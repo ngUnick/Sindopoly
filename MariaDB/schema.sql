@@ -43,10 +43,9 @@ CREATE TABLE Square(
 
 CREATE TABLE Card( -- still needs to run
     id int AUTO_INCREMENT,
-    title VARCHAR(200),
     description VARCHAR(1000),
-    type ENUM('money','transport'),
-    amount int,
+    type ENUM('money','transport', 'jail'),
+    amount int, -- could use TINYINT or SMALLINT
 
     PRIMARY KEY (id)
 );
