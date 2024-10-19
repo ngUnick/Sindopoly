@@ -18,7 +18,7 @@ CREATE TABLE Game (
     start_Time TIMESTAMP,
     PRIMARY KEY (id),
     FOREIGN KEY (creator) REFERENCES Player(id),
-    FOREIGN KEY (winner) REFERENCES Player(id),
+    FOREIGN KEY (winner) REFERENCES Player(id)
 );
 
 CREATE TABLE Property( -- still needs to run
@@ -34,8 +34,9 @@ CREATE TABLE Property( -- still needs to run
 CREATE TABLE Square(
     id int AUTO_INCREMENT,
     property int,
+    game int,
     type ENUM('property','jail','card','start','goToJail','parking'),
-    FOREIGN KEY (game) REFERENCES Game(id),
+    -- FOREIGN KEY (game) REFERENCES Game(id),
     FOREIGN KEY (property) REFERENCES Property(id),
     PRIMARY KEY (id)
 );
