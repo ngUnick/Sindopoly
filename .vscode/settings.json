@@ -13,5 +13,6 @@
             "database": "sindopoly",
             "username": "root"
         }
-    ]
+    ],
+    "java.compile.nullAnalysis.mode": "automatic"
 }
