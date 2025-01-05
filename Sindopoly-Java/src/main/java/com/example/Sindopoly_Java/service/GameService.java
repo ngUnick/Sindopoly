@@ -34,6 +34,12 @@ public class GameService {
 
     @Transactional
     public Integer createGame(Integer playerCreatorId, Integer maxTime, Integer maxMoney) {
+        
+        // Validate maxTime
+        if (maxTime > 60) {
+            throw new IllegalArgumentException("Game time cannot exceed 60 minutes.");
+        }
+
         Player creator = playerRepository.findById(playerCreatorId)
                 .orElseThrow(() -> new RuntimeException("Player not found"));
         // Create a new game in 'lobby' status
@@ -47,14 +53,46 @@ public class GameService {
         game = gameRepository.save(game);
 
         // Create the board (40 squares)
-        // For simplicity, we assume properties with ids 1-28 exist as in original data
-        // Insert the squares similarly to original code
-        // Adjust property positions as needed
-        // Example (just a few squares, fill in all accordingly):
         squareRepository.save(makeSquare(game, 0, null, SquareType.start));
         squareRepository.save(makeSquare(game, 1, propertyRepository.findById(1).orElse(null), SquareType.property));
         squareRepository.save(makeSquare(game, 2, null, SquareType.card));
-        // ... add all squares similarly ...
+        squareRepository.save(makeSquare(game, 3, propertyRepository.findById(2).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 4, null, SquareType.parking));
+        squareRepository.save(makeSquare(game, 5, propertyRepository.findById(3).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 6, propertyRepository.findById(4).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 7, null, SquareType.card));
+        squareRepository.save(makeSquare(game, 8, propertyRepository.findById(5).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 9, propertyRepository.findById(6).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 10, null, SquareType.jail));
+        squareRepository.save(makeSquare(game, 11, propertyRepository.findById(7).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 12, propertyRepository.findById(8).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 13, propertyRepository.findById(9).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 14, propertyRepository.findById(10).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 15, propertyRepository.findById(11).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 16, propertyRepository.findById(12).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 17, null, SquareType.card));
+        squareRepository.save(makeSquare(game, 18, propertyRepository.findById(13).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 19, propertyRepository.findById(14).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 20, null, SquareType.parking));
+        squareRepository.save(makeSquare(game, 21, propertyRepository.findById(15).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 22, null, SquareType.card));
+        squareRepository.save(makeSquare(game, 23, propertyRepository.findById(16).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 24, propertyRepository.findById(17).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 25, propertyRepository.findById(18).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 26, propertyRepository.findById(19).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 27, propertyRepository.findById(20).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 28, propertyRepository.findById(21).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 29, propertyRepository.findById(22).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 30, null, SquareType.goToJail));
+        squareRepository.save(makeSquare(game, 31, propertyRepository.findById(23).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 32, propertyRepository.findById(24).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 33, null, SquareType.card));
+        squareRepository.save(makeSquare(game, 34, propertyRepository.findById(25).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 35, propertyRepository.findById(26).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 36, null, SquareType.card));
+        squareRepository.save(makeSquare(game, 37, propertyRepository.findById(27).orElse(null), SquareType.property));
+        squareRepository.save(makeSquare(game, 38, null, SquareType.parking));
+        squareRepository.save(makeSquare(game, 39, propertyRepository.findById(28).orElse(null), SquareType.property));
 
         // Join the creator to the game
         joinGame(game.getId(), playerCreatorId);
