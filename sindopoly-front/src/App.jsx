@@ -15,6 +15,7 @@ import { AuthProvider } from './AuthContext/AuthContext';
 import { ProtectedRoute } from './AuthContext/ProtectedRoute';
 import GetToken from './pages/GetToken/GetToken';
 import WaitingLobby from './pages/WaitingLobby/WaitingLobby';
+import Statistics from './pages/Statistics/Statistics';
 
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
                 <Route path="/lobby" element={<ProtectedRoute><WaitingLobby /></ProtectedRoute>}/>
                 <Route path="/Game" element={<ProtectedRoute><Game /></ProtectedRoute>}/>
                 <Route path="/endgame" element={<ProtectedRoute><EndGame /></ProtectedRoute>}/>
+                <Route path="/statistics" element={<ProtectedRoute><Statistics /></ProtectedRoute>}/>
               </Routes>
             </AuthProvider>
       </Router>

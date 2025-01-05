@@ -3,12 +3,18 @@ import { useSearchParams } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTrophy } from "@fortawesome/free-solid-svg-icons";
+import { Button } from 'antd';
+import { GamePlayAPI } from "../../apis/GamePlayAPI";
 
 const EndGame = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  useEffect(() => {}, []);
+  useEffect(() => {
+    setTimeout(async () => {
+      await GamePlayAPI.endGame(localStorage.getItem('player_id'));
+    },5000)
+  }, []);
 
   return (
     <div className="flex-grow flex justify-center items-center bg-pic bg-cover bg-no-repeat">
@@ -40,20 +46,15 @@ const EndGame = () => {
 
           <span>
             <FontAwesomeIcon icon={faTrophy} className="trophy" />
-            <p>Amog</p>
+            <p className="text-center">{searchParams.get('winner')}</p>
             <FontAwesomeIcon icon={faTrophy} className="trophy" />
           </span>
+
+          <Button className="my-5" onClick={() => navigate('/')}>Back to Main Page</Button>
 
           {/* End Game, the winner is {searchParams.get('winner')} */}
         </div>
 
-        <div className="b">
-          <button
-            onClick={() => {
-              navigate("/");
-            }}
-          ></button>
-        </div>
       </div>
     </div>
   );

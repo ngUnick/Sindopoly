@@ -10,8 +10,8 @@ function CreateGame() {
     const onFinish = async (values) => {
         console.log('Success:', values);
         try {
-            const response = await GameAPI.createGame(values.MaxTime, values.MaxMoney);
-            navigate(`/lobby?creator=1&game_id=${response["game_id"]}`);
+            const response = await GameAPI.createGame(values.MaxTime, values.MaxMoney, values.bot);
+            navigate(`/lobby?creator=1&game_id=${response["game_id"]}&bot=${values.bot}`);
             
         } catch (error) {
             
@@ -61,6 +61,9 @@ function CreateGame() {
             ]}
           >
             <Input placeholder="MaxMoney *" />
+          </Form.Item>
+          <Form.Item label="Checkbox" name="bot" valuePropName="checked">
+            <Checkbox>Play with bot</Checkbox>
           </Form.Item>
           <Form.Item name="submit_button">
             <Button type="primary" htmlType="submit">

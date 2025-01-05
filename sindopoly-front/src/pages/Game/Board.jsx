@@ -30,10 +30,17 @@ const Board = () => {
 
   const [posInput, setposInput] = useState(0); // State to store the numeric value entered
   const [isMyTurn, setIsMyTurn] = useState(true);
-  const [player1Info, setPlayer1Info] = useState({ money: 100 });
-  const [player2Info, setPlayer2Info] = useState({ money: 100 });
-  const [player3Info, setPlayer3Info] = useState({ money: 100 });
-  const [player4Info, setPlayer4Info] = useState({ money: 100 });
+  const [playersAmount, setPlayersAmount] = useState(0);
+  const [player1Info, setPlayer1Info] = useState({ money: '-' });
+  const [player2Info, setPlayer2Info] = useState({ money: '-' });
+  const [player3Info, setPlayer3Info] = useState({ money: '-' });
+  const [player4Info, setPlayer4Info] = useState({ money: '-' });
+
+  const [dice_var1, setDice1] = useState(0);
+  const [dice_var2, setDice2] = useState(0);
+
+
+  const [my_sira, setSira] = useState(1);
 
   // Audio Management --------------------------------------------------------------------------------------------------
   const [isVolumeVisible, setIsVolumeVisible] = useState(true);
@@ -132,9 +139,9 @@ const Board = () => {
   };
 
   // Manage Properties ---------------------------------------------------------------------------------------------
-  const gamePositions = [
+  const [gamePositions, setGamePositions] = useState([
     { position: 0, type: "start", player: null, name: null },
-    { position: 1, type: "property", player: "Nick", name: "ΓΥΜΝΑΣΤΗΡΙΟ" },
+    { position: 1, type: "property", player: null, name: "ΓΥΜΝΑΣΤΗΡΙΟ" },
     { position: 2, type: "card", player: null, name: null },
     { position: 3, type: "property", player: null, name: "ΒΙΒΛΙΟΘΗΚΗ" },
     { position: 4, type: "card", player: null, name: null },
@@ -155,7 +162,7 @@ const Board = () => {
     {
       position: 19,
       type: "property",
-      player: "Nick",
+      player: null,
       name: "ΤΕΧΝΟΛΟΓΙΑΣ ΤΡΟΦΙΜΩΝ",
     },
     { position: 20, type: "parking", player: null, name: null },
@@ -188,12 +195,13 @@ const Board = () => {
     { position: 37, type: "property", player: null, name: "ΠΛΗΡΟΦΟΡΙΚΗΣ" },
     { position: 38, type: "card", player: null, name: null },
     { position: 39, type: "property", player: null, name: "ΗΛΕΚΤΡΟΝΙΚΗΣ" },
-  ];
+  ]);
 
   // Example: Accessing a specific game position
   // console.log(gamePositions[0]); // debug
 
   function filterAndDisplayNames() {
+    console.log(gamePositions);
     const filteredPositions = gamePositions.filter(
       (position) => position.type === "property" && position.player !== null
     );
@@ -342,7 +350,7 @@ const Board = () => {
     const rand = Math.random() * 20;
     const xVel = 5 + rand;
     const zVel = 5 + rand;
-    dice.userData.velocity = new THREE.Vector3(xVel, yVel, zVel);
+    let velocity = new THREE.Vector3(xVel, yVel, zVel);
 
     const angularList = [
       [12.6, 9.45, 11.0], // 1
@@ -361,13 +369,9 @@ const Board = () => {
       selectedAng[2] // Third value from the selected group
     );
 
-    dice.userData.angularVelocity = angularVel;
+    let angularVelocity = angularVel;
 
     // Use these values for the dice animation
-    rollDiceWithRandomValues(dice);
-  };
-
-  const rollDiceWithRandomValues = (dice) => {
     const duration = 1000; // Duration of the animation in milliseconds
     const startTime = performance.now();
 
@@ -376,14 +380,14 @@ const Board = () => {
       const progress = Math.min(elapsed / duration, 1); // Normalize the progress between 0 and 1
 
       // Apply random velocities for position and rotation
-      const x = dice.userData.velocity.x * progress - 10;
-      const y = dice.userData.velocity.y * progress + 20;
-      const z = dice.userData.velocity.z * progress - 10;
+      const x = velocity.x * progress - 10;
+      const y = velocity.y * progress + 20;
+      const z = velocity.z * progress - 10;
       dice.position.set(x, y, z);
 
-      const rotX = dice.userData.angularVelocity.x * progress;
-      const rotY = dice.userData.angularVelocity.y * progress;
-      const rotZ = dice.userData.angularVelocity.z * progress;
+      const rotX = angularVelocity.x * progress;
+      const rotY = angularVelocity.y * progress;
+      const rotZ = angularVelocity.z * progress;
       dice.rotation.set(rotX, rotY, rotZ);
 
       if (elapsed < duration) {
@@ -408,8 +412,45 @@ const Board = () => {
     requestAnimationFrame(animateRoll);
   };
 
+  // const rollDiceWithRandomValues = (dice) => {
+    
+  // };
+
   // Call the roll animation function when needed
   // randomDiceThrow();
+
+  // Function to add the "disable" class to the button with id "dice"
+  function disableDice() {
+    const diceButton = document.getElementById('dice');
+    if (diceButton) {
+      diceButton.classList.add('disable');
+    }
+  }
+
+  // Function to remove the "disable" class from the button with id "dice"
+  function enableDice() {
+    const diceButton = document.getElementById('dice');
+    if (diceButton) {
+      diceButton.classList.remove('disable');
+    }
+  }
+
+  // Function to add the "disable" class to the button with id "money"
+  function disableMoney(id) {
+    const moneyChip = document.getElementById(id);
+    if (moneyChip) {
+      moneyChip.classList.add('hidden');
+    }
+  }
+
+  // Function to remove the "disable" class from the button with id "money"
+  function enableMoney(id) {
+    const moneyChip = document.getElementById(id);
+    if (moneyChip) {
+      moneyChip.classList.remove('hidden');
+    }
+  }
+
 
   useEffect(() => {
     // Board Creation --------------------------------------------------------------------------------------------------------
@@ -623,34 +664,70 @@ const Board = () => {
         {
           torusRef.current.visible = false;
           coneRef.current.visible = false;
+          disableMoney('money3');
+          disableMoney('money4');
         }
         else if(playersAmount == 3)
         {
           coneRef.current.visible = false;
+          disableMoney('money4');
         }    
     }
+
+    const updateProperties = (board__) => {
+      var copyGamepositions = [];
+      board__.forEach((item) => {
+        let currentProperties = item["properties"];
+        if(currentProperties)
+        {
+          copyGamepositions = [...gamePositions];
+          currentProperties = currentProperties.split(",").map(function(item) {return parseInt(item, 10);});
+          for (let index = 0; index < copyGamepositions.length; index++) {
+            const element = copyGamepositions[index];
+            if(currentProperties.includes(element["position"]))
+            {
+              copyGamepositions[index]["player"] = item["name"];
+            }
+          }
+        }
+      });
+      setGamePositions(copyGamepositions);
+    };
 
 
     setInterval(async () => {
         // console.log('hellooo');
         const player_id = searchParams.get('player');
         const playersPosition = await GamePlayAPI.getBoard(player_id);
-
+        setPlayersAmount(playersPosition.length);
+        updateProperties(playersPosition);
         const gameStatus = playersPosition[0]["gameStatus"];
 
         if(gameStatus == "completed")
         {
-          navigate('/endgame?winner=Makis');
+          const winner_id = playersPosition[0]["winner"];
+          let winner_name = "no_winner_just_for_debug";
+          for (let index = 0; index < playersPosition.length; index++) {
+            const element = playersPosition[index]["player_id"];
+            if(element == winner_id)
+              winner_name = playersPosition[index]["name"];
+          }
+          navigate(`/endgame?winner=${winner_name}`);
         }
 
         const currentTurn = playersPosition[0]["playerTurn"];
         // console.log('currentTurn',currentTurn);
         // console.log('player_id',player_id);
         if(currentTurn == player_id)
+        {
           setIsMyTurn(true);
+          enableDice();
+        }
         else
+        {
           setIsMyTurn(false);
-
+          disableDice();
+        }
           HideUnnecessaryPlayers(playersPosition.length);
 
         for (let index = 0; index < playersPosition.length; index++) {
@@ -658,21 +735,37 @@ const Board = () => {
             {
               findSteps(cubeRef.current,playersPosition[index]["position"]);
               setPlayer1Info({money : playersPosition[index]["money"]});
+              if(playersPosition[index]["player_id"] == player_id)
+              {
+                setSira(index);
+              }
             }
           else if(index == 1)
             {
               findSteps(sphereRef.current,playersPosition[index]["position"]);
               setPlayer2Info({money : playersPosition[index]["money"]});
+              if(playersPosition[index]["player_id"] == player_id)
+              {
+                setSira(index);
+              }
             }
           else if(index == 2)
             {
               findSteps(torusRef.current,playersPosition[index]["position"]);
               setPlayer3Info({money : playersPosition[index]["money"]});
+              if(playersPosition[index]["player_id"] == player_id)
+              {
+                setSira(index);
+              }
             }
           else if(index == 3)
             {
               findSteps(coneRef.current,playersPosition[index]["position"]);
               setPlayer4Info({money : playersPosition[index]["money"]});
+              if(playersPosition[index]["player_id"] == player_id)
+              {
+                setSira(index);
+              }
             }
         }
       // console.log(playersPosition);
@@ -711,73 +804,99 @@ const Board = () => {
   });
 
   const throwDiceAction = async () => {
-    const player_id = searchParams.get("player");
-    const dices = await GamePlayAPI.rollDice(player_id);
-    
-    randomDiceThrow(dice1, dices["dice1"]);
-    setTimeout(async () => {
-      randomDiceThrow(dice2, dices["dice2"]);
-      const actions = await GamePlayAPI.getActions(player_id);
-      console.log("celanideee", actions);
+    if(isMyTurn)
+    {
+      const player_id = searchParams.get("player");
+      const dices = await GamePlayAPI.rollDice(player_id);
+      setDice1(dices["dice1"]);
+      setDice2(dices["dice2"]);
+      randomDiceThrow(dice1, dices["dice1"]);
+      setTimeout(async () => {
+        randomDiceThrow(dice2, dices["dice2"]);
+        const actions = await GamePlayAPI.getActions(player_id);
+        console.log("celanideee", actions);
+  
+        if(actions["mandatory"].length > 0)
+        {
+          const mandatory_action = actions["mandatory"][0][0];
+          if(mandatory_action["actionName"] == "drawCard")
+          {
+            updateCard(
+              mandatory_action["title"],
+              mandatory_action["description"],
+              null,
+              null
+            );
+          }
+          else if(mandatory_action["actionName"] == "rent")
+          {
+            updateCard(
+              "Prostimo",
+              `Pay ${mandatory_action["amount"]}`,
+              null,
+              null
+            );
+          }
+          else if(mandatory_action["actionName"] == "jail")
+          {
+            updateCard(
+              "Go to jail",
+              `Police troubles`,
+              null,
+              null
+            );
+          }
+        }
+        if(actions["optional"].length > 0)
+        {
+          const optional_action = actions["optional"][0]["actionName"];
+          if(optional_action == "BuyProperty")
+          {
+            updateCard(
+              "Buy property",
+              `Do you want to buy this property that costs ${actions["optional"][0]["price"]}?`,
+              {
+                "text" : "Buy property",
+                "function" : async () => {
+                  await GamePlayAPI.buyProperty(player_id);
+                  closeCard();
+                  updateCard(
+                    "Success",
+                    "The property now is yours!! WOWOWOWOWOWOWO",
+                    null,
+                    null
+                  );
+                }
+              },
+              null
+            );
+          }
+        }
+        await GamePlayAPI.passTurn(player_id);
 
-      if(actions["mandatory"].length > 0)
-      {
-        const mandatory_action = actions["mandatory"][0][0];
-        if(mandatory_action["actionName"] == "drawCard")
+        if(searchParams.get('bot') == 'true')
         {
-          updateCard(
-            mandatory_action["title"],
-            mandatory_action["description"],
-            null,
-            null
-          );
-        }
-        else if(mandatory_action["actionName"] == "rent")
-        {
-          updateCard(
-            "Prostimo",
-            `Pay ${mandatory_action["amount"]}`,
-            null,
-            null
-          );
-        }
-        else if(mandatory_action["actionName"] == "jail")
-        {
-          updateCard(
-            "Go to jail",
-            `Police troubles`,
-            null,
-            null
-          );
-        }
-      }
-      if(actions["optional"].length > 0)
-      {
-        const optional_action = actions["optional"][0]["actionName"];
-        if(optional_action == "BuyProperty")
-        {
-          updateCard(
-            "Buy property",
-            `Do you want to buy this property that costs ${actions["optional"][0]["price"]}?`,
-            {
-              "text" : "Buy property",
-              "function" : async () => {
-                await GamePlayAPI.buyProperty(player_id);
-                closeCard();
-                updateCard(
-                  "Success",
-                  "The property now is yours!! WOWOWOWOWOWOWO",
-                  null,
-                  null
-                );
+          // alert("bot");
+          await GamePlayAPI.rollDice(5);
+          const actions = await GamePlayAPI.getActions(player_id);
+          if(actions["optional"].length > 0)
+          {
+            try {
+              const optional_action = actions["optional"][0]["actionName"];
+              if(optional_action == "BuyProperty")
+              {
+                await GamePlayAPI.buyProperty(5);
               }
-            },
-            null
-          );
+            } catch (error) {
+              console.error('bot doesnt buy property')
+            }
+            
+          }
+          await GamePlayAPI.passTurn(5);
         }
-      }
-      await GamePlayAPI.passTurn(player_id);
-    }, 1000);
+      }, 1000);
+    }
+
   }
 
   // UI Elements ----------------------------------------------------------------------------------------------------
@@ -786,20 +905,20 @@ const Board = () => {
       <canvas ref={canvasRef} />
 
       <div className="first-nav">
-        <span className="px-5">
-          <img src="src/assets/images/monopoly_money.png" alt="" />
+        <span className={`px-5  ${my_sira == 0 ? "animated-box" : ""}`} id="money1">
+          <img src="src/assets/images/monopoly_money.png" alt="Player 1's money" />
           <p>{player1Info["money"]}</p>
         </span>
-        <span className="px-5">
-          <img src="src/assets/images/monopoly_money.png" alt="" />
+        <span className={`px-5  ${my_sira == 1 ? "animated-box" : ""}`} id="money2">
+          <img src="src/assets/images/monopoly_money.png" alt="Player 2's money" />
           <p>{player2Info["money"]}</p>
         </span>
-        <span className="px-5">
-          <img src="src/assets/images/monopoly_money.png" alt="" />
+        <span className={`px-5 ${(playersAmount < 3) ? 'hidden' : ''} ${my_sira == 2 ? "animated-box" : ""}`} id="money3">
+          <img src="src/assets/images/monopoly_money.png" alt="Player 3's money" />
           <p>{player3Info["money"]}</p>
         </span>
-        <span className="px-5">
-          <img src="src/assets/images/monopoly_money.png" alt="" />
+        <span className={`px-5 ${(playersAmount < 4) ? 'hidden' : ''} ${my_sira == 3 ? "animated-box" : ""}`} id="money4">
+          <img src="src/assets/images/monopoly_money.png" alt="Player 4's money" />
           <p>{player4Info["money"]}</p>
         </span>
       </div>
@@ -823,11 +942,21 @@ const Board = () => {
         </button>
         <button
           disabled={!isMyTurn}
-          className="property-btn"
+          className={`property-btn ${!isMyTurn ? "hidden" : ""}`}
           onClick={throwDiceAction}
+          
         >
-          <FontAwesomeIcon icon={faDice} id="property" />
+          <FontAwesomeIcon icon={faDice}  id="dice" />
         </button>
+      </div>
+
+      <div className="third-nav">
+        <span>
+          <p>{dice_var1}</p>
+        </span>
+        <span>
+          <p>{dice_var2}</p>
+        </span>
       </div>
 
       <div
@@ -840,7 +969,7 @@ const Board = () => {
         id="card"
       >
         <div
-          className="relative shadow flex flex-col justify-around items-stretch h-min min-w-max
+          className="relative shadow flex flex-col justify-around items-stretch min-h-[150px] min-w-[300px]
         bg-[rgba(255,236,195,0.8)] pt-[20px] pb-[20px] px-5 backdrop-blur-sm border-solid border-[rgba(255,255,255,0.6)] rounded-md"
         >
           <span
