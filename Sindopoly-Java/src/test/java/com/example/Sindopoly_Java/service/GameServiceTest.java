@@ -92,6 +92,13 @@ class GameServiceTest {
     }
 
     @Test
+    void createGame_shouldThrowExceptionIfMaxTimeExceedsLimit() {
+        // Act & Assert
+        assertThrows(IllegalArgumentException.class, () -> gameService.createGame(1, 61, 500));
+    }
+
+
+    @Test
     void joinGame_shouldAddPlayerToGame() {
         // Arrange
         Game game = new Game();
