@@ -39,6 +39,7 @@ function Home() {
                                 <div className="flex flex-col justify-center items-center gap-5">
                                     <Button type="primary" value="large" onClick={() => navigate('/createGame')}>Create Game</Button>
                                     <Button type="primary" value="large" onClick={() => navigate('/searchGame')}>Join Game</Button>
+                                    <Button type="primary" value="large" onClick={() => navigate('/statistics')}>Statistics</Button>
                                 </div>
                             }
                         </ConfigProvider>

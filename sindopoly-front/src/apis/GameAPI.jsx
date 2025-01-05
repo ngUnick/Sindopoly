@@ -21,7 +21,7 @@ export const GameAPI = {
         throw new Error(response);
         
     },
-    createGame : async (maxTime, maxMoney) => {
+    createGame : async (maxTime, maxMoney, bot) => {
         var myHeaders = new Headers();
         myHeaders.append("Content-Type", "application/json");
 
@@ -29,6 +29,7 @@ export const GameAPI = {
             "playerCreator": localStorage.getItem('player_id'),
             "maxTime": maxTime,
             "maxMoney": maxMoney,
+            "bot" : bot,
         });
 
         const requestOptions = {

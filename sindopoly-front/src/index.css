@@ -4,6 +4,7 @@
 
 :root {
   --text-yelow: #b45309;
+  --disabled-item: rgb(179, 179, 179);
 }
 
 * {
@@ -52,7 +53,8 @@
 /* -------------------------------------------- Board -------------------------------------------- */
 
 .first-nav,
-.sec-nav {
+.sec-nav,
+.third-nav {
   position: absolute;
   left: 50%;
   top: 10%;
@@ -74,6 +76,10 @@
   top: 17%;
 }
 
+.third-nav {
+  top: 25%;
+}
+
 .sec-nav > button {
   margin-right: 10px;
 }
@@ -86,7 +92,8 @@
   height: 30px;
 }
 
-.first-nav > span {
+.first-nav > span,
+.third-nav > span {
   pointer-events: none;
   display: flex;
   padding: 0.3em 1.2em;
@@ -97,6 +104,15 @@
   text-shadow: 0 0.04em 0.04em rgba(0, 0, 0, 0.5);
   margin: auto;
   margin-left: 10px;
+}
+
+.third-nav > span {
+  border-color: rgb(207, 151, 28);
+  background-color: var(--disabled-item);
+}
+
+span .disable {
+  background-color: var(--disabled-item);
 }
 
 .first-nav > span:nth-child(1) {
@@ -139,7 +155,16 @@
   cursor: pointer;
 }
 
-#property {
+.property-btn .disable {
+  background-color: var(--disabled-item);
+}
+
+.property-btn:hover .disable {
+  border-color: rgba(0, 0, 0, 0.2);
+  cursor: default;
+}
+
+#property, #dice {
   height: 20px;
 }
 
@@ -189,7 +214,7 @@
   margin: auto;
 }
 
-/* -------------------------------------------- EndGame -------------------------------------------- */
+/* -------------------------------------------- Fireworks -------------------------------------------- */
 [class^="firework-"] {
   position: absolute;
   width: 0.3rem;
@@ -425,3 +450,9 @@
   }
 }
 
+
+
+
+.animated-box {
+  border: 3px solid black !important;
+}
