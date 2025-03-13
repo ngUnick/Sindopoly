@@ -34,7 +34,16 @@ CREATE TABLE Square(
     PRIMARY KEY (id)
 );
 
-
+CREATE TABLE Stats( -- not sure if it will implemented yet
+    id INT AUTO_INCREMENT,
+    player INT,
+    total_wins INT,
+    total_losses INT,
+    total_games INT,
+    total_money INT,
+    PRIMARY KEY (id),
+    FOREIGN KEY (player) REFERENCES Player(id)
+)
 
 COMMIT;
 
