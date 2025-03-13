@@ -1,3 +1,50 @@
+-- NEW FUNCTIONS
+
+DELIMITER //
+
+
+-- Create a MySQL Event to Delete Expired Players (Could also be done in Spring Boot in order  to control expiration from application logic)
+
+-- Enable the Event Scheduler in MySQL (if not already enabled):
+SET GLOBAL event_scheduler = ON;
+
+
+-- Then, create an event that runs every hour and deletes players older than 24 hours:
+CREATE EVENT delete_expired_players
+ON SCHEDULE EVERY 1 HOUR
+DO
+  DELETE FROM Player WHERE created_at < NOW() - INTERVAL 1 DAY;
+
+
+
+DELIMITER ;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- OLD FUNCTIONS
+
+
 DELIMITER //
 
 CREATE PROCEDURE StartGame(IN gameToStart INT)

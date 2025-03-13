@@ -1,3 +1,62 @@
+-- NEW TABLES
+
+START TRANSACTION;
+
+CREATE TABLE Player(
+    id INT AUTO_INCREMENT,
+    p_name VARCHAR(255),
+
+    -- will see later if this is needed, depending on if I add a login system
+    -- email VARCHAR(255),
+
+    -- store the timestamp when a player is created, in order to delete them after 1 day
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+
+CREATE TABLE Card(
+    id SMALLINT AUTO_INCREMENT,
+    title VARCHAR(200),
+    description VARCHAR(1000),
+    type ENUM('money','transport'),
+    amount FLOAT, -- if 'money' then amount is the money (negative if the player has to pay), if 'transport' then amount is the position
+    PRIMARY KEY (id)
+);
+
+
+CREATE TABLE Square(
+    id TINYINT AUTO_INCREMENT,
+    s_type ENUM('START', 'CARD', 'TAX', 'JAIL', 'GOJAIL', 'PARKING', 'TRAIN', 'UTILITY', 'BROWN', 'CYAN', 'PURPLE', 'ORANGE', 'RED', 'YELLOW', 'GREEN','BLUE'),
+    price SMALLINT,
+    rent SMALLINT,
+
+    PRIMARY KEY (id)
+);
+
+
+
+COMMIT;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- OLD TABLES
+
 START TRANSACTION;
 
 CREATE TABLE Player(
