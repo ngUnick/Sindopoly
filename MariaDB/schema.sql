@@ -37,13 +37,14 @@ CREATE TABLE Square(
 CREATE TABLE Stats( -- not sure if it will implemented yet
     id INT AUTO_INCREMENT,
     player INT,
-    total_wins INT,
-    total_losses INT,
-    total_games INT,
-    total_money INT,
+    total_wins INT DEFAULT 0,
+    total_losses INT DEFAULT 0,
+    total_games INT DEFAULT 0,
+    total_money INT DEFAULT 0,
+    total_time_played INT DEFAULT 0,
     PRIMARY KEY (id),
     FOREIGN KEY (player) REFERENCES Player(id)
-)
+);
 
 COMMIT;
 
