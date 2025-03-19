@@ -34,8 +34,7 @@ public class PlayerStateService {
      */
     public Map<String, Object> getPlayerState(int playerId) {
         String playerKey = PLAYER_PREFIX + playerId;
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) (Map) hashOps.entries(playerKey);
+        Map<String, Object> result = hashOps.entries(playerKey);
         return result;
     }
 

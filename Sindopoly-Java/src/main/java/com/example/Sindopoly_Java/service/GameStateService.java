@@ -44,8 +44,7 @@ public class GameStateService {
     public Map<String, Object> getGame(int gameId) {
         String gameKey = GAME_PREFIX + gameId;
         // HashOperations.entries(...) returns Map<String, Object>
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) (Map) hashOps.entries(gameKey);
+        Map<String, Object> result = hashOps.entries(gameKey);
         return result;
     }
 
