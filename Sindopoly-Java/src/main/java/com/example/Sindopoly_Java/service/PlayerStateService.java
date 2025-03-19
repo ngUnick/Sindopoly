@@ -1,0 +1,49 @@
+package com.example.Sindopoly_Java.service;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
+
+import java.util.Map;
+
+@Service
+public class PlayerStateService {
+    private static final String PLAYER_PREFIX = "player:";
+
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final HashOperations<String, String, Object> hashOps;
+
+    @Autowired
+    public PlayerStateService(RedisTemplate<String, Object> redisTemplate) {
+        this.redisTemplate = redisTemplate;
+        this.hashOps = redisTemplate.opsForHash();
+    }
+
+    /**
+     * Save Player State (Hash: player:PLAYER_ID)
+     * Example fields: position, money, properties, jail, jailTime, bankrupt
+     */
+    public void savePlayerState(int playerId, Map<String, Object> playerData) {
+        String playerKey = PLAYER_PREFIX + playerId;
+        hashOps.putAll(playerKey, playerData);
+    }
+
+    /**
+     * Get Player State
+     */
+    public Map<String, Object> getPlayerState(int playerId) {
+        String playerKey = PLAYER_PREFIX + playerId;
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) (Map) hashOps.entries(playerKey);
+        return result;
+    }
+
+    /**
+     * Delete Player State
+     */
+    public void deletePlayer(int playerId) {
+        String playerKey = PLAYER_PREFIX + playerId;
+        redisTemplate.delete(playerKey);
+    }
+}

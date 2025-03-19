@@ -15,23 +15,33 @@ public class GameStateController {
         this.gameStateService = gameStateService;
     }
 
-    // Save game state
+    /**
+     * Save Game State
+     * POST /api/game-state/{gameId}
+     * Body: JSON with fields like { "status": "inProgress", ... }
+     */
     @PostMapping("/{gameId}")
-    public String saveGameState(@PathVariable String gameId, @RequestBody Map<String, Object> gameData) {
-        gameStateService.saveGameState(gameId, gameData);
+    public String saveGameState(@PathVariable int gameId, @RequestBody Map<String, Object> gameData) {
+        gameStateService.saveGame(gameId, gameData);
         return "Game state saved successfully.";
     }
 
-    // Get game state
+    /**
+     * Get Game State
+     * GET /api/game-state/{gameId}
+     */
     @GetMapping("/{gameId}")
-    public Map<Object, Object> getGameState(@PathVariable String gameId) {
-        return gameStateService.getGameState(gameId);
+    public Map<String, Object> getGameState(@PathVariable int gameId) {
+        return gameStateService.getGame(gameId);
     }
 
-    // Delete game state
+    /**
+     * Delete Game State
+     * DELETE /api/game-state/{gameId}
+     */
     @DeleteMapping("/{gameId}")
-    public String deleteGameState(@PathVariable String gameId) {
-        gameStateService.deleteGameState(gameId);
+    public String deleteGameState(@PathVariable int gameId) {
+        gameStateService.deleteGame(gameId);
         return "Game state deleted successfully.";
     }
 }
