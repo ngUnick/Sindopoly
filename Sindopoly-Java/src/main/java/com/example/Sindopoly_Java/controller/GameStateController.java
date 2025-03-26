@@ -31,7 +31,7 @@ public class GameStateController {
      * GET /api/game-state/{gameId}
      */
     @GetMapping("/{gameId}")
-    public Map<String, Object> getGameState(@PathVariable int gameId) {
+    public Map<String, String> getGameState(@PathVariable int gameId) {
         return gameStateService.getGame(gameId);
     }
 
