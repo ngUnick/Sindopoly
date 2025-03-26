@@ -36,25 +36,28 @@ public class GameStateService {
 
     /** Create Game */
     public Map<String, String> createGame(int ownerId, String visibility) {
-        String gameId = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-        String gameKey = GAME_PREFIX + gameId;
-        String creationTime = Instant.now().toString();
-        String inviteCode = visibility.equals("private") ? generateInviteCode() : "";
-
+        String gameKey = GAME_PREFIX + ownerId;
+        String playersKey = gameKey + ":players";
+    
         Map<String, String> gameData = new HashMap<>();
         gameData.put("status", "lobby");
+        gameData.put("creationTime", Instant.now().toString());
         gameData.put("visibility", visibility);
-        gameData.put("inviteCode", inviteCode);
-        gameData.put("creationTime", creationTime);
-        gameData.put("owner", String.valueOf(ownerId));
-
+    
+        if ("private".equalsIgnoreCase(visibility)) {
+            String inviteCode = generateInviteCode();
+            gameData.put("inviteCode", inviteCode);
+            redisTemplate.opsForValue().set(INVITE_PREFIX + inviteCode, String.valueOf(ownerId));
+        }
+    
         hashOps.putAll(gameKey, gameData);
-        setOps.add(gameKey + PLAYERS_KEY_SUFFIX, String.valueOf(ownerId));
+        setOps.add(playersKey, String.valueOf(ownerId)); // ✅ Add owner to player list
         redisTemplate.expire(gameKey, 24, TimeUnit.HOURS);
-        redisTemplate.expire(gameKey + PLAYERS_KEY_SUFFIX, 24, TimeUnit.HOURS);
-
+        redisTemplate.expire(playersKey, 24, TimeUnit.HOURS);
+    
         return gameData;
     }
+    
 
     /** Start Game */
     public void startGame(int gameId) {
