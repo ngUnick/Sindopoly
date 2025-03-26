@@ -1,6 +1,7 @@
 package com.example.Sindopoly_Java.controller;
 
 import com.example.Sindopoly_Java.service.GameStateService;
+import com.example.Sindopoly_Java.dto.GameCreationRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -18,11 +19,14 @@ public class GameStateController {
 
     /**
      * Create a new game
-     * POST /api/game-state/create?ownerId=1&visibility=private
+     * POST /api/game-state/create
+     * Body: { "ownerId": 1, "visibility": "private" }
      */
     @PostMapping("/create")
-    public Map<String, String> createGame(@RequestParam int ownerId, @RequestParam String visibility) {
-        return gameStateService.createGame(ownerId, visibility);
+    public Map<String, String> createGame(@RequestBody GameCreationRequest request) {
+        // Use ownerId as the gameId for easier lookup
+        int ownerId = request.getOwnerId();
+        return gameStateService.createGame(ownerId, request.getVisibility());
     }
 
     /**
