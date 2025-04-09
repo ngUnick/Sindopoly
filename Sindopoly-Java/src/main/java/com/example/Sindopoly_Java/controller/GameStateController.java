@@ -50,6 +50,16 @@ public class GameStateController {
     }
 
     /**
+     * Add a player to a game using an invite code
+     * POST /api/game-state/join-with-invite?inviteCode=ABC123&playerId=2
+     */
+    @PostMapping("/join-with-invite")
+    public String joinWithInvite(@RequestParam String inviteCode, @RequestParam int playerId) {
+        return gameStateService.addPlayerToGameWithInviteCode(inviteCode, playerId);
+    }
+
+
+    /**
      * Remove a player from a game
      * POST /api/game-state/{gameId}/remove-player?playerId=2
      */
@@ -86,4 +96,15 @@ public class GameStateController {
         gameStateService.deleteGame(gameId);
         return "Game state deleted.";
     }
+
+    /**
+     * Check end conditions
+     * GET /api/game-state/{gameId}/check-end
+     */
+    @PostMapping("/{gameId}/check-end")
+    public String checkGameEnd(@PathVariable int gameId) {
+        boolean ended = gameStateService.checkEndCondition(gameId);
+        return ended ? "Game ended due to condition." : "Game continues.";
+    }
+
 }

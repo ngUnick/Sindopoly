@@ -46,7 +46,6 @@ public class GameStateService {
         if ("private".equalsIgnoreCase(visibility)) {
             String inviteCode = generateInviteCode();
             gameData.put("inviteCode", inviteCode);
-            redisTemplate.opsForValue().set(INVITE_PREFIX + inviteCode, String.valueOf(ownerId));
         }
     
         hashOps.putAll(gameKey, gameData);
@@ -87,17 +86,70 @@ public class GameStateService {
 
     /** Add Player */
     public String addPlayerToGame(int gameId, int playerId) {
-        String playerSetKey = GAME_PREFIX + gameId + PLAYERS_KEY_SUFFIX;
-        Long playerCount = setOps.size(playerSetKey);
-        if (playerCount == null) {
-            playerCount = 0L; // Default to 0 if null
+        String gameKey = GAME_PREFIX + gameId;
+        String playerSetKey = gameKey + PLAYERS_KEY_SUFFIX;
+    
+        // Game must exist
+        if (!redisTemplate.hasKey(gameKey)) {
+            return "Game not found.";
         }
+    
+        // Check visibility and status
+        String visibility = hashOps.get(gameKey, "visibility");
+        String status = hashOps.get(gameKey, "status");
+    
+        if (!"public".equalsIgnoreCase(visibility)) {
+            return "Game is private.";
+        }
+    
+        if (!"lobby".equalsIgnoreCase(status)) {
+            return "Game is already in progress or ended.";
+        }
+    
+        Long playerCount = setOps.size(playerSetKey);
+        if (playerCount == null) playerCount = 0L;
+    
         if (playerCount >= MAX_PLAYERS) {
             return "Game is full.";
         }
+    
         setOps.add(playerSetKey, String.valueOf(playerId));
         return "Player added.";
     }
+    
+    /** Add Player with Invite Code */
+    public String addPlayerToGameWithInviteCode(String inviteCode, int playerId) {
+        // Loop through all games to match invite code (or add an index later)
+        Set<String> keys = redisTemplate.keys(GAME_PREFIX + "*");
+        
+        // The keys variable is never null with redisTemplate.keys(), so we can just handle the case when keys is empty
+        if (keys.isEmpty()) return "No games found.";
+    
+        for (String gameKey : keys) {
+            String storedInvite = hashOps.get(gameKey, "inviteCode");
+            String status = hashOps.get(gameKey, "status");
+    
+            if (inviteCode.equalsIgnoreCase(storedInvite)) {
+                if (!"lobby".equalsIgnoreCase(status)) {
+                    return "Game is already in progress or ended.";
+                }
+    
+                String playerSetKey = gameKey + PLAYERS_KEY_SUFFIX;
+                Long playerCount = setOps.size(playerSetKey);
+                if (playerCount == null) playerCount = 0L;
+    
+                if (playerCount >= MAX_PLAYERS) {
+                    return "Game is full.";
+                }
+    
+                setOps.add(playerSetKey, String.valueOf(playerId));
+                return "Player added to private game.";
+            }
+        }
+    
+        return "Invalid invite code.";
+    }
+    
 
     /** Remove Player */
     public String removePlayerFromGame(int gameId, int playerId) {
@@ -139,4 +191,29 @@ public class GameStateService {
 
         return code;
     }
+
+    /** Check the End Conditions */
+    public boolean checkEndCondition(int gameId) {
+        String gameKey = "game:" + gameId;
+        String timerStr = hashOps.get(gameKey, "timer");
+    
+        if (timerStr != null && Integer.parseInt(timerStr) >= 1200) {
+            hashOps.put(gameKey, "status", "ended");
+            return true;
+        }
+    
+        Set<String> playerIds = setOps.members(gameKey + ":players");
+        if (playerIds != null) {
+            for (String pid : playerIds) {
+                String moneyStr = (String) redisTemplate.opsForHash().get("player:" + pid, "money");
+                if (moneyStr != null && Integer.parseInt(moneyStr) >= 5000) {
+                    hashOps.put(gameKey, "status", "ended");
+                    return true;
+                }
+            }
+        }
+    
+        return false;
+    }
+    
 }
