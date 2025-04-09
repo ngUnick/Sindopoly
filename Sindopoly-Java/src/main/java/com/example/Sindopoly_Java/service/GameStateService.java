@@ -1,4 +1,3 @@
-// GameStateService.java
 package com.example.Sindopoly_Java.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,7 +50,7 @@ public class GameStateService {
         }
     
         hashOps.putAll(gameKey, gameData);
-        setOps.add(playersKey, String.valueOf(ownerId)); // ✅ Add owner to player list
+        setOps.add(playersKey, String.valueOf(ownerId));
         redisTemplate.expire(gameKey, 24, TimeUnit.HOURS);
         redisTemplate.expire(playersKey, 24, TimeUnit.HOURS);
     
@@ -89,7 +88,11 @@ public class GameStateService {
     /** Add Player */
     public String addPlayerToGame(int gameId, int playerId) {
         String playerSetKey = GAME_PREFIX + gameId + PLAYERS_KEY_SUFFIX;
-        if (setOps.size(playerSetKey) >= MAX_PLAYERS) {
+        Long playerCount = setOps.size(playerSetKey);
+        if (playerCount == null) {
+            playerCount = 0L; // Default to 0 if null
+        }
+        if (playerCount >= MAX_PLAYERS) {
             return "Game is full.";
         }
         setOps.add(playerSetKey, String.valueOf(playerId));
