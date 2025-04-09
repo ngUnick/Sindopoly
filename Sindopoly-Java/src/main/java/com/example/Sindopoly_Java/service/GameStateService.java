@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 
 import java.time.Instant;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -167,20 +168,20 @@ public class GameStateService {
     
 
     /** Remove Player */
-    public String removePlayerFromGame(int gameId, int playerId) {
-        String gameKey = GAME_PREFIX + gameId;
-        String playerSetKey = gameKey + PLAYERS_KEY_SUFFIX;
-        setOps.remove(playerSetKey, String.valueOf(playerId));
+    // public String removePlayerFromGame(int gameId, int playerId) {
+    //     String gameKey = GAME_PREFIX + gameId;
+    //     String playerSetKey = gameKey + PLAYERS_KEY_SUFFIX;
+    //     setOps.remove(playerSetKey, String.valueOf(playerId));
 
-        // If owner left, delete game
-        String owner = hashOps.get(gameKey, "owner");
-        if (String.valueOf(playerId).equals(owner)) {
-            deleteGame(gameId);
-            return "Owner left. Game deleted.";
-        }
+    //     // If owner left, delete game
+    //     String owner = hashOps.get(gameKey, "owner");
+    //     if (String.valueOf(playerId).equals(owner)) {
+    //         deleteGame(gameId);
+    //         return "Owner left. Game deleted.";
+    //     }
 
-        return "Player removed.";
-    }
+    //     return "Player removed.";
+    // }
 
     /** Get Players */
     public Set<String> getPlayersInGame(int gameId) {
@@ -208,12 +209,17 @@ public class GameStateService {
     }
 
     /** Check the End Conditions */
+    // This method is called periodically to check if the game should end
+    // It checks if the game is in progress and if there are players
+    // It checks if the timer has reached the maximum time
+    // It checks if any player has reached the maximum money
+    // If any condition is met, it ends the game
     public boolean checkEndCondition(int gameId) {
         String gameKey = "game:" + gameId;
         String timerStr = hashOps.get(gameKey, "timer");
     
         if (timerStr != null && Integer.parseInt(timerStr) >= 1200) {
-            finalizeGameStatsAndCleanup(gameId);
+            endGame(gameId);
             return true;
         }
     
@@ -222,7 +228,7 @@ public class GameStateService {
             for (String pid : playerIds) {
                 String moneyStr = (String) redisTemplate.opsForHash().get("player:" + pid, "money");
                 if (moneyStr != null && Integer.parseInt(moneyStr) >= 5000) {
-                    finalizeGameStatsAndCleanup(gameId);
+                    endGame(gameId);
                     return true;
                 }
             }
@@ -231,7 +237,48 @@ public class GameStateService {
         return false;
     }
 
+    /** Remove Player */
+    // This method is called when a player leaves the game
+    // It checks if the player is the owner and if the game is in lobby status
+    // If so, it deletes the game and all players
+    // If the player is not the owner, it just removes the player from the game
+    // If the game is in progress, it finalizes the player stats
+    // and removes the player from the game
+    public String removePlayerFromGame(int gameId, int playerId) {
+        String gameKey = GAME_PREFIX + gameId;
+        String playerSetKey = gameKey + PLAYERS_KEY_SUFFIX;
+    
+        setOps.remove(playerSetKey, String.valueOf(playerId));
+    
+        String owner = hashOps.get(gameKey, "owner");
+        String status = hashOps.get(gameKey, "status");
+    
+        if (String.valueOf(playerId).equals(owner) && "lobby".equalsIgnoreCase(status)) {
+            deleteGameAndPlayers(gameId);
+            return "Owner left during lobby. Game deleted.";
+        }
+    
+        // Handle player leaving mid-game
+        if ("inProgress".equalsIgnoreCase(status)) {
+            String startTimeStr = hashOps.get(gameKey, "startTime");
+            Instant now = Instant.now();
+            Instant startTime = startTimeStr != null ? Instant.parse(startTimeStr) : now;
+            int sessionSeconds = (int) Duration.between(startTime, now).getSeconds();
+    
+            int money = Integer.parseInt((String) redisTemplate.opsForHash().get("player:" + playerId, "money"));
+            finalizePlayerStats(playerId, false, money, sessionSeconds);
+        }
+    
+        return "Player removed.";
+    }
+    
+
     /** Find the Winner */
+    // This method is called when the game ends
+    // It checks if the game is in progress and if there are players
+    // It determines the winner by calculating the total value of each player
+    // It compares the total value of each player and returns the player with the highest value
+    // It uses the player's money and properties to calculate the total value
     public String determineGameWinner(int gameId) {
         String playersKey = "game:" + gameId + ":players";
         Set<String> playerIds = setOps.members(playersKey);
@@ -268,56 +315,72 @@ public class GameStateService {
         return winner;
     }
 
-
-    private void finalizeGameStatsAndCleanup(int gameId) {
+    /** Finalize Player Stats */
+    // This method is called when the game ends
+    // It updates the player's stats in the database
+    // It checks if the player already has stats, if not, it creates a new stats object
+    // It updates the total games, wins, losses, money, and time played
+    // Finally, it saves the stats object to the database
+    // This method is called for each player in the game
+    // It checks if the player is the winner and updates the stats accordingly
+    public void finalizePlayerStats(int playerId, boolean isWinner, int money, int sessionSeconds) {
+        Stats stats = statsRepo.findByPlayer(playerId).orElseGet(() -> {
+            Stats s = new Stats();
+            s.setPlayer(playerId);
+            return s;
+        });
+    
+        stats.setTotalGames(stats.getTotalGames() + 1);
+        if (isWinner) {
+            stats.setTotalWins(stats.getTotalWins() + 1);
+        } else {
+            stats.setTotalLosses(stats.getTotalLosses() + 1);
+        }
+        stats.setTotalMoney(stats.getTotalMoney() + money);
+        stats.setTotalTimePlayed(stats.getTotalTimePlayed() + sessionSeconds);
+    
+        statsRepo.save(stats);
+    }
+    
+    /** Delete Game and Players */
+    // This method is called when the game ends
+    // It deletes the game and all players from Redis
+    public void deleteGameAndPlayers(int gameId) {
         String gameKey = "game:" + gameId;
-        hashOps.put(gameKey, "status", "ended");
-
-        Set<String> playerIds = setOps.members(gameKey + ":players");
-        if (playerIds == null || playerIds.isEmpty()) {
-            return; // nothing to process
-        }
-
-        String startTimeStr = hashOps.get(gameKey, "startTime");
-
-        Instant now = Instant.now();
-        Instant startTime = startTimeStr != null ? Instant.parse(startTimeStr) : now;
-        int sessionSeconds = (int) java.time.Duration.between(startTime, now).getSeconds();
-
-        // Determine winner (Player with most money plus property value combined)
-        String winner = determineGameWinner(gameId);
-        hashOps.put("game:" + gameId, "winner", winner);
-
-
-        // Persist stats for each player
-        for (String pid : playerIds) {
-            int playerId = Integer.parseInt(pid);
-            int money = Integer.parseInt((String) redisTemplate.opsForHash().get("player:" + pid, "money"));
-
-            Stats stats = statsRepo.findByPlayer(playerId).orElseGet(() -> {
-                Stats s = new Stats();
-                s.setPlayer(playerId);
-                return s;
-            });
-
-            stats.setTotalGames(stats.getTotalGames() + 1);
-            if (pid.equals(winner)) {
-                stats.setTotalWins(stats.getTotalWins() + 1);
-            } else {
-                stats.setTotalLosses(stats.getTotalLosses() + 1);
-            }
-            stats.setTotalMoney(stats.getTotalMoney() + money);
-            stats.setTotalTimePlayed(stats.getTotalTimePlayed() + sessionSeconds);
-
-            statsRepo.save(stats);
-        }
-
-        // Cleanup Redis
         redisTemplate.delete(gameKey);
         redisTemplate.delete(gameKey + ":players");
-
-        System.out.println("Game " + gameId + " ended. Winner: " + winner);
     }
+    
+
+    /** End Game */
+    // This method is called when the game ends
+    // It checks if the game is in progress and if there are players
+    // It updates the game status to ended
+    // It determines the winner and updates the game data
+    // It finalizes the player stats and deletes the game and players
+    public void endGame(int gameId) {
+        String gameKey = "game:" + gameId;
+        Set<String> playerIds = setOps.members(gameKey + ":players");
+        if (playerIds == null || playerIds.isEmpty()) return;
+    
+        hashOps.put(gameKey, "status", "ended");
+    
+        String winner = determineGameWinner(gameId);
+        hashOps.put(gameKey, "winner", winner);
+    
+        String startTimeStr = hashOps.get(gameKey, "startTime");
+        Instant now = Instant.now();
+        Instant startTime = startTimeStr != null ? Instant.parse(startTimeStr) : now;
+        int sessionSeconds = (int) Duration.between(startTime, now).getSeconds();
+    
+        for (String pid : playerIds) {
+            int money = Integer.parseInt((String) redisTemplate.opsForHash().get("player:" + pid, "money"));
+            finalizePlayerStats(Integer.parseInt(pid), pid.equals(winner), money, sessionSeconds);
+        }
+    
+        deleteGameAndPlayers(gameId);
+    }
+    
 
     
     
