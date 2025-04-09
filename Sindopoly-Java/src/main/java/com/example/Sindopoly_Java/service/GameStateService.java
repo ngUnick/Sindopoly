@@ -6,6 +6,9 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.SetOperations;
 import org.springframework.stereotype.Service;
 
+import com.example.Sindopoly_Java.model.Stats;
+import com.example.Sindopoly_Java.repository.StatsRepository;
+
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -26,12 +29,16 @@ public class GameStateService {
     private final SetOperations<String, String> setOps;
     private final Random random = new Random();
 
+    private final StatsRepository statsRepo;
+
     @Autowired
-    public GameStateService(RedisTemplate<String, String> redisTemplate) {
+    public GameStateService(RedisTemplate<String, String> redisTemplate, StatsRepository statsRepo) {
         this.redisTemplate = redisTemplate;
         this.hashOps = redisTemplate.opsForHash();
         this.setOps = redisTemplate.opsForSet();
+        this.statsRepo = statsRepo;
     }
+
 
     /** Create Game */
     public Map<String, String> createGame(int ownerId, String visibility) {
@@ -198,7 +205,7 @@ public class GameStateService {
         String timerStr = hashOps.get(gameKey, "timer");
     
         if (timerStr != null && Integer.parseInt(timerStr) >= 1200) {
-            hashOps.put(gameKey, "status", "ended");
+            finalizeGameStatsAndCleanup(gameId);
             return true;
         }
     
@@ -207,7 +214,7 @@ public class GameStateService {
             for (String pid : playerIds) {
                 String moneyStr = (String) redisTemplate.opsForHash().get("player:" + pid, "money");
                 if (moneyStr != null && Integer.parseInt(moneyStr) >= 5000) {
-                    hashOps.put(gameKey, "status", "ended");
+                    finalizeGameStatsAndCleanup(gameId);
                     return true;
                 }
             }
@@ -215,5 +222,64 @@ public class GameStateService {
     
         return false;
     }
+
+    private void finalizeGameStatsAndCleanup(int gameId) {
+        String gameKey = "game:" + gameId;
+        hashOps.put(gameKey, "status", "ended");
+
+        Set<String> playerIds = setOps.members(gameKey + ":players");
+        String startTimeStr = hashOps.get(gameKey, "startTime");
+
+        Instant now = Instant.now();
+        Instant startTime = startTimeStr != null ? Instant.parse(startTimeStr) : now;
+        int sessionSeconds = (int) java.time.Duration.between(startTime, now).getSeconds();
+
+        // Determine winner (first with >= 5000 or highest money)
+        String winner = null;
+        int highestMoney = -1;
+
+        for (String pid : playerIds) {
+            String moneyStr = (String) redisTemplate.opsForHash().get("player:" + pid, "money");
+            int money = moneyStr != null ? Integer.parseInt(moneyStr) : 0;
+
+            if (money >= 5000 || money > highestMoney) {
+                winner = pid;
+                highestMoney = money;
+            }
+        }
+
+        hashOps.put(gameKey, "winner", winner);
+
+        // Persist stats for each player
+        for (String pid : playerIds) {
+            int playerId = Integer.parseInt(pid);
+            int money = Integer.parseInt((String) redisTemplate.opsForHash().get("player:" + pid, "money"));
+
+            Stats stats = statsRepo.findByPlayer(playerId).orElseGet(() -> {
+                Stats s = new Stats();
+                s.setPlayer(playerId);
+                return s;
+            });
+
+            stats.setTotalGames(stats.getTotalGames() + 1);
+            if (pid.equals(winner)) {
+                stats.setTotalWins(stats.getTotalWins() + 1);
+            } else {
+                stats.setTotalLosses(stats.getTotalLosses() + 1);
+            }
+            stats.setTotalMoney(stats.getTotalMoney() + money);
+            stats.setTotalTimePlayed(stats.getTotalTimePlayed() + sessionSeconds);
+
+            statsRepo.save(stats);
+        }
+
+        // Cleanup Redis
+        redisTemplate.delete(gameKey);
+        redisTemplate.delete(gameKey + ":players");
+
+        System.out.println("Game " + gameId + " ended. Winner: " + winner);
+    }
+
+    
     
 }
