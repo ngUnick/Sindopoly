@@ -23,24 +23,31 @@ The goal is to simulate the Monopoly experience in a university setting while in
 ## 💡 How the Game Works (Current Progress)
 
 ### ✅ Game Lifecycle (Back-End Logic)
-- A game is **created** by a player (owner), who automatically joins it.
-- Each game has:
-  - A unique `gameId` (currently set to the owner's ID for lookup simplicity)
-  - A `visibility` setting (public/private)
-  - A randomly generated **invite code** if it’s private
-  - A list of players (max 4)
-- Players can **join/leave** lobbies.
-- If the **owner leaves**, the game is automatically **deleted**.
-- When the **owner starts** the game:
-  - The timer starts
-  - Initial turn is set
-  - Win/loss conditions are monitored:
-    - Max time: 20 minutes (1200 seconds)
-    - Max money: 5000
-- A game ends if:
-  - Timer runs out
-  - A player reaches the money cap
-  - All other players go bankrupt
+- A game is **created** by a player (owner), who must exist in MariaDB.
+  - Each player can **only be in one game at a time**.
+- A game includes:
+  - A unique `gameId` (same as `ownerId` for lookup)
+  - A `visibility` flag (`public` or `private`)
+  - A unique **invite code** if the game is private
+  - A Redis player set, with a **maximum of 4 players**
+- Players can **join or leave** games:
+  - Private games require an invite code
+  - Only public, "lobby" state games are joinable
+- If the **owner leaves during the lobby**, the game is **deleted** from Redis
+- If a player leaves **during an active game**, their **stats are finalized and saved to MariaDB**
+- When the **game starts**, it transitions to `"inProgress"` and:
+  - A timer begins (0 → 1200 seconds)
+  - Turn order is initiated
+- The game ends automatically when:
+  - The timer hits 1200 seconds
+  - A player reaches 5000 in-game money
+  - Or all other players go bankrupt
+
+### 🧠 Winner Determination Logic
+- Each player's **total wealth** is calculated:
+  - `money` from Redis
+  - `property values` fetched from MariaDB (`Square.price`)
+- The player with the **highest combined total** is set as the winner
 
 ---
 
@@ -50,7 +57,7 @@ The goal is to simulate the Monopoly experience in a university setting while in
 |------------------------------|--------|--------------------------------------|
 | `game:{gameId}`              | Hash   | Game metadata + live game state      |
 | `game:{gameId}:players`      | Set    | List of player IDs in the game       |
-| `player:{playerId}`          | Hash   | Individual player state              |
+| `player:{playerId}`          | Hash   | Individual player state (temporary)  |
 
 ### Example game data
 ```json
@@ -80,26 +87,49 @@ The goal is to simulate the Monopoly experience in a university setting while in
 }
 ```
 
-## 🧪 API Preview (WIP)
+---
+
+## 🧪 API Preview (Current)
 
 | Method | Endpoint                                  | Description                        |
 |--------|-------------------------------------------|------------------------------------|
 | POST   | `/api/game-state/create`                  | Create a new game                  |
 | POST   | `/api/game-state/{gameId}/start`          | Start the game                     |
-| POST   | `/api/game-state/{gameId}/add-player`     | Add a player to the game lobby     |
-| POST   | `/api/game-state/{gameId}/remove-player`  | Remove a player from the lobby     |
-| GET    | `/api/game-state/{gameId}`                | Retrieve the current game state    |
-| GET    | `/api/game-state/{gameId}/players`        | Get all players in a specific game |
-| DELETE | `/api/game-state/{gameId}`                | Delete a game (only by owner)      |
+| POST   | `/api/game-state/{gameId}/add-player`     | Add a player to a public lobby     |
+| POST   | `/api/game-state/join-with-invite`        | Join a private game via invite     |
+| POST   | `/api/game-state/{gameId}/remove-player`  | Remove a player from the game      |
+| GET    | `/api/game-state/{gameId}`                | Get current game state             |
+| GET    | `/api/game-state/{gameId}/players`        | Get all players in a game          |
+| DELETE | `/api/game-state/{gameId}`                | Delete a game                      |
 
+---
+
+## 🛢️ MariaDB Integration
+
+- **Player**, **Card**, **Square**, and **Stats** tables are modeled as JPA entities
+- Each player's game participation is recorded in Redis and mapped to persistent `Player` and `Stats` rows
+- When a game ends (or a player disconnects), stats are saved to MariaDB:
+  - `total_games`, `total_wins`, `total_losses`, `total_money`, and `total_time_played`
+- Players must **exist in MariaDB** before being allowed to join or create games
+
+---
+
+## 🔐 Validation + Error Handling
+
+- Game creation fails if:
+  - Player already in another game
+  - Player does not exist in MariaDB
+- Redis updates are only allowed if player is valid
+- All such errors return `HTTP 400` via global exception handler using `@ControllerAdvice`
+
+---
 
 ## 🚧 Work in Progress
 
 - 🎲 Implementing full turn mechanics and dice roll system  
 - 🗺️ Custom IHU-themed property and board layout  
 - 🕹️ Interactive frontend in React + Three.js  
-- 👥 Support for multiplayer real-time interaction via Redis  
-- 🧠 Game end logic (max time, money cap, bankruptcy)  
-- 📊 Live player dashboards and score tracking  
-- 🔐 Invite-based private games with secure code system
-
+- 👥 Reconnection/resilience logic for disconnected players  
+- 🎯 In-game action logic (cards, tax, rent, etc.)  
+- 🧠 Bankruptcy handling + next-player turn system  
+- 📊 Real-time dashboards for score and session tracking  
