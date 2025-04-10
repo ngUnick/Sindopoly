@@ -8,8 +8,10 @@ import org.springframework.stereotype.Service;
 
 import com.example.Sindopoly_Java.model.Square;
 import com.example.Sindopoly_Java.model.Stats;
+import com.example.Sindopoly_Java.repository.PlayerRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.repository.StatsRepository;
+import com.example.Sindopoly_Java.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 
@@ -38,6 +40,11 @@ public class GameStateService {
     private final StatsRepository statsRepo;
     @Autowired
     private SquareRepository squareRepo;
+    @Autowired
+    private PlayerRepository playerRepo;
+    @Autowired
+    private ValidationUtils validationUtils;
+    
 
 
     @Autowired
@@ -50,7 +57,34 @@ public class GameStateService {
 
 
     /** Create Game */
+    // This method creates a new game in Redis
+    // It takes the owner ID and visibility as parameters
+    // It checks if the owner exists in the database
+    // It checks if the owner is already in another game
+    // It generates a unique game key and players key
+    // It sets the game status to "lobby" and the creation time
+    // It sets the visibility and invite code if the game is private
+    // It adds the owner to the players set
+    // It sets the expiration time for the game and players keys
+    // It returns the game data as a map
+    // The game data includes the status, creation time, visibility, and invite code
+    // The game key is in the format "game:{ownerId}"
     public Map<String, String> createGame(int ownerId, String visibility) {
+        
+        validationUtils.validatePlayerExists(ownerId);
+
+        // Check if this player is already in any game
+        Set<String> keys = redisTemplate.keys("game:*:players");
+        if (keys != null) {
+            for (String key : keys) {
+                Boolean isMember = setOps.isMember(key, String.valueOf(ownerId));
+                if (Boolean.TRUE.equals(isMember)) {
+                    throw new IllegalStateException("Player is already in another game.");
+                }
+            }
+        }
+
+        
         String gameKey = GAME_PREFIX + ownerId;
         String playersKey = gameKey + ":players";
     
@@ -102,6 +136,9 @@ public class GameStateService {
 
     /** Add Player */
     public String addPlayerToGame(int gameId, int playerId) {
+
+        validationUtils.validatePlayerExists(playerId);
+
         String gameKey = GAME_PREFIX + gameId;
         String playerSetKey = gameKey + PLAYERS_KEY_SUFFIX;
     
@@ -135,6 +172,9 @@ public class GameStateService {
     
     /** Add Player with Invite Code */
     public String addPlayerToGameWithInviteCode(String inviteCode, int playerId) {
+
+        validationUtils.validatePlayerExists(playerId);
+
         // Loop through all games to match invite code (or add an index later)
         Set<String> keys = redisTemplate.keys(GAME_PREFIX + "*");
         
@@ -245,6 +285,9 @@ public class GameStateService {
     // If the game is in progress, it finalizes the player stats
     // and removes the player from the game
     public String removePlayerFromGame(int gameId, int playerId) {
+
+        validationUtils.validatePlayerExists(playerId);
+
         String gameKey = GAME_PREFIX + gameId;
         String playerSetKey = gameKey + PLAYERS_KEY_SUFFIX;
     
