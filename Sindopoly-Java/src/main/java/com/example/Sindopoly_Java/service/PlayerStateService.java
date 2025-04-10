@@ -5,6 +5,9 @@ import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import com.example.Sindopoly_Java.repository.PlayerRepository;
+import com.example.Sindopoly_Java.utils.ValidationUtils;
+
 import java.util.Map;
 
 @Service
@@ -13,6 +16,13 @@ public class PlayerStateService {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final HashOperations<String, String, Object> hashOps;
+
+    @Autowired
+    private PlayerRepository playerRepo;
+    @Autowired
+    private ValidationUtils validationUtils;
+
+
 
     @Autowired
     public PlayerStateService(RedisTemplate<String, Object> redisTemplate) {
@@ -25,6 +35,9 @@ public class PlayerStateService {
      * Example fields: position, money, properties, jail, jailTime, bankrupt
      */
     public void savePlayerState(int playerId, Map<String, Object> playerData) {
+        
+        validationUtils.validatePlayerExists(playerId);
+
         String playerKey = PLAYER_PREFIX + playerId;
         hashOps.putAll(playerKey, playerData);
     }
