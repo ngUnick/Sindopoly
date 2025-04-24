@@ -12,6 +12,7 @@ import com.example.Sindopoly_Java.model.Card.CardType;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.List;
 
 @Service
 public class SquareActionService {
@@ -28,7 +29,8 @@ public class SquareActionService {
         this.cardSvc    = cardSvc;
     }
     
-
+    private int currentGameId;
+    
     /** Executes action and returns (deltaMoney, message) */
     public TileResult execute(int playerId, int position, int gameId) {
 
@@ -97,26 +99,18 @@ public class SquareActionService {
         }
 
         /* (3) Pay rent to another player */
-        int rent = sq.getRent() == null ? 0 : sq.getRent();
-        int playerMoney = readMoney(playerId);
-
-        if (playerMoney < rent) {
-            // let TurnService’s bankruptcy handler mark him bankrupt
-            writeMoney(playerId, 0);
-            return new TileResult(-playerMoney,
-                    "Could not pay full rent (" + rent + ") – bankrupt");
+        int rent;
+        if (sq.getType() == SquareType.UTILITY) {
+            int dice = readLastDice(currentGameId);      // TurnService sets it
+            rent = ownsBothUtilities(owner) ? dice * 10 : dice * 4;
+        } else if (sq.getType() == SquareType.TRAIN) {
+            rent = rentForTrainsOwned(owner);
+        } else {
+            rent = maybeDoubleForFullSet(sq, owner);
         }
-
-        // debit tenant
-        writeMoney(playerId, playerMoney - rent);
-
-        // credit owner
-        int ownerMoney = readMoney(Integer.parseInt(owner));
-        writeMoney(Integer.parseInt(owner), ownerMoney + rent);
-
-        return new TileResult(-rent,
-                "Paid rent " + rent + " to player " + owner);
+        return processRentPayment(playerId, owner, rent);
     }
+
 
     private TileResult applyCard(int playerId, Card card) {
         return switch (card.getType()) {
@@ -137,6 +131,62 @@ public class SquareActionService {
         };
     }
     
+    private TileResult processRentPayment(int tenantId, String ownerId, int rent) {
+        int tenantMoney = readMoney(tenantId);
+    
+        if (tenantMoney < rent) {
+            writeMoney(tenantId, 0);
+            return new TileResult(-tenantMoney,
+                    "Could not pay full rent (" + rent + ") – bankrupt");
+        }
+    
+        writeMoney(tenantId, tenantMoney - rent);
+        int ownerMoney = readMoney(Integer.parseInt(ownerId));
+        writeMoney(Integer.parseInt(ownerId), ownerMoney + rent);
+    
+        return new TileResult(-rent,
+                "Paid rent " + rent + " to player " + ownerId);
+    }
+    
+
+    /* ----- rent helpers ----------------------------------------- */
+
+    private boolean ownsBothUtilities(String ownerId) {
+        // Monopoly board indices for the two utilities (adjust if different)
+        return ownerId.equals(hashOps.get("square:12","owner")) &&
+            ownerId.equals(hashOps.get("square:28","owner"));
+    }
+
+    private int rentForTrainsOwned(String ownerId) {
+        int count = 0;
+        for (int id : List.of(5,15,25,35)) {
+            if (ownerId.equals(hashOps.get("square:" + id,"owner"))) count++;
+        }
+        return switch (count) {
+            case 1 -> 25;
+            case 2 -> 50;
+            case 3 -> 100;
+            default -> 200;   // owns all 4
+        };
+    }
+
+    private int maybeDoubleForFullSet(Square sq, String ownerId) {
+        SquareType colour = sq.getType();
+
+        /* fetch all squares of same colour from DB once */
+        List<Integer> sameColourIds = squareRepo.findIdsByColour(colour);
+        boolean fullSet = sameColourIds.stream()
+                .allMatch(id -> ownerId.equals(hashOps.get("square:" + id,"owner")));
+
+        int base = sq.getRent() == null ? 0 : sq.getRent();
+        return fullSet ? base * 2 : base;
+    }
+
+    private int readLastDice(int gameId) {
+        String v = hashOps.get("game:" + gameId, "lastDice");
+        return v == null ? 0 : Integer.parseInt(v);
+    }
+
 
     /* ------------ small Redis helpers --------------------------- */
     private int readMoney(int pid) {

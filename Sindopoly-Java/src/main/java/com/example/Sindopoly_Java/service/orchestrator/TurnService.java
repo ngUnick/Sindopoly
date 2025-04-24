@@ -89,6 +89,10 @@ public class TurnService {
         /* ─── 2. roll dice & move ──────────────────────────────────────── */
         int dice = diceSvc.roll();
         MovementResult mv = moveSvc.move(position, dice);
+
+        /* store value for utilities */
+        gameStateSvc.getGame(gameId).put("lastDice", String.valueOf(dice));
+
         position = mv.newPosition();
         if (mv.passedGo()) money += 200;
 
