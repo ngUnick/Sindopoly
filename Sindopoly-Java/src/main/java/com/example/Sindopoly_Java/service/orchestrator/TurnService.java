@@ -20,21 +20,23 @@ public class TurnService {
     /* pure-logic helpers */
     private final DiceService diceSvc           = new DiceService();
     private final MovementService moveSvc       = new MovementService();
-    private final BankruptcyService bankSvc     = new BankruptcyService();
 
-    
 
+    private final BankruptcyService bankSvc;
     private final SquareActionService squareActionSvc;
 
     public TurnService(GameStateService g,
-                       PlayerStateService p,
-                       ValidationUtils v,
-                       SquareActionService sq) {
-        this.gameStateSvc = g;
-        this.playerStateSvc = p;
-        this.validationUtils = v;
-        this.squareActionSvc = sq;
+                    PlayerStateService p,
+                    ValidationUtils v,
+                    SquareActionService sq,
+                    BankruptcyService bank) {   // <-- add parameter
+        this.gameStateSvc     = g;
+        this.playerStateSvc   = p;
+        this.validationUtils  = v;
+        this.squareActionSvc  = sq;
+        this.bankSvc          = bank;   // <-- store injected bean
     }
+
     
 
     public TurnResponse playTurn(int gameId, int playerId) {
@@ -105,13 +107,15 @@ public class TurnService {
 
         /* ─── 4. post-move bankruptcy? ────────────────────────────────── */
         if (bankSvc.isBankrupt(money)) {
-            handleBankruptcy(gameId, playerId, pHash);
-            return new TurnResponse(
+            handleFullBankruptcy(gameId, playerId, pHash);
+            rotateTurn(gameId);
+            return new TurnService.TurnResponse(
                 0, position, money, false,
-                true,   // wasInJail
-                true,   // wentBankrupt
-                "Bankrupt");   // tileMessage
+                true,  // wasInJail
+                true,  // wentBankrupt
+                "Bankrupt");
         }
+        
 
         /* ─── 5. increase timer + rotate turn ─────────────────────────── */
         incrementGameTimer(gameId, gameHash);
@@ -156,6 +160,34 @@ public class TurnService {
         // TODO: transfer properties to bank etc.
     }
 
+    private void handleFullBankruptcy(int gameId,
+                                  int playerId,
+                                  Map<String,Object> pHash) {
+
+    // 1. flag bankrupt in Redis
+    pHash.put("bankrupt", true);
+    playerStateSvc.savePlayerState(playerId, pHash);
+
+    // 2. release properties
+    bankSvc.releaseProperties(playerId);
+
+    // 3. remove from players set
+    gameStateSvc.getPlayersInGame(gameId)
+                .forEach(id -> {});       // touch to init pipeline
+    gameStateSvc.removePlayerFromGame(gameId, playerId);
+
+    // 4. finalize stats (loss) – re-use existing method
+    //   winner flag false, money could be zero
+    gameStateSvc.finalizePlayerStats(playerId, false,
+        Integer.parseInt(pHash.get("money").toString()), 0);
+
+    // 5. if only one player left -> endGame
+    if (gameStateSvc.getPlayersInGame(gameId).size() == 1) {
+        gameStateSvc.endGame(gameId);
+    }
+}
+
+
     /* lightweight response */
     public record TurnResponse(
         int dice,
@@ -164,6 +196,7 @@ public class TurnService {
         boolean passedGo,
         boolean wasInJail,
         boolean wentBankrupt,
-        String  tileMessage) {}
+        String tileMessage) {}
+
 
 }
