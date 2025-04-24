@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 
 import com.example.Sindopoly_Java.model.Square;
 import com.example.Sindopoly_Java.model.Stats;
-import com.example.Sindopoly_Java.repository.PlayerRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.repository.StatsRepository;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
@@ -40,8 +39,6 @@ public class GameStateService {
     private final StatsRepository statsRepo;
     @Autowired
     private SquareRepository squareRepo;
-    @Autowired
-    private PlayerRepository playerRepo;
     @Autowired
     private ValidationUtils validationUtils;
     
