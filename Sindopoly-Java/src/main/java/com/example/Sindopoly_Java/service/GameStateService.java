@@ -136,39 +136,37 @@ public class GameStateService {
 
         validationUtils.validatePlayerExists(playerId);
 
-        String gameKey = GAME_PREFIX + gameId;
-        String playerSetKey = gameKey + PLAYERS_KEY_SUFFIX;
-    
+        String gameKey       = GAME_PREFIX + gameId;
+        String playerSetKey  = gameKey + PLAYERS_KEY_SUFFIX;
+
         // Game must exist
-        if (!redisTemplate.hasKey(gameKey)) {
-            return "Game not found.";
-        }
-    
-        // Check visibility and status
+        if (!redisTemplate.hasKey(gameKey))
+            throw new IllegalStateException("Game not found.");
+
+        /* ── lobby-only check ───────────────────────────── */
+        String status = hashOps.get(gameKey, "status");        // <- correct field
+        validationUtils.ensureLobby(status);                   // throws if not "lobby"
+
+        /* ── visibility check ───────────────────────────── */
         String visibility = hashOps.get(gameKey, "visibility");
-        String status = hashOps.get(gameKey, "status");
-    
-        if (!"public".equalsIgnoreCase(visibility)) {
-            return "Game is private.";
-        }
-    
-        if (!"lobby".equalsIgnoreCase(status)) {
-            return "Game is already in progress or ended.";
-        }
-    
+        if (!"public".equalsIgnoreCase(visibility))
+            throw new IllegalStateException("Game is private.");
+
+        /* ── max-players check ──────────────────────────── */
         Long playerCount = setOps.size(playerSetKey);
-        if (playerCount == null) playerCount = 0L;
-    
-        if (playerCount >= MAX_PLAYERS) {
-            return "Game is full.";
-        }
-    
+        if (playerCount != null && playerCount >= MAX_PLAYERS)
+            throw new IllegalStateException("Game is full (4 players).");
+
+        /* ── add player ─────────────────────────────────── */
         setOps.add(playerSetKey, String.valueOf(playerId));
         return "Player added.";
     }
+
     
     /** Add Player with Invite Code */
     public String addPlayerToGameWithInviteCode(String inviteCode, int playerId) {
+
+
 
         validationUtils.validatePlayerExists(playerId);
 
@@ -181,6 +179,7 @@ public class GameStateService {
         for (String gameKey : keys) {
             String storedInvite = hashOps.get(gameKey, "inviteCode");
             String status = hashOps.get(gameKey, "status");
+            validationUtils.ensureLobby(status);            
     
             if (inviteCode.equalsIgnoreCase(storedInvite)) {
                 if (!"lobby".equalsIgnoreCase(status)) {

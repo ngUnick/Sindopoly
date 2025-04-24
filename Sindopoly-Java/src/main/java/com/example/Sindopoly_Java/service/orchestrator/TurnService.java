@@ -46,17 +46,18 @@ public class TurnService {
 
     public TurnResponse playTurn(int gameId, int playerId) {
 
-        /* ─── 0. look-ups / validation ─────────────────────────────── */
+        /* ─── 0. look-ups / validation ───────────────────────────── */
         validationUtils.validatePlayerExists(playerId);
-    
+
         Map<String,String> gameHash = gameStateSvc.getGame(gameId);
         if (!"inProgress".equalsIgnoreCase(gameHash.get("status")))
             throw new IllegalStateException("Game not in progress.");
-    
-        if (!String.valueOf(playerId).equals(gameHash.get("playerTurn")))
-            throw new IllegalStateException("Not this player's turn.");
-    
+
+        /* single helper */
+        validationUtils.ensurePlayerTurn(gameId, playerId, gameHash);
+
         Map<String,Object> pHash = playerStateSvc.getPlayerState(playerId);
+
     
         /* clear AFK flag */
         pHash.put("afk", "false");

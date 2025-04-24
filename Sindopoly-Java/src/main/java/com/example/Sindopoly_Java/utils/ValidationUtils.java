@@ -2,6 +2,7 @@ package com.example.Sindopoly_Java.utils;
 
 import com.example.Sindopoly_Java.repository.PlayerRepository;
 import org.springframework.stereotype.Component;
+import java.util.Map;
 
 @Component
 public class ValidationUtils {
@@ -16,5 +17,27 @@ public class ValidationUtils {
         if (!playerRepo.existsById(playerId)) {
             throw new IllegalArgumentException("Player with ID " + playerId + " does not exist.");
         }
+    }
+
+    /** Ensure it is this player's turn */
+    public void ensurePlayerTurn(int gameId,
+                                 int playerId,
+                                 Map<String,String> gameHash) {
+        String current = gameHash.get("playerTurn");
+        if (!String.valueOf(playerId).equals(current)) {
+            throw new IllegalStateException("Not your turn.");
+        }
+    }
+
+    /** Ensure game is still in lobby state */
+    public void ensureLobby(String status) {
+        if (!"lobby".equalsIgnoreCase(status))
+            throw new IllegalStateException("Game already started.");
+    }
+
+    /** Prevent negative money except via bankruptcy handling */
+    public void assertNonNegativeMoney(int money) {
+        if (money < 0)
+            throw new IllegalStateException("Money cannot be negative.");
     }
 }

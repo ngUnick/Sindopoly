@@ -8,10 +8,13 @@ import java.util.Map;
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
-        return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+    @ExceptionHandler({
+        IllegalArgumentException.class,
+        IllegalStateException.class            // NEW
+    })
+    public ResponseEntity<Map<String,String>> handleBadRequest(RuntimeException ex) {
+        return ResponseEntity
+               .badRequest()
+               .body(Map.of("error", ex.getMessage()));
     }
-
-    // Will later add more exception types here (probably)
 }
