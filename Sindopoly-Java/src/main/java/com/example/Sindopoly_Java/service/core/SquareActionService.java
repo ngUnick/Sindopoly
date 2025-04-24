@@ -8,6 +8,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import com.example.Sindopoly_Java.model.Card;
 import com.example.Sindopoly_Java.model.Card.CardType;
+import com.example.Sindopoly_Java.utils.ValidationUtils;
 
 
 import java.util.Map;
@@ -21,12 +22,16 @@ public class SquareActionService {
     private final HashOperations<String,String,String> hashOps;
     private final CardService cardSvc;
 
+    private final ValidationUtils validationUtils;
+
     public SquareActionService(SquareRepository repo,
                                RedisTemplate<String,String> redis,
-                               CardService cardSvc) {
+                               CardService cardSvc,
+                               ValidationUtils v) {
         this.squareRepo = repo;
         this.hashOps    = redis.opsForHash();
         this.cardSvc    = cardSvc;
+        this.validationUtils = v;
     }
     
     private int currentGameId;
@@ -80,6 +85,9 @@ public class SquareActionService {
 
         /* (1) Un-owned tile → auto-buy if player can afford */
         if (owner == null) {
+            if (hashOps.get(squareKey, "owner") != null)
+                throw new IllegalStateException("Property was purchased concurrently."); // This protects against race conditions if two requests hit simultaneously
+
             int price = sq.getPrice() == null ? 0 : sq.getPrice();
             int playerMoney = readMoney(playerId);
 
@@ -194,8 +202,10 @@ public class SquareActionService {
         return v == null ? 0 : Integer.parseInt(v);
     }
     private void writeMoney(int pid, int newAmount) {
+        validationUtils.assertNonNegativeMoney(newAmount);
         hashOps.put("player:" + pid, "money", String.valueOf(newAmount));
     }
+    
 
 
     private void sendPlayerToJail(int playerId) {
