@@ -62,32 +62,64 @@ public class SquareActionService {
     }
 
     /* ============================================================ */
-
+    /* property handling with ownership + rent                      */
+    /* ============================================================ */
     private TileResult handleProperty(int playerId, Square sq) {
+
         String squareKey = "square:" + sq.getId();
-        String owner = hashOps.get(squareKey, "owner");
+        String owner = hashOps.get(squareKey, "owner");        // may be null
 
-        if (owner == null) {            // unowned → offer buy
-            // For MVP auto-buy if player has cash
-            return new TileResult(-sq.getPrice(),
-                    "Bought property for " + sq.getPrice());
+        /* (1) Un-owned tile → auto-buy if player can afford */
+        if (owner == null) {
+            int price = sq.getPrice() == null ? 0 : sq.getPrice();
+            int playerMoney = readMoney(playerId);
+
+            if (playerMoney >= price) {
+                writeMoney(playerId, playerMoney - price);
+                hashOps.put(squareKey, "owner", String.valueOf(playerId));
+                return new TileResult(-price,
+                    "You bought this property for " + price);
+            }
+            // Can't afford → nothing happens for now
+            return new TileResult(0, "Unowned property (insufficient funds)");
         }
 
+        /* (2) Landing on own property */
         if (owner.equals(String.valueOf(playerId))) {
-            return new TileResult(0, "Your own property");
+            return new TileResult(0, "Own property – no action");
         }
 
-        // pay rent
-        int rent = sq.getRent();
-        // Add rent to owner’s money (simplified)
-        String ownerPlayerKey = "player:" + owner;
-        Integer ownerMoney = Integer.valueOf(
-                hashOps.get(ownerPlayerKey, "money"));
-        hashOps.put(ownerPlayerKey, "money",
-                String.valueOf(ownerMoney + rent));
+        /* (3) Pay rent to another player */
+        int rent = sq.getRent() == null ? 0 : sq.getRent();
+        int playerMoney = readMoney(playerId);
 
-        return new TileResult(-rent, "Paid rent " + rent + " to P" + owner);
+        if (playerMoney < rent) {
+            // let TurnService’s bankruptcy handler mark him bankrupt
+            writeMoney(playerId, 0);
+            return new TileResult(-playerMoney,
+                    "Could not pay full rent (" + rent + ") – bankrupt");
+        }
+
+        // debit tenant
+        writeMoney(playerId, playerMoney - rent);
+
+        // credit owner
+        int ownerMoney = readMoney(Integer.parseInt(owner));
+        writeMoney(Integer.parseInt(owner), ownerMoney + rent);
+
+        return new TileResult(-rent,
+                "Paid rent " + rent + " to player " + owner);
     }
+
+    /* ------------ small Redis helpers --------------------------- */
+    private int readMoney(int pid) {
+        String v = hashOps.get("player:" + pid, "money");
+        return v == null ? 0 : Integer.parseInt(v);
+    }
+    private void writeMoney(int pid, int newAmount) {
+        hashOps.put("player:" + pid, "money", String.valueOf(newAmount));
+    }
+
 
     private void sendPlayerToJail(int playerId) {
         String key = "player:" + playerId;
