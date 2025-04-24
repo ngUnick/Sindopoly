@@ -98,7 +98,7 @@ public class TurnService {
 
         /* ─── 3. TODO square action / card etc. ───────────────────────── */
         SquareActionService.TileResult tile =
-        squareActionSvc.execute(playerId, position);
+        squareActionSvc.execute(playerId, position, gameId);
 
         money += tile.deltaMoney();
         pHash.put("money", money);

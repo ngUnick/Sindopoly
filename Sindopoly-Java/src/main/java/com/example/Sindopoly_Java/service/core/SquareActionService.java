@@ -6,6 +6,9 @@ import com.example.Sindopoly_Java.repository.SquareRepository;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import com.example.Sindopoly_Java.model.Card;
+import com.example.Sindopoly_Java.model.Card.CardType;
+
 
 import java.util.Map;
 import java.util.Optional;
@@ -15,15 +18,19 @@ public class SquareActionService {
 
     private final SquareRepository squareRepo;
     private final HashOperations<String,String,String> hashOps;
+    private final CardService cardSvc;
 
     public SquareActionService(SquareRepository repo,
-                               RedisTemplate<String,String> redis) {
+                               RedisTemplate<String,String> redis,
+                               CardService cardSvc) {
         this.squareRepo = repo;
         this.hashOps    = redis.opsForHash();
+        this.cardSvc    = cardSvc;
     }
+    
 
     /** Executes action and returns (deltaMoney, message) */
-    public TileResult execute(int playerId, int position) {
+    public TileResult execute(int playerId, int position, int gameId) {
 
         Optional<Square> opt = squareRepo.findById(position);
         if (opt.isEmpty()) return new TileResult(0, "Unknown square");
@@ -38,9 +45,9 @@ public class SquareActionService {
                 return new TileResult(-200, "Paid university tax");
             }
 
-            case CARD      -> {
-                // TODO: draw card from deck later
-                return new TileResult(+100, "Card: scholarship +100");
+            case CARD -> {
+                Card c = cardSvc.drawCard(gameId);           // use passed id
+                return applyCard(playerId, c);
             }
 
             case JAIL      -> {
@@ -110,6 +117,26 @@ public class SquareActionService {
         return new TileResult(-rent,
                 "Paid rent " + rent + " to player " + owner);
     }
+
+    private TileResult applyCard(int playerId, Card card) {
+        return switch (card.getType()) {
+            case money     -> {
+                int delta = (int) card.getAmount();
+                int money = readMoney(playerId) + delta;
+                writeMoney(playerId, money);
+                yield new TileResult(delta,
+                        card.getTitle() + " (" + delta + ")");
+            }
+            case transport -> {
+                int newPos = (int) card.getAmount();
+                // update position directly; TurnService will re-execute square action
+                hashOps.put("player:" + playerId, "position", String.valueOf(newPos));
+                yield new TileResult(0,
+                        card.getTitle() + " – moved to square " + newPos);
+            }
+        };
+    }
+    
 
     /* ------------ small Redis helpers --------------------------- */
     private int readMoney(int pid) {
