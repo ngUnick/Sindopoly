@@ -100,9 +100,23 @@ public class TurnService {
         SquareActionService.TileResult tile =
         squareActionSvc.execute(playerId, position, gameId);
 
-        money += tile.deltaMoney();
-        pHash.put("money", money);
-        playerStateSvc.savePlayerState(playerId, pHash);
+        // ── if teleport card moved the player, re-evaluate destination square
+        if (tile.message().contains("moved to square")) {
+            position = Integer.parseInt(
+                    playerStateSvc.getPlayerState(playerId).get("position").toString());
+
+            var dest = squareActionSvc.execute(playerId, position, gameId);
+
+            money += dest.deltaMoney();
+            pHash.put("money", money);
+            playerStateSvc.savePlayerState(playerId, pHash);
+
+            // merge messages
+            tile = new SquareActionService.TileResult(
+                    tile.deltaMoney() + dest.deltaMoney(),
+                    tile.message() + " | " + dest.message());
+        }
+
 
 
         /* ─── 4. post-move bankruptcy? ────────────────────────────────── */
