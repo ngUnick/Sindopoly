@@ -425,7 +425,35 @@ public class GameStateService {
         deleteGameAndPlayers(gameId);
     }
     
+    /* ------------------------------------------------------------------
+    * Convenience: set a single field in the game hash
+    * ------------------------------------------------------------------ */
+    public void setGameField(int gameId, String field, String value) {
+        hashOps.put("game:" + gameId, field, value);
+    }
 
+    /* ------------------------------------------------------------------
+    * Convenience: set any field inside player:{playerId} hash
+    * ------------------------------------------------------------------ */
+    public void setPlayerField(int playerId, String field, String value) {
+        hashOps.put("player:" + playerId, field, value);
+    }
+
+
+    public void forceRotateTurn(int gameId, String currentId) {
+        Set<String> set = getPlayersInGame(gameId);
+        if (set == null || set.size() <= 1) return;    // nothing to rotate
+    
+        List<Integer> ids = set.stream()
+                .map(Integer::parseInt)
+                .sorted()
+                .toList();
+    
+        int idx = ids.indexOf(Integer.parseInt(currentId));
+        int next = ids.get((idx + 1) % ids.size());
+    
+        hashOps.put("game:" + gameId, "playerTurn", String.valueOf(next));
+    }
     
     
 }

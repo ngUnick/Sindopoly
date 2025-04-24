@@ -53,6 +53,11 @@ public class TurnService {
 
         Map<String,Object> pHash = playerStateSvc.getPlayerState(playerId);
 
+        /* clear AFK when player takes a real turn */
+        pHash.put("afk", "false");
+        playerStateSvc.savePlayerState(playerId, pHash);
+
+
         int money     = Integer.parseInt(pHash.get("money").toString());
         int position  = Integer.parseInt(pHash.get("position").toString());
         boolean inJail= Boolean.parseBoolean(pHash.get("jail").toString());
@@ -139,7 +144,11 @@ public class TurnService {
         incrementGameTimer(gameId, gameHash);
         rotateTurn(gameId);
 
-        /* ─── 6. return response to client ────────────────────────────── */
+        /* ─── 6. reset idle timer ────────────────────────────── */
+        gameStateSvc.setGameField(gameId, "turnAge", "0");        
+        gameStateSvc.setGameField(gameId, "turnTimeout", "60");   // only needs once, harmless to set every move
+
+        /* ─── 7. return response to client ────────────────────────────── */
         return new TurnResponse(
             dice,
             position,
