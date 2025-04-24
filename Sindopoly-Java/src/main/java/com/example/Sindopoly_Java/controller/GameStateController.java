@@ -1,6 +1,7 @@
 package com.example.Sindopoly_Java.controller;
 
 import com.example.Sindopoly_Java.service.GameStateService;
+import com.example.Sindopoly_Java.service.orchestrator.TurnService;
 import com.example.Sindopoly_Java.dto.GameCreationRequest;
 import org.springframework.web.bind.annotation.*;
 
@@ -106,5 +107,26 @@ public class GameStateController {
         boolean ended = gameStateService.checkEndCondition(gameId);
         return ended ? "Game ended due to condition." : "Game continues.";
     }
+
+
+    /**
+     * 
+     * POST /api/turn/{gameId}/{playerId}
+     */
+    @RestController
+    @RequestMapping("/api/turn")
+    public class TurnController {
+
+        private final TurnService turnService;
+        public TurnController(TurnService ts) { this.turnService = ts; }
+
+        @PostMapping("/{gameId}/{playerId}")
+        public TurnService.TurnResponse playTurn(
+                @PathVariable int gameId,
+                @PathVariable int playerId) {
+            return turnService.playTurn(gameId, playerId);
+        }
+    }
+
 
 }

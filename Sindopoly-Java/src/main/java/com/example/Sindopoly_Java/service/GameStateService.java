@@ -312,6 +312,10 @@ public class GameStateService {
         return "Player removed.";
     }
     
+    
+    public void updateGameFields(int gameId, Map<String, String> fields) {
+        hashOps.putAll(GAME_PREFIX + gameId, fields);
+    }    
 
     /** Find the Winner */
     // This method is called when the game ends
