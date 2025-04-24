@@ -25,7 +25,7 @@ public class GameLoopScheduler {
     public void pollTurnTimers() {
 
         Set<String> keys = redisTemplate.keys("game:*");
-        if (keys == null) return;
+        if (keys.isEmpty()) return;
 
         for (String key : keys) {
             if (key.endsWith(":players")) continue;
