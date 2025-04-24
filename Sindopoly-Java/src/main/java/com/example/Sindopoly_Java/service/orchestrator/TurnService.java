@@ -6,6 +6,7 @@ import com.example.Sindopoly_Java.service.core.*;
 import com.example.Sindopoly_Java.service.core.MovementService.MovementResult;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.Instant;
 import java.util.*;
@@ -25,139 +26,128 @@ public class TurnService {
     private final BankruptcyService bankSvc;
     private final SquareActionService squareActionSvc;
 
+    private final SimpMessagingTemplate broker;
+
     public TurnService(GameStateService g,
-                    PlayerStateService p,
-                    ValidationUtils v,
-                    SquareActionService sq,
-                    BankruptcyService bank) {   // <-- add parameter
-        this.gameStateSvc     = g;
-        this.playerStateSvc   = p;
-        this.validationUtils  = v;
-        this.squareActionSvc  = sq;
-        this.bankSvc          = bank;   // <-- store injected bean
+                       PlayerStateService p,
+                       ValidationUtils v,
+                       SquareActionService sq,
+                       BankruptcyService bank,
+                       SimpMessagingTemplate broker) {
+        this.gameStateSvc = g;
+        this.playerStateSvc = p;
+        this.validationUtils = v;
+        this.squareActionSvc = sq;
+        this.bankSvc = bank;
+        this.broker = broker;        // <-- store
     }
 
     
 
     public TurnResponse playTurn(int gameId, int playerId) {
 
-        /* ─── 0. look-ups / validation ─────────────────────────────────── */
+        /* ─── 0. look-ups / validation ─────────────────────────────── */
         validationUtils.validatePlayerExists(playerId);
-
+    
         Map<String,String> gameHash = gameStateSvc.getGame(gameId);
         if (!"inProgress".equalsIgnoreCase(gameHash.get("status")))
             throw new IllegalStateException("Game not in progress.");
-
+    
         if (!String.valueOf(playerId).equals(gameHash.get("playerTurn")))
             throw new IllegalStateException("Not this player's turn.");
-
+    
         Map<String,Object> pHash = playerStateSvc.getPlayerState(playerId);
-
-        /* clear AFK when player takes a real turn */
+    
+        /* clear AFK flag */
         pHash.put("afk", "false");
         playerStateSvc.savePlayerState(playerId, pHash);
-
-
-        int money     = Integer.parseInt(pHash.get("money").toString());
-        int position  = Integer.parseInt(pHash.get("position").toString());
-        boolean inJail= Boolean.parseBoolean(pHash.get("jail").toString());
-        int jailTime  = Integer.parseInt(pHash.get("jailTime").toString());
-
-        /* ─── 1. jail / bankrupt pre-checks ────────────────────────────── */
+    
+        int money    = Integer.parseInt(pHash.get("money").toString());
+        int position = Integer.parseInt(pHash.get("position").toString());
+        boolean inJail = Boolean.parseBoolean(pHash.get("jail").toString());
+        int jailTime   = Integer.parseInt(pHash.get("jailTime").toString());
+    
+        /* ─── 1. bankrupt before turn ─────────────────────────────── */
         if (bankSvc.isBankrupt(money)) {
-            handleBankruptcy(gameId, playerId, pHash);
+            handleFullBankruptcy(gameId, playerId, pHash);
             rotateTurn(gameId);
-            return new TurnResponse(
-                0, position, money, false,
-                true,   // wasInJail
-                true,   // wentBankrupt
-                "Bankrupt");   // tileMessage
+            return publish(gameId, new TurnResponse(
+                    0, position, money, false,
+                    inJail, true, "Bankrupt"));
         }
-
+    
+        /* ─── 2. jail logic ───────────────────────────────────────── */
         if (inJail) {
             if (jailTime > 1) {
                 pHash.put("jailTime", jailTime - 1);
                 playerStateSvc.savePlayerState(playerId, pHash);
                 rotateTurn(gameId);
-                return new TurnResponse(
-                    0, position, money, false,
-                    true,   // wasInJail
-                    false,  // wentBankrupt
-                    "Stayed in jail");
+                return publish(gameId, new TurnResponse(
+                        0, position, money, false,
+                        true, false, "Stayed in jail"));
             } else {
-                // last round in jail – release
                 pHash.put("jail", false);
                 pHash.put("jailTime", 0);
             }
         }
-
-        /* ─── 2. roll dice & move ──────────────────────────────────────── */
+    
+        /* ─── 3. roll dice & move ─────────────────────────────────── */
         int dice = diceSvc.roll();
         MovementResult mv = moveSvc.move(position, dice);
-
-        /* store value for utilities */
-        gameStateSvc.getGame(gameId).put("lastDice", String.valueOf(dice));
-
+        gameStateSvc.setGameField(gameId, "lastDice", String.valueOf(dice));
+    
         position = mv.newPosition();
         if (mv.passedGo()) money += 200;
-
+    
         pHash.put("position", position);
         pHash.put("money", money);
         playerStateSvc.savePlayerState(playerId, pHash);
-
-        /* ─── 3. TODO square action / card etc. ───────────────────────── */
-        SquareActionService.TileResult tile =
-        squareActionSvc.execute(playerId, position, gameId);
-
-        // ── if teleport card moved the player, re-evaluate destination square
+    
+        /* ─── 4. square action ───────────────────────────────────── */
+        var tile = squareActionSvc.execute(playerId, position, gameId);
+    
+        /* teleport follow-up */
         if (tile.message().contains("moved to square")) {
             position = Integer.parseInt(
                     playerStateSvc.getPlayerState(playerId).get("position").toString());
-
+    
             var dest = squareActionSvc.execute(playerId, position, gameId);
-
             money += dest.deltaMoney();
             pHash.put("money", money);
             playerStateSvc.savePlayerState(playerId, pHash);
-
-            // merge messages
+    
             tile = new SquareActionService.TileResult(
                     tile.deltaMoney() + dest.deltaMoney(),
                     tile.message() + " | " + dest.message());
         }
-
-
-
-        /* ─── 4. post-move bankruptcy? ────────────────────────────────── */
+    
+        /* ─── 5. post-move bankruptcy ─────────────────────────────── */
         if (bankSvc.isBankrupt(money)) {
             handleFullBankruptcy(gameId, playerId, pHash);
             rotateTurn(gameId);
-            return new TurnService.TurnResponse(
-                0, position, money, false,
-                true,  // wasInJail
-                true,  // wentBankrupt
-                "Bankrupt");
+            return publish(gameId, new TurnResponse(
+                    0, position, money, false,
+                    false, true, "Bankrupt"));
         }
-        
-
-        /* ─── 5. increase timer + rotate turn ─────────────────────────── */
+    
+        /* ─── 6. timer, turn rotate, idle reset ───────────────────── */
         incrementGameTimer(gameId, gameHash);
         rotateTurn(gameId);
-
-        /* ─── 6. reset idle timer ────────────────────────────── */
-        gameStateSvc.setGameField(gameId, "turnAge", "0");        
-        gameStateSvc.setGameField(gameId, "turnTimeout", "60");   // only needs once, harmless to set every move
-
-        /* ─── 7. return response to client ────────────────────────────── */
-        return new TurnResponse(
-            dice,
-            position,
-            money,
-            mv.passedGo(),
-            inJail,
-            false,              // wentBankrupt (post-move b/c bankrupt handled earlier)
-            tile.message());    // tileMessage
+        gameStateSvc.setGameField(gameId, "turnAge", "0");
+        gameStateSvc.setGameField(gameId, "turnTimeout", "60");
+    
+        /* ─── 7. build & broadcast result ─────────────────────────── */
+        return publish(gameId, new TurnResponse(
+                dice, position, money, mv.passedGo(),
+                false, false, tile.message()));
     }
+    
+    /* ───────────────── helper: send over WebSocket & return ─────── */
+    private TurnResponse publish(int gameId, TurnResponse resp) {
+        broker.convertAndSend("/topic/game/" + gameId, resp);
+        return resp;
+    }
+    
 
     /* =================================================================== */
     /* helper methods                                                      */
