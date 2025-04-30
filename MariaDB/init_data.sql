@@ -51,67 +51,69 @@ INSERT INTO Square(id, s_type, price, rent) VALUES
 
 -- Example 1
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Ο φίλος σου που έχει αμάξι έφυγε πιο νωρίς σήμερα. Πήγαινε 2 θέσεις μπροστά.', 'transport', 2);
-
+VALUES ('Chance', 'Ο φίλος σου που έχει αμάξι έφυγε πιο νωρίς σήμερα. Πήγαινε στη ΣΤΑΣΗ ΔΙΠΑΕ.', 'transport', 6);
 
 -- Example 2
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Έχεις 3 ώρες κενό μέχρι το επόμενο μάθημα. Πήγαινε 3 θέσεις πίσω.', 'transport', -3);
+VALUES ('Chance', 'Έχεις 3 ώρες κενό μέχρι το επόμενο μάθημα. Πήγαινε στο ΣΠΛΑΣ.', 'transport', 11);
 
 
 -- Example 3
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Σε πλησιάζει ο Μάριος από την ΜΠΡΙΖΑ. Πήγαινε 5 θέσεις μπροστά.', 'transport', 5);
+VALUES ('Chance', 'Σε πλησιάζει ο Μάριος από την ΜΠΡΙΖΑ. Πήγαινε στην ΑΦΕΤΗΡΙΑ (GO) για να ξεφύγεις.', 'transport', 0);
 
 
 -- Example 4
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Ακυρώθηκε το εργαστήριο σου και δεν έχεις τί να κάνεις. Πήγαινε 2 θέσεις πίσω.', 'transport', -2);
+VALUES ('Chance', 'Ακυρώθηκε το εργαστήριο σου και δεν έχεις τι να κάνεις. Πήγαινε στο ΠΟΔΗΛΑΤΟ.', 'transport', 13);
 
 
 -- Example 5
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Η στάση του ΔΙ.ΠΑ.Ε. είναι γεμάτη. Πήγαινε 4 θέσεις μπροστά.', 'transport', 4);
-
+VALUES ('Chance', 'Η στάση του ΔΙ.ΠΑ.Ε. είναι γεμάτη. Πήγαινε στη ΣΤΑΣΗ ΙΘΑΚΗ.', 'transport', 8);
 
 -- Example 6
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Πήγαινε 1 θέση μπροστά.', 'transport', 3);
+VALUES ('Chance', 'Πήγαινε στο ΚΙΟΣΚΙ ΔΙΟΙΚΗΣΗΣ.', 'transport', 15);
 
 
 -- Example 7
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Δεν έχεις καθηγητές αυτό το εξάμηνο και δεν θα έχεις μαθηματα να δηλώσεις. Πήγαινε 5 θέσεις πίσω.', 'transport', -5);
+VALUES ('Chance', 'Δεν έχεις καθηγητές αυτό το εξάμηνο και δεν θα έχεις μαθηματα να δηλώσεις. Πήγαινε στην αίθουσα ΝΑΥΤΙΛΟΣ.', 'transport', 20);
 
 
 -- Example 8
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Πήγαινε 1 θέση πίσω.', 'transport', -1);
+VALUES ('Chance', 'Πήγαινε στο ΚΙΟΣΚΙ ΕΞΟΔΟΥ.', 'transport', 25);
 
 
 -- Example 9
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Έχεις 3 ώρες κενό μέχρι το επόμενο μάθημα. Πήγαινε 2 θέσεις πίσω.', 'transport', -2);
+VALUES ('Chance', 'Έχεις 3 ώρες κενό μέχρι το επόμενο μάθημα. Πήγαινε στο ΠΟΔΗΛΑΤΟ.', 'transport', 13);
 
 
 -- Example 10
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Χώρισες με την κοπέλα σου και θέλεις να κάνεις γνωριμίες. Πήγαινε 3 θέσεις πίσω.', 'transport', -3);
+VALUES ('Chance', 'Χώρισες με την κοπέλα σου και θέλεις να κάνεις γνωριμίες. Πήγαινε στο ΚΙΟΣΚΙ ΣΕΥΠ.', 'transport', 5);
 
 
 -- Example 11
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Χώρισες με το αγόρι σου και θέλεις να κάνεις γνωριμίες. Πήγαινε 3 θέσεις πίσω.', 'transport', -3);
+VALUES ('Chance', 'Χώρισες με το αγόρι σου και θέλεις να κάνεις γνωριμίες. Πήγαινε στο ΚΙΟΣΚΙ ΠΛΗΡΟΦΟΡΙΚΗΣ.', 'transport', 35);
 
 
 -- Example 12
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Έκανες μάθημα με τον κ. Γουλιάνα. Δεν άκουσες τίποτα από την φασαρία αλλά γνώρισες νέους συμφοιτητές. Πήγαινε 4 θέση μπροστά.', 'transport', 4);
+VALUES ('Chance', 'Έκανες μάθημα με τον κ. Γουλιάνα. Δεν άκουσες τίποτα από την φασαρία αλλά γνώρισες νέους συμφοιτητές. Πήγαινε στη ΛΕΣΧΗ.', 'transport', 28);
 
 
 -- Example 13
 INSERT INTO Card (title, description, type, amount)
-VALUES ('Go', 'Ο Μάριος απο την ΜΠΡΙΖΑ διέκοψε πάλι το μάθημα. Πήγαινε 2 θέσεις πίσω.', 'transport', -2);
+VALUES ('Chance', 'Ο Μάριος απο την ΜΠΡΙΖΑ διέκοψε πάλι το μάθημα. Πήγαινε στο ΚΥΛΙΚΕΙΟ.', 'transport', 12);
+
+-- Example 14
+INSERT INTO Card (title, description, type, amount)
+VALUES ('Chance', 'Πήγαινε στο κτίριο ΠΛΗΡΟΦΟΡΙΚΗΣ.', 'transport', 25);
 
 
 
