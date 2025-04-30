@@ -34,8 +34,6 @@ public class SquareActionService {
         this.validationUtils = v;
     }
     
-    private int currentGameId;
-    
     /** Executes action and returns (deltaMoney, message) */
     public TileResult execute(int playerId, int position, int gameId) {
 
@@ -48,10 +46,12 @@ public class SquareActionService {
         switch (cat) {
             case START     -> { return new TileResult(0, "Just visiting Start"); }
 
-            case TAX       -> {                           // simple 200 tax
-                return new TileResult(-200, "Paid university tax");
+            case TAX -> {
+                int amount = sq.getPrice();          // amount is positive (e.g. 200)
+                writeMoney(playerId, readMoney(playerId) - amount);
+                return new TileResult(-amount, "Paid tax");
             }
-
+            
             case CARD -> {
                 Card c = cardSvc.drawCard(gameId);           // use passed id
                 return applyCard(playerId, c);
@@ -68,7 +68,7 @@ public class SquareActionService {
             }
 
             case BROWN, CYAN, PURPLE, ORANGE, RED, YELLOW, GREEN, BLUE, TRAIN, UTILITY -> {
-                return handleProperty(playerId, sq);
+                return handleProperty(playerId, sq, gameId);
             }
 
             default -> { return new TileResult(0, "Parking/Empty"); }
@@ -78,7 +78,7 @@ public class SquareActionService {
     /* ============================================================ */
     /* property handling with ownership + rent                      */
     /* ============================================================ */
-    private TileResult handleProperty(int playerId, Square sq) {
+    private TileResult handleProperty(int playerId, Square sq, int gameId) {
 
         String squareKey = "square:" + sq.getId();
         String owner = hashOps.get(squareKey, "owner");        // may be null
@@ -109,7 +109,7 @@ public class SquareActionService {
         /* (3) Pay rent to another player */
         int rent;
         if (sq.getType() == SquareType.UTILITY) {
-            int dice = readLastDice(currentGameId);      // TurnService sets it
+            int dice = readLastDice(gameId);             // use the method arg
             rent = ownsBothUtilities(owner) ? dice * 10 : dice * 4;
         } else if (sq.getType() == SquareType.TRAIN) {
             rent = rentForTrainsOwned(owner);

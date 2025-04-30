@@ -1,34 +1,52 @@
 INSERT INTO Player(p_name, email) VALUES ('Vasilis','celanide@gmail.com'),('Ioannis','maou@gmail.com'),('Ioannis','skoul37@gmail.com'),('Nikos','megamart@gmail.com');
 
-INSERT INTO Property (price,color,rent) VALUES 
-(60,'BROWN',70),
-(60,'BROWN',70),
-(200, 'BROWN', 100),
-(100,'GRAY',80),
-(100,'GRAY',80),
-(120,'GRAY',100),
-(140,'PURPLE',110),
-(150, 'PURPLE', 75),
-(140,'PURPLE',110),
-(160,'PURPLE',130),
-(200, 'PURPLE', 100),
-(180,'ORANGE',140),
-(180,'ORANGE',140),
-(200,'ORANGE',160),
-(220,'RED',170),
-(220,'RED',170),
-(240,'RED',190),
-(200, 'RED', 100),
-(260,'YELLOW',200),
-(260,'YELLOW',200),
-(150, 'YELLOW', 75),
-(280,'YELLOW',220),
-(300,'GREEN',230),
-(300,'GREEN',230),
-(320,'GREEN',250),
-(200, 'GREEN', 100),
-(350,'BLUE',270),
-(400,'BLUE',300);
+-- Initialize Squares ─────────────────────────────────────────────────────────
+INSERT INTO Square(id, s_type, price, rent) VALUES
+-- 0–9 ─────────────────────────────────────────────────────────
+ ( 0,'START'  ,  NULL ,  NULL ),
+ ( 1,'BROWN'  ,     60,     2 ),
+ ( 2,'CARD'   ,  NULL ,  NULL ),
+ ( 3,'BROWN'  ,     60,     4 ),
+ ( 4,'TAX'    ,   -200,  NULL ),
+ ( 5,'TRAIN'  ,    200,    25 ),
+ ( 6,'CYAN'   ,    100,     6 ),
+ ( 7,'CARD'   ,  NULL ,  NULL ),
+ ( 8,'CYAN'   ,    100,     6 ),
+ ( 9,'CYAN'   ,    120,     8 ),
+-- 10–19 ───────────────────────────────────────────────────────
+ (10,'JAIL'   ,  NULL ,  NULL ),
+ (11,'PURPLE' ,    140,    10 ),
+ (12,'UTILITY',    150,  NULL ),   -- rent = dice×4 / ×10 (handled in code)
+ (13,'PURPLE' ,    140,    10 ),
+ (14,'PURPLE' ,    160,    12 ),
+ (15,'TRAIN'  ,    200,    25 ),
+ (16,'ORANGE' ,    180,    14 ),
+ (17,'CARD'   ,  NULL ,  NULL ),
+ (18,'ORANGE' ,    180,    14 ),
+ (19,'ORANGE' ,    200,    16 ),
+-- 20–29 ───────────────────────────────────────────────────────
+ (20,'PARKING',  NULL ,  NULL ),
+ (21,'RED'    ,    220,    18 ),
+ (22,'CARD'   ,  NULL ,  NULL ),
+ (23,'RED'    ,    220,    18 ),
+ (24,'RED'    ,    240,    20 ),
+ (25,'TRAIN'  ,    200,    25 ),
+ (26,'YELLOW' ,    260,    22 ),
+ (27,'YELLOW' ,    260,    22 ),
+ (28,'UTILITY',    150,  NULL ),
+ (29,'YELLOW' ,    280,    24 ),
+-- 30–39 ───────────────────────────────────────────────────────
+ (30,'GOJAIL' ,  NULL ,  NULL ),
+ (31,'GREEN'  ,    300,    26 ),
+ (32,'GREEN'  ,    300,    26 ),
+ (33,'CARD'   ,  NULL ,  NULL ),
+ (34,'GREEN'  ,    320,    28 ),
+ (35,'TRAIN'  ,    200,    25 ),
+ (36,'CARD'   ,  NULL ,  NULL ),
+ (37,'BLUE'   ,    350,    35 ),
+ (38,'TAX'    ,   -100,  NULL ),   -- luxury tax
+ (39,'BLUE'   ,    400,    50 );
+
 
 
 -- Example 1
