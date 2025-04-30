@@ -88,6 +88,12 @@
       <version>1.19.4</version>
       <scope>test</scope>
     </dependency>
+
+    <!-- Reactive WebClient for HTTP calls -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-webflux</artifactId>
+    </dependency>
   </dependencies>
 
 
