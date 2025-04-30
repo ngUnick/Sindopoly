@@ -19,8 +19,8 @@ public class TurnService {
     private final ValidationUtils validationUtils;
 
     /* pure-logic helpers */
-    private final DiceService diceSvc           = new DiceService();
-    private final MovementService moveSvc       = new MovementService();
+    private final DiceService diceSvc;
+    private final MovementService moveSvc = new MovementService();
 
 
     private final BankruptcyService bankSvc;
@@ -29,17 +29,20 @@ public class TurnService {
     private final SimpMessagingTemplate broker;
 
     public TurnService(GameStateService g,
-                       PlayerStateService p,
-                       ValidationUtils v,
-                       SquareActionService sq,
-                       BankruptcyService bank,
-                       SimpMessagingTemplate broker) {
-        this.gameStateSvc = g;
+                    PlayerStateService p,
+                    ValidationUtils v,
+                    SquareActionService sq,
+                    BankruptcyService bank,
+                    DiceService diceSvc,
+                    SimpMessagingTemplate broker) {
+
+        this.gameStateSvc   = g;
         this.playerStateSvc = p;
-        this.validationUtils = v;
-        this.squareActionSvc = sq;
-        this.bankSvc = bank;
-        this.broker = broker;        // <-- store
+        this.validationUtils= v;
+        this.squareActionSvc= sq;
+        this.bankSvc        = bank;
+        this.diceSvc        = diceSvc;
+        this.broker         = broker;
     }
 
     
