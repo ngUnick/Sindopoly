@@ -10,7 +10,7 @@ import java.util.Set;
 @Component
 public class GameLoopScheduler {
 
-    private static final String GAME_PREFIX = "game:";
+    // private static final String GAME_PREFIX = "game:";
 
     @Autowired
     private RedisTemplate<String, String> redisTemplate;
