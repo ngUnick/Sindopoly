@@ -1,6 +1,9 @@
-INSERT INTO Player(p_name, email) VALUES ('Vasilis','celanide@gmail.com'),('Ioannis','maou@gmail.com'),('Ioannis','skoul37@gmail.com'),('Nikos','megamart@gmail.com');
+-- ── Seed three players for testing ───────────────────────────
+INSERT INTO player (p_name) VALUES ('Nick'), ('Bill'), ('John');
 
--- Initialize Squares ─────────────────────────────────────────────────────────
+
+
+-- ── Initialize Squares ───────────────────────────────────────
 INSERT INTO Square(id, s_type, price, rent) VALUES
 -- 0–9 ─────────────────────────────────────────────────────────
  ( 0,'START'  ,  NULL ,  NULL ),
@@ -49,6 +52,9 @@ INSERT INTO Square(id, s_type, price, rent) VALUES
 
 
 
+-- ── Initialize Cards ─────────────────────────────────────────
+
+-- Chance ──────────────────────────────────────────────────────
 -- Example 1
 INSERT INTO Card (title, description, type, amount)
 VALUES ('Chance', 'Ο φίλος σου που έχει αμάξι έφυγε πιο νωρίς σήμερα. Πήγαινε στη ΣΤΑΣΗ ΔΙΠΑΕ.', 'transport', 6);
@@ -116,11 +122,7 @@ INSERT INTO Card (title, description, type, amount)
 VALUES ('Chance', 'Πήγαινε στο κτίριο ΠΛΗΡΟΦΟΡΙΚΗΣ.', 'transport', 25);
 
 
-
-
-
-
-
+-- Community Chest ─────────────────────────────────────────────
 -- Example 1
 INSERT INTO Card (title, description, type, amount)
 VALUES ('Community Chest', 'Κέρδισες το τουρνουά Tekken της Ναυτίλου. Πάρε $12.', 'money', 12);
