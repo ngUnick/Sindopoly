@@ -139,6 +139,13 @@ public class GameStateService {
         String gameKey       = GAME_PREFIX + gameId;
         String playerSetKey  = gameKey + PLAYERS_KEY_SUFFIX;
 
+
+        /* ── reconnect: player already in set ─────────────────────────── */
+        Boolean isMember = setOps.isMember(playerSetKey, String.valueOf(playerId));
+        if (Boolean.TRUE.equals(isMember)) {
+            return "Reconnected.";
+        }
+
         // Game must exist
         if (!redisTemplate.hasKey(gameKey))
             throw new IllegalStateException("Game not found.");

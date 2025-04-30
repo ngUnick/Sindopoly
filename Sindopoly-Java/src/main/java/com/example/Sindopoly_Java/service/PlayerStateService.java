@@ -58,4 +58,19 @@ public class PlayerStateService {
         String playerKey = PLAYER_PREFIX + playerId;
         redisTemplate.delete(playerKey);
     }
+
+    /**
+     * Pay to get out of jail
+     */
+    public void payToExitJail(int pid, int fee){
+        Map<String,Object> p = getPlayerState(pid);
+        int money = Integer.parseInt(p.get("money").toString());
+        if(money < fee) throw new IllegalStateException("Insufficient funds");
+    
+        p.put("money", money-fee);
+        p.put("jail", false);
+        p.put("jailTime", 0);
+        savePlayerState(pid,p);
+    }
+    
 }
