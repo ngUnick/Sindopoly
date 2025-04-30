@@ -7,7 +7,6 @@ import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import com.example.Sindopoly_Java.model.Card;
-import com.example.Sindopoly_Java.model.Card.CardType;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
 
 
