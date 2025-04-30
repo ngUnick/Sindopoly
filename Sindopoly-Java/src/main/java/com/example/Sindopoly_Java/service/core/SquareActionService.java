@@ -83,23 +83,19 @@ public class SquareActionService {
         String squareKey = "square:" + sq.getId();
         String owner = hashOps.get(squareKey, "owner");        // may be null
 
-        /* (1) Un-owned tile → auto-buy if player can afford */
+        /* (1) Un-owned tile → offer, do NOT auto-buy */
         if (owner == null) {
-            if (hashOps.get(squareKey, "owner") != null)
-                throw new IllegalStateException("Property was purchased concurrently."); // This protects against race conditions if two requests hit simultaneously
-
-            int price = sq.getPrice() == null ? 0 : sq.getPrice();
+            int price = sq.getPrice()==null?0:sq.getPrice();
             int playerMoney = readMoney(playerId);
 
             if (playerMoney >= price) {
-                writeMoney(playerId, playerMoney - price);
-                hashOps.put(squareKey, "owner", String.valueOf(playerId));
-                return new TileResult(-price,
-                    "You bought this property for " + price);
+                // tell frontend an offer is available
+                return new TileResult(0,
+                    "offer:" + sq.getId() + ":" + price);   // e.g. "offer:6:100"
             }
-            // Can't afford → nothing happens for now
-            return new TileResult(0, "Unowned property (insufficient funds)");
+            return new TileResult(0,"Unowned property (insufficient funds)");
         }
+
 
         /* (2) Landing on own property */
         if (owner.equals(String.valueOf(playerId))) {
@@ -216,6 +212,23 @@ public class SquareActionService {
                 "jailTime", "3"
         ));
     }
+
+    public void forceBuyProperty(int gameId, int playerId, int squareId){
+        Square sq = squareRepo.findById(squareId)
+                    .orElseThrow(()->new IllegalArgumentException("Bad id"));
+    
+        String key = "square:" + squareId;
+        if (hashOps.get(key,"owner") != null)
+            throw new IllegalStateException("Already owned");
+    
+        int price = sq.getPrice()==null?0:sq.getPrice();
+        int money = readMoney(playerId);
+        if (money < price) throw new IllegalStateException("Not enough cash");
+    
+        writeMoney(playerId, money-price);
+        hashOps.put(key,"owner",String.valueOf(playerId));
+    }
+    
 
     /* small record to bubble back results */
     public record TileResult(int deltaMoney, String message) {}
