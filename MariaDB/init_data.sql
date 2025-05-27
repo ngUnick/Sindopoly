@@ -1,5 +1,5 @@
 -- ── Seed three players for testing ───────────────────────────
-INSERT INTO player (p_name) VALUES ('Nick'), ('Bill'), ('John');
+INSERT INTO Player (p_name) VALUES ('Bob'), ('Alice');
 
 
 
