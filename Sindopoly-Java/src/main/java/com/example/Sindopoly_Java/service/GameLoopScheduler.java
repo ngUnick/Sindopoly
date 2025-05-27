@@ -21,7 +21,7 @@ public class GameLoopScheduler {
     /**
      * Check end conditions for all games every 10 seconds
      */
-    @Scheduled(fixedRate = 10000)        // every 10 s
+    @Scheduled(fixedRate = 2000)        // every 10 s
     public void pollTurnTimers() {
 
         Set<String> keys = redisTemplate.keys("game:*");

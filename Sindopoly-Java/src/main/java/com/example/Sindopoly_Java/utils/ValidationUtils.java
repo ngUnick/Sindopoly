@@ -13,6 +13,7 @@ public class ValidationUtils {
         this.playerRepo = playerRepo;
     }
 
+    /** Ensure the player exists */
     public void validatePlayerExists(int playerId) {
         if (!playerRepo.existsById(playerId)) {
             throw new IllegalArgumentException("Player with ID " + playerId + " does not exist.");
