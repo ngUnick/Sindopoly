@@ -14,6 +14,9 @@ import com.example.Sindopoly_Java.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 
+import com.example.Sindopoly_Java.model.Player;
+import com.example.Sindopoly_Java.repository.PlayerRepository;
+
 import java.time.Instant;
 import java.time.Duration;
 import java.util.*;
@@ -41,16 +44,23 @@ public class GameStateService {
     private SquareRepository squareRepo;
     @Autowired
     private ValidationUtils validationUtils;
+    @Autowired
+    private final PlayerRepository playerRepo;
+
     
 
 
     @Autowired
-    public GameStateService(RedisTemplate<String, String> redisTemplate, StatsRepository statsRepo) {
+    public GameStateService(RedisTemplate<String, String> redisTemplate,
+                            StatsRepository statsRepo,
+                            PlayerRepository playerRepo) {
         this.redisTemplate = redisTemplate;
         this.hashOps = redisTemplate.opsForHash();
         this.setOps = redisTemplate.opsForSet();
         this.statsRepo = statsRepo;
+        this.playerRepo = playerRepo;
     }
+
 
 
     /** Create Game */
@@ -374,11 +384,16 @@ public class GameStateService {
     // This method is called for each player in the game
     // It checks if the player is the winner and updates the stats accordingly
     public void finalizePlayerStats(int playerId, boolean isWinner, int money, int sessionSeconds) {
-        Stats stats = statsRepo.findByPlayer(playerId).orElseGet(() -> {
+        Player player = playerRepo.findById(playerId)
+        .orElseThrow(() -> new IllegalArgumentException("Player not found"));
+
+        Stats stats = statsRepo.findByPlayer(player).orElseGet(() -> {
             Stats s = new Stats();
-            s.setPlayer(playerId);
+            s.setPlayer(player); // 👈 Now Player object, not int
             return s;
         });
+
+
     
         stats.setTotalGames(stats.getTotalGames() + 1);
         if (isWinner) {
