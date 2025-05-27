@@ -1,15 +1,11 @@
-import {Navigate} from 'react-router-dom';
-import {useContext} from "react";
-import AuthContext from './AuthContext';
-
+import { Navigate } from "react-router-dom";
 
 export const ProtectedRoute = ({ children }) => {
-    const { isLoggedIn } = useContext(AuthContext);
+  const nickname = sessionStorage.getItem("nickname");
 
-    if(!isLoggedIn())
-    {
-        return <Navigate to="/login" replace />;
-    }
+  if (!nickname) {
+    return <Navigate to="/login" />;
+  }
 
-    return children;
+  return children;
 };

@@ -1,23 +1,66 @@
 -- NEW FUNCTIONS
 
-DELIMITER //
+-- DELIMITER //
 
 
 -- Create a MySQL Event to Delete Expired Players (Could also be done in Spring Boot in order  to control expiration from application logic)
 
--- Enable the Event Scheduler in MySQL (if not already enabled):
-SET GLOBAL event_scheduler = ON;
+-- -- Enable the Event Scheduler in MySQL (if not already enabled):
+-- SET GLOBAL event_scheduler = ON;
 
 
--- Then, create an event that runs every hour and deletes players older than 24 hours:
-CREATE EVENT delete_expired_players
-ON SCHEDULE EVERY 1 HOUR
-DO
-  DELETE FROM Player WHERE created_at < NOW() - INTERVAL 1 DAY;
+-- -- Then, create an event that runs every hour and deletes players older than 24 hours:
+-- CREATE EVENT delete_expired_players
+-- ON SCHEDULE EVERY 1 HOUR
+-- DO
+--   DELETE FROM Player WHERE created_at < NOW() - INTERVAL 1 DAY;
 
 
+
+-- DELIMITER ;
+
+
+
+
+-- DROP ALL TABLES;
+DELIMITER //
+
+CREATE PROCEDURE drop_all_tables()
+BEGIN
+  DECLARE _done INT DEFAULT FALSE;
+  DECLARE _table_name VARCHAR(64);
+  DECLARE _cursor CURSOR FOR
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'sindopoly';
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET _done = TRUE;
+
+  SET FOREIGN_KEY_CHECKS = 0;
+
+  OPEN _cursor;
+
+  loop_tables: LOOP
+    FETCH _cursor INTO _table_name;
+    IF _done THEN
+      LEAVE loop_tables;
+    END IF;
+
+    SET @s = CONCAT('DROP TABLE IF EXISTS `', _table_name, '`');
+    PREPARE stmt FROM @s;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+  END LOOP;
+
+  CLOSE _cursor;
+
+  SET FOREIGN_KEY_CHECKS = 1;
+END //
 
 DELIMITER ;
+
+-- Then call it:
+CALL drop_all_tables();
+
 
 
 

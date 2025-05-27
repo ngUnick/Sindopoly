@@ -15,4 +15,30 @@ public class Player {
 
     @Column(name = "created_at", insertable = false, updatable = false)
     private Timestamp createdAt;
+
+    // Getters
+    public int getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public Timestamp getCreatedAt() {
+        return createdAt;
+    }
+
+    // Setters
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setCreatedAt(Timestamp createdAt) {
+        this.createdAt = createdAt;
+    }
 }

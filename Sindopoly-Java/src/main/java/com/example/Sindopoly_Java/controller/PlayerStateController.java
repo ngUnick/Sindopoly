@@ -1,11 +1,14 @@
 package com.example.Sindopoly_Java.controller;
 
+import com.example.Sindopoly_Java.model.Player;
+import com.example.Sindopoly_Java.repository.PlayerRepository; // Add this import
 import com.example.Sindopoly_Java.service.PlayerStateService;
 import com.example.Sindopoly_Java.service.core.SquareActionService;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @RestController
@@ -14,10 +17,35 @@ public class PlayerStateController {
 
     private final PlayerStateService playerStateService;
     private final SquareActionService squareActionService;
+    private final PlayerRepository playerRepository; // Add this field
 
-    public PlayerStateController(PlayerStateService playerStateService, SquareActionService squareActionService) {
+    public PlayerStateController(PlayerStateService playerStateService,
+                                 SquareActionService squareActionService,
+                                 PlayerRepository playerRepository) { // Add PlayerRepository to constructor
         this.playerStateService = playerStateService;
         this.squareActionService = squareActionService;
+        this.playerRepository = playerRepository; // Assign it
+    }
+
+    /**
+     * Create a new Player
+     * POST /api/player-state/create
+     * Body: JSON like { "nickname": "Player1" }
+     */
+    @PostMapping("/create")
+    public ResponseEntity<Integer> createPlayer(@RequestBody Map<String, String> body) {
+        String nickname = body.get("nickname");
+
+        if (nickname == null || nickname.trim().isEmpty()) {
+            throw new IllegalArgumentException("Nickname is required");
+        }
+
+        Player player = new Player();
+        player.setName(nickname.trim());
+        player.setCreatedAt(java.sql.Timestamp.valueOf(LocalDateTime.now()));
+
+        player = playerRepository.save(player);
+        return ResponseEntity.ok(player.getId()); // return player ID
     }
 
     /**
