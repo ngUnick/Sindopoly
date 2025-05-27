@@ -10,11 +10,23 @@ public class Stats {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    private int player;
+    @OneToOne
+    @JoinColumn(name = "player", referencedColumnName = "id", nullable = false, unique = true)
+    private Player player;
+
+    @Column(name = "total_wins")
     private int totalWins;
+
+    @Column(name = "total_losses")
     private int totalLosses;
+
+    @Column(name = "total_games")
     private int totalGames;
+
+    @Column(name = "total_money")
     private int totalMoney;
+
+    @Column(name = "total_time_played")
     private int totalTimePlayed;
 
     // Getters
@@ -22,7 +34,7 @@ public class Stats {
         return id;
     }
 
-    public int getPlayer() {
+    public Player getPlayer() {
         return player;
     }
 
@@ -47,7 +59,7 @@ public class Stats {
     }
 
     // Setters
-    public void setPlayer(int player) {
+    public void setPlayer(Player player) {
         this.player = player;
     }
 
