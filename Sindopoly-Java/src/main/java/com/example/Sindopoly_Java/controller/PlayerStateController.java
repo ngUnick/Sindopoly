@@ -42,9 +42,9 @@ public class PlayerStateController {
 
         Player player = new Player();
         player.setName(nickname.trim());
-        player.setCreatedAt(java.sql.Timestamp.valueOf(LocalDateTime.now()));
 
         player = playerRepository.save(player);
+        System.out.println("Saving player: " + nickname);
         return ResponseEntity.ok(player.getId()); // return player ID
     }
 

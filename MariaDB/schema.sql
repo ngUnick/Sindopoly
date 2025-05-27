@@ -34,7 +34,7 @@ CREATE TABLE Square(
     PRIMARY KEY (id)
 );
 
-CREATE TABLE Stats( -- not sure if it will implemented yet
+CREATE TABLE Stats(
     id INT AUTO_INCREMENT,
     player INT,
     total_wins INT DEFAULT 0,
