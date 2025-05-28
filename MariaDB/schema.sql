@@ -2,7 +2,7 @@
 
 START TRANSACTION;
 
-CREATE TABLE Player(
+CREATE TABLE player(
     id INT AUTO_INCREMENT,
     p_name VARCHAR(255),
 
@@ -15,7 +15,7 @@ CREATE TABLE Player(
 );
 
 
-CREATE TABLE Card(
+CREATE TABLE card(
     id SMALLINT AUTO_INCREMENT,
     title VARCHAR(200),
     description VARCHAR(1000),
@@ -25,7 +25,7 @@ CREATE TABLE Card(
 );
 
 
-CREATE TABLE Square(
+CREATE TABLE square(
     id TINYINT AUTO_INCREMENT,
     s_type ENUM('START', 'CARD', 'TAX', 'JAIL', 'GOJAIL', 'PARKING', 'TRAIN', 'UTILITY', 'BROWN', 'CYAN', 'PURPLE', 'ORANGE', 'RED', 'YELLOW', 'GREEN', 'BLUE'),
     price SMALLINT,
@@ -34,7 +34,7 @@ CREATE TABLE Square(
     PRIMARY KEY (id)
 );
 
-CREATE TABLE Stats(
+CREATE TABLE stats(
     id INT AUTO_INCREMENT,
     player INT,
     total_wins INT DEFAULT 0,
@@ -43,7 +43,7 @@ CREATE TABLE Stats(
     total_money INT DEFAULT 0,
     total_time_played INT DEFAULT 0,
     PRIMARY KEY (id),
-    FOREIGN KEY (player) REFERENCES Player(id)
+    FOREIGN KEY (player) REFERENCES player(id)
 );
 
 COMMIT;
