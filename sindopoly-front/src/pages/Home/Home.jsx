@@ -1,27 +1,44 @@
 import monopoly_logo from "../../assets/images/monopoly_logo.png";
-import { Button, ConfigProvider, Avatar } from 'antd';
+import { Button, ConfigProvider, Avatar, Modal, Radio, message } from 'antd';
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GamePlayAPI } from "../../apis/GamePlayAPI";
-import { UserOutlined } from '@ant-design/icons';  // ✅ avatar icon
+import { GameAPI } from "../../apis/GameAPI";
+import { UserOutlined } from '@ant-design/icons';
 
 function Home() {
     const navigate = useNavigate();
     const [isOnGame, setIsOnGame] = useState(false);
-    const nickname = sessionStorage.getItem("nickname") || "Guest"; // ✅ fallback
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [visibility, setVisibility] = useState("public");
+    const nickname = sessionStorage.getItem("nickname") || "Guest";
 
-    const fetchAndSetIsOnGme = async () => {
-        const response = await GamePlayAPI.getBoard(localStorage.getItem('player_id'));
-
-        if(response.length === 0)
-            setIsOnGame(false)
-        else
-            setIsOnGame(true);
+    const fetchAndSetIsOnGame = async () => {
+        const inGame = await GamePlayAPI.getInGameStatus(localStorage.getItem('player_id'));
+        setIsOnGame(inGame);
     };
 
     useEffect(() => {
-        setInterval(fetchAndSetIsOnGme, 500);
+        fetchAndSetIsOnGame(); // Only run once on mount
     }, []);
+
+    const handleCreateGame = async () => {
+        try {
+            await GameAPI.createGame(visibility);
+            const gameId = result.gameId ?? result.id ?? result.game_id;
+            const isPrivate = visibility === "private";
+
+            if (isPrivate) {
+                navigate(`/lobby?creator=1&game_id=${gameId}`);
+            } else {
+                navigate(`/Game?player=${localStorage.getItem("player_id")}`);
+            }
+        } catch (err) {
+            console.error(err);
+            message.error("Failed to create game.");
+        }
+    };
+
 
     return ( 
         <div className="flex-grow flex justify-center items-center bg-pic bg-cover bg-no-repeat">
@@ -38,7 +55,7 @@ function Home() {
                                 <Button type="primary" value="large" onClick={() => navigate(`/Game?player=${localStorage.getItem('player_id')}`)}>Continue Game</Button>
                             </div> :
                             <div className="flex flex-col justify-center items-center gap-5">
-                                <Button type="primary" value="large" onClick={() => navigate('/createGame')}>Create Game</Button>
+                                <Button type="primary" value="large" onClick={() => setIsModalOpen(true)}>Create Game</Button>
                                 <Button type="primary" value="large" onClick={() => navigate('/searchGame')}>Join Game</Button>
                                 <Button type="primary" value="large" onClick={() => navigate('/statistics')}>Statistics</Button>
                             </div>
@@ -52,6 +69,20 @@ function Home() {
                     <span className="font-medium">{nickname}</span>
                 </div>
             </div>
+
+            <Modal
+                title="Create a New Game"
+                open={isModalOpen}
+                onOk={handleCreateGame}
+                onCancel={() => setIsModalOpen(false)}
+                okText="Create"
+                centered
+            >
+                <Radio.Group onChange={(e) => setVisibility(e.target.value)} value={visibility}>
+                    <Radio value="public">Public</Radio>
+                    <Radio value="private">Private</Radio>
+                </Radio.Group>
+            </Modal>
         </div>
     );
 }

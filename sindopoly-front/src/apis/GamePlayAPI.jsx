@@ -1,6 +1,16 @@
 import API_BASE_URL from "./apiConfig";
 
 export const GamePlayAPI = {
+
+
+    // ✅ Check if Player is In-Game
+    getInGameStatus: async (playerId) => {
+        const response = await fetch(`${API_BASE_URL}/api/game-state/in-game/${playerId}`);
+        if (!response.ok) throw new Error("Failed to check game state");
+        return await response.json(); // true/false
+    }
+
+
   // ✅ Play Turn (Roll Dice + Move + Handle Tile)
   playTurn: async (gameId, playerId) => {
     const response = await fetch(`${API_BASE_URL}/api/turn/play`, {

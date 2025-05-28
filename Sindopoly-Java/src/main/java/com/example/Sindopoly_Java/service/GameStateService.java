@@ -113,6 +113,19 @@ public class GameStateService {
         return gameData;
     }
     
+    /** Check if Player is in any Game */
+    public boolean isPlayerInAnyGame(int playerId) {
+        Set<String> keys = redisTemplate.keys("game:*:players");
+        if (keys.isEmpty()) return false;
+
+        for (String key : keys) {
+            Boolean isMember = setOps.isMember(key, String.valueOf(playerId));
+            if (Boolean.TRUE.equals(isMember)) return true;
+        }
+        return false;
+    }
+
+
 
     /** Start Game */
     public void startGame(int gameId) {

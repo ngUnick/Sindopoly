@@ -2,16 +2,24 @@ import API_BASE_URL from "./apiConfig";
 
 export const GameAPI = {
   // ✅ Create Game
-  createGame: async ({ visibility = "public" }) => {
-    const ownerId = parseInt(localStorage.getItem("player_id"));
+  createGame: async (visibility) => {
+    const payload = {
+      ownerId: parseInt(localStorage.getItem("player_id")),
+      visibility
+    };
+
     const response = await fetch(`${API_BASE_URL}/api/game-state/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ownerId, visibility }),
+      body: JSON.stringify(payload),
     });
 
-    if (!response.ok) throw new Error("Failed to create game");
-    return await response.text(); // gameId (String)
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Create game failed: ${errText}`);
+    }
+
+    return await response.json();
   },
 
   // ✅ Start Game
