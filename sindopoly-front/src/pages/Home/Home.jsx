@@ -24,15 +24,11 @@ function Home() {
 
     const handleCreateGame = async () => {
         try {
-            await GameAPI.createGame(visibility);
+            const result = await GameAPI.createGame(visibility);
             const gameId = result.gameId ?? result.id ?? result.game_id;
             const isPrivate = visibility === "private";
 
-            if (isPrivate) {
-                navigate(`/lobby?creator=1&game_id=${gameId}`);
-            } else {
-                navigate(`/Game?player=${localStorage.getItem("player_id")}`);
-            }
+            navigate(`/lobby?creator=1&game_id=${gameId}`);
         } catch (err) {
             console.error(err);
             message.error("Failed to create game.");
