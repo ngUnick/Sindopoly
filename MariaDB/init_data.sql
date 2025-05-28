@@ -6,49 +6,49 @@ INSERT INTO Player (p_name) VALUES ('Bob'), ('Alice');
 -- ── Initialize Squares ───────────────────────────────────────
 INSERT INTO Square(id, s_type, price, rent) VALUES
 -- 0–9 ─────────────────────────────────────────────────────────
- ( 0,'START'  ,  NULL ,  NULL ),
- ( 1,'BROWN'  ,     60,     2 ),
- ( 2,'CARD'   ,  NULL ,  NULL ),
- ( 3,'BROWN'  ,     60,     4 ),
- ( 4,'TAX'    ,   -200,  NULL ),
- ( 5,'TRAIN'  ,    200,    25 ),
- ( 6,'CYAN'   ,    100,     6 ),
- ( 7,'CARD'   ,  NULL ,  NULL ),
- ( 8,'CYAN'   ,    100,     6 ),
- ( 9,'CYAN'   ,    120,     8 ),
+ ( 1,'START'  ,  NULL ,  NULL ),
+ ( 2,'BROWN'  ,     60,     2 ),
+ ( 3,'CARD'   ,  NULL ,  NULL ),
+ ( 4,'BROWN'  ,     60,     4 ),
+ ( 5,'TAX'    ,   -200,  NULL ),
+ ( 6,'TRAIN'  ,    200,    25 ),
+ ( 7,'CYAN'   ,    100,     6 ),
+ ( 8,'CARD'   ,  NULL ,  NULL ),
+ ( 9,'CYAN'   ,    100,     6 ),
 -- 10–19 ───────────────────────────────────────────────────────
- (10,'JAIL'   ,  NULL ,  NULL ),
- (11,'PURPLE' ,    140,    10 ),
- (12,'UTILITY',    150,  NULL ),   -- rent = dice×4 / ×10 (handled in code)
- (13,'PURPLE' ,    140,    10 ),
- (14,'PURPLE' ,    160,    12 ),
- (15,'TRAIN'  ,    200,    25 ),
- (16,'ORANGE' ,    180,    14 ),
- (17,'CARD'   ,  NULL ,  NULL ),
- (18,'ORANGE' ,    180,    14 ),
- (19,'ORANGE' ,    200,    16 ),
+ (10,'CYAN'   ,    120,     8 ),
+ (11,'JAIL'   ,  NULL ,  NULL ),
+ (12,'PURPLE' ,    140,    10 ),
+ (13,'UTILITY',    150,  NULL ),   -- rent = dice×4 / ×10 (handled in code)
+ (14,'PURPLE' ,    140,    10 ),
+ (15,'PURPLE' ,    160,    12 ),
+ (16,'TRAIN'  ,    200,    25 ),
+ (17,'ORANGE' ,    180,    14 ),
+ (18,'CARD'   ,  NULL ,  NULL ),
+ (19,'ORANGE' ,    180,    14 ),
 -- 20–29 ───────────────────────────────────────────────────────
- (20,'PARKING',  NULL ,  NULL ),
- (21,'RED'    ,    220,    18 ),
- (22,'CARD'   ,  NULL ,  NULL ),
- (23,'RED'    ,    220,    18 ),
- (24,'RED'    ,    240,    20 ),
- (25,'TRAIN'  ,    200,    25 ),
- (26,'YELLOW' ,    260,    22 ),
+ (20,'ORANGE' ,    200,    16 ),
+ (21,'PARKING',  NULL ,  NULL ),
+ (22,'RED'    ,    220,    18 ),
+ (23,'CARD'   ,  NULL ,  NULL ),
+ (24,'RED'    ,    220,    18 ),
+ (25,'RED'    ,    240,    20 ),
+ (26,'TRAIN'  ,    200,    25 ),
  (27,'YELLOW' ,    260,    22 ),
- (28,'UTILITY',    150,  NULL ),
- (29,'YELLOW' ,    280,    24 ),
--- 30–39 ───────────────────────────────────────────────────────
- (30,'GOJAIL' ,  NULL ,  NULL ),
- (31,'GREEN'  ,    300,    26 ),
+ (28,'YELLOW' ,    260,    22 ),
+ (29,'UTILITY',    150,  NULL ),
+-- 30–40 ───────────────────────────────────────────────────────
+ (30,'YELLOW' ,    280,    24 ),
+ (31,'GOJAIL' ,  NULL ,  NULL ),
  (32,'GREEN'  ,    300,    26 ),
- (33,'CARD'   ,  NULL ,  NULL ),
- (34,'GREEN'  ,    320,    28 ),
- (35,'TRAIN'  ,    200,    25 ),
- (36,'CARD'   ,  NULL ,  NULL ),
- (37,'BLUE'   ,    350,    35 ),
- (38,'TAX'    ,   -100,  NULL ),   -- luxury tax
- (39,'BLUE'   ,    400,    50 );
+ (33,'GREEN'  ,    300,    26 ),
+ (34,'CARD'   ,  NULL ,  NULL ),
+ (35,'GREEN'  ,    320,    28 ),
+ (36,'TRAIN'  ,    200,    25 ),
+ (37,'CARD'   ,  NULL ,  NULL ),
+ (38,'BLUE'   ,    350,    35 ),
+ (39,'TAX'    ,   -100,  NULL ),   -- luxury tax
+ (40,'BLUE'   ,    400,    50 );
 
 
 

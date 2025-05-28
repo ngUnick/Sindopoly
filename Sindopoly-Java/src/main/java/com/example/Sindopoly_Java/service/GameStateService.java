@@ -314,32 +314,37 @@ public class GameStateService {
 
         validationUtils.validatePlayerExists(playerId);
 
-        String gameKey = GAME_PREFIX + gameId;
-        String playerSetKey = gameKey + PLAYERS_KEY_SUFFIX;
-    
+        System.out.println("Removing player " + playerId + " from game " + gameId);
+
+        String gameKey = "game:" + gameId;
+        String playerSetKey = gameKey + ":players";
+
+        // Remove player from Redis set
         setOps.remove(playerSetKey, String.valueOf(playerId));
-    
-        String owner = hashOps.get(gameKey, "owner");
+
         String status = hashOps.get(gameKey, "status");
-    
-        if (String.valueOf(playerId).equals(owner) && "lobby".equalsIgnoreCase(status)) {
+
+        // If the owner leaves while in lobby, delete the game
+        if (gameId == playerId && "lobby".equalsIgnoreCase(status)) {
             deleteGameAndPlayers(gameId);
             return "Owner left during lobby. Game deleted.";
         }
-    
+
+
         // Handle player leaving mid-game
         if ("inProgress".equalsIgnoreCase(status)) {
             String startTimeStr = hashOps.get(gameKey, "startTime");
             Instant now = Instant.now();
             Instant startTime = startTimeStr != null ? Instant.parse(startTimeStr) : now;
             int sessionSeconds = (int) Duration.between(startTime, now).getSeconds();
-    
+
             int money = Integer.parseInt((String) redisTemplate.opsForHash().get("player:" + playerId, "money"));
             finalizePlayerStats(playerId, false, money, sessionSeconds);
         }
-    
+
         return "Player removed.";
     }
+
     
     
     public void updateGameFields(int gameId, Map<String, String> fields) {

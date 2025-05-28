@@ -3,7 +3,7 @@ package com.example.Sindopoly_Java.model;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "Square")
+@Table(name = "`Square`")
 public class Square {
 
     @Id

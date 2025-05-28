@@ -28,7 +28,7 @@ function Home() {
             const gameId = result.gameId ?? result.id ?? result.game_id;
             const isPrivate = visibility === "private";
 
-            navigate(`/lobby?creator=1&game_id=${gameId}`);
+            navigate(`/lobby?game_id=${gameId}`);
         } catch (err) {
             console.error(err);
             message.error("Failed to create game.");
