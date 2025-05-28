@@ -105,6 +105,7 @@ const Login = () => {
 
       <Modal
         centered
+        width={400}
         title="Choose a Nickname"
         open={isModalOpen}
         onOk={handleOk}
