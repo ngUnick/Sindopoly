@@ -25,10 +25,12 @@ public class GameStateController {
      */
     @PostMapping("/create")
     public Map<String, String> createGame(@RequestBody GameCreationRequest request) {
-        // Use ownerId as the gameId for easier lookup
         int ownerId = request.getOwnerId();
-        return gameStateService.createGame(ownerId, request.getVisibility());
+        Map<String, String> response = gameStateService.createGame(ownerId, request.getVisibility());
+        response.put("gameId", String.valueOf(ownerId));
+        return response;
     }
+
 
     
     /**
@@ -39,6 +41,7 @@ public class GameStateController {
     public boolean isPlayerInGame(@PathVariable int playerId) {
         return gameStateService.isPlayerInAnyGame(playerId);
     }
+
 
 
     /**
@@ -53,13 +56,14 @@ public class GameStateController {
 
     /**
      * Add a player to a game
-     * POST /api/game-state/{gameId}/add-player?playerId=2
+     * POST /api/game-state/add/{gameId}/{playerId}
      */
-    @PostMapping("/{gameId}/add-player")
-    public String addPlayer(@PathVariable int gameId, @RequestParam int playerId) {
+    @PostMapping("/add/{gameId}/{playerId}")
+    public String addPlayer(@PathVariable int gameId, @PathVariable int playerId) {
         gameStateService.addPlayerToGame(gameId, playerId);
         return "Player added to game.";
     }
+
 
     /**
      * Add a player to a game using an invite code
