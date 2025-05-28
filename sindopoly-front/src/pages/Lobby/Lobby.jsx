@@ -1,5 +1,6 @@
 import { Button } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useEffect, useState, useMemo } from 'react';
 
 const Lobby = () => {
   const navigate = useNavigate();
@@ -7,10 +8,15 @@ const Lobby = () => {
   const params = new URLSearchParams(location.search);
 
   const gameId = params.get('game_id');
-  const isOwner = params.get('creator') === '1';         // passed from Home
+
   const visibility = params.get('visibility') || 'public';
   const playerId = localStorage.getItem('player_id');
   const nickname = sessionStorage.getItem("nickname");
+
+  const [players, setPlayers] = useState([]);
+  const isOwner = String(playerId) === String(gameId); // Owner is always the creator, who is gameId
+
+
 
   const handleStartGame = async () => {
     try {
@@ -24,6 +30,59 @@ const Lobby = () => {
       console.error(err);
     }
   };
+
+  
+  const fetchPlayers = async () => {
+    try {
+      const resPlayers = await fetch(`http://localhost:8080/api/game-state/players-detailed/${gameId}`);
+      const resGame = await fetch(`http://localhost:8080/api/game-state/${gameId}`);
+      if (!resPlayers.ok || !resGame.ok) throw new Error("Failed to fetch");
+
+      const players = await resPlayers.json();
+      const game = await resGame.json();
+
+      setPlayers(players);
+
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleLeaveGame = async () => {
+    try {
+      const response = await fetch(`http://localhost:8080/api/game-state/${gameId}/remove-player?playerId=${playerId}`, {
+        method: 'POST'
+      });
+
+      if (!response.ok) throw new Error("Failed to leave game");
+      navigate("/"); // go back to home
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleKick = async (targetId) => {
+    try {
+      const response = await fetch(`http://localhost:8080/api/game-state/${gameId}/remove-player?playerId=${targetId}`, {
+        method: 'POST'
+      });
+
+      if (!response.ok) throw new Error("Failed to remove player");
+      message.success("Player removed.");
+      fetchPlayers(); // Refresh player list immediately
+    } catch (err) {
+      console.error(err);
+      message.error("Failed to remove player.");
+    }
+  };
+
+
+
+
+  useEffect(() => {
+    const interval = setInterval(fetchPlayers, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="flex-grow flex justify-center items-center bg-pic bg-cover bg-no-repeat">
@@ -41,13 +100,44 @@ const Lobby = () => {
           You are playing as <strong>{nickname}</strong> {isOwner && '(Owner)'}
         </p>
 
-        <div className="flex justify-center">
+        <div className="mb-6">
+          <h2 className="text-center text-lg font-medium mb-2">Players:</h2>
+          <ul className="list-disc list-inside text-center">
+            {players.map(p => (
+              <div key={p.id} className="text-center font-medium flex items-center justify-center gap-2">
+                <span>
+                  {p.nickname ?? `Player #${p.id}`} {p.id == playerId && "(You)"} {p.id == gameId && "(Owner)"}
+                </span>
+
+                {/* ❌ Show Remove Button if owner and not self */}
+                {isOwner && p.id != playerId && (
+                  <button
+                    className="text-red-600 hover:text-red-800 text-xs"
+                    onClick={() => handleKick(p.id)}
+                    title="Remove player"
+                  >
+                    ❌
+                  </button>
+                )}
+              </div>
+            ))}
+          </ul>
+        </div>
+
+        <div className="flex justify-center gap-3">
           <Button
             type="primary"
             disabled={!isOwner}
             onClick={handleStartGame}
           >
             Start Game
+          </Button>
+          <Button
+            type="primary"
+            danger
+            onClick={handleLeaveGame}
+          >
+            Leave Game
           </Button>
         </div>
       </div>

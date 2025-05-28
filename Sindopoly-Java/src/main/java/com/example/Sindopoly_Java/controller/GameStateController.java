@@ -3,10 +3,19 @@ package com.example.Sindopoly_Java.controller;
 import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.orchestrator.TurnService;
 import com.example.Sindopoly_Java.dto.GameCreationRequest;
+import com.example.Sindopoly_Java.repository.PlayerRepository;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+
 
 @RestController
 @RequestMapping("/api/game-state")
@@ -17,6 +26,29 @@ public class GameStateController {
     public GameStateController(GameStateService gameStateService) {
         this.gameStateService = gameStateService;
     }
+
+
+    @Autowired
+    private PlayerRepository playerRepo;
+
+    @GetMapping("/players-detailed/{gameId}")
+    public List<Map<String, Object>> getPlayerDetailsInGame(@PathVariable int gameId) {
+        Set<String> playerIds = gameStateService.getPlayersInGame(gameId);
+
+        return playerIds.stream()
+            .map(id -> {
+                Map<String, Object> entry = new HashMap<>();
+                entry.put("id", id);
+
+                playerRepo.findById(Integer.parseInt(id)).ifPresent(player ->
+                    entry.put("nickname", player.getName())
+                );
+
+                return entry;
+            })
+            .toList();
+    }
+
 
     /**
      * Create a new game
@@ -59,11 +91,26 @@ public class GameStateController {
      * POST /api/game-state/add/{gameId}/{playerId}
      */
     @PostMapping("/add/{gameId}/{playerId}")
-    public String addPlayer(@PathVariable int gameId, @PathVariable int playerId) {
+    public ResponseEntity<String> addPlayer(@PathVariable int gameId, @PathVariable int playerId) {
+        // ❌ Prevent player from joining multiple games
+        if (gameStateService.isPlayerInAnyGame(playerId)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Player is already in another game.");
+        }
+
+        // ✅ Proceed to add
         gameStateService.addPlayerToGame(gameId, playerId);
-        return "Player added to game.";
+        return ResponseEntity.ok("Player added to game.");
     }
 
+
+    /**
+     * Get all player IDs in a game
+     * GET /api/game-state/players/{gameId}
+     */
+    @GetMapping("/players/{gameId}")
+    public Set<String> getPlayersInGame(@PathVariable int gameId) {
+        return gameStateService.getPlayersInGame(gameId);
+    }
 
     /**
      * Add a player to a game using an invite code
