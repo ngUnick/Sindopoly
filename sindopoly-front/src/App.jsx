@@ -5,9 +5,8 @@ import {
   Route,
 } from "react-router-dom";
 import Home from './pages/Home/Home';
-import Navbar from './globalComponents/Navbar/Navbar';
+// import Navbar from './globalComponents/Navbar/Navbar';
 import SearchGame from './pages/SearchGame/SearchGame';
-import CreateGame from './pages/CreateGame/CreateGame';
 import Game from './pages/Game/Game';
 import EndGame from './pages/Game/EndGame';
 import Login from "./pages/Login/Login";
@@ -16,6 +15,7 @@ import { ProtectedRoute } from './AuthContext/ProtectedRoute';
 import GetToken from './pages/GetToken/GetToken';
 import WaitingLobby from './pages/WaitingLobby/WaitingLobby';
 import Statistics from './pages/Statistics/Statistics';
+import Lobby from './pages/Lobby/Lobby';
 
 
 function App() {
@@ -29,7 +29,7 @@ function App() {
                 <Route path="/getToken" element={<GetToken/>}/>
                 <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>}/>
                 <Route path="/searchGame" element={<ProtectedRoute><SearchGame /></ProtectedRoute>}/>
-                <Route path="/createGame" element={<ProtectedRoute><CreateGame /></ProtectedRoute>}/>
+                <Route path="/lobby" element={<ProtectedRoute><Lobby /></ProtectedRoute>}/>
                 <Route path="/lobby" element={<ProtectedRoute><WaitingLobby /></ProtectedRoute>}/>
                 <Route path="/Game" element={<ProtectedRoute><Game /></ProtectedRoute>}/>
                 <Route path="/endgame" element={<ProtectedRoute><EndGame /></ProtectedRoute>}/>

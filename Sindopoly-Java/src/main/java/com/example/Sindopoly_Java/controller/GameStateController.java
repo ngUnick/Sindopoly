@@ -30,6 +30,17 @@ public class GameStateController {
         return gameStateService.createGame(ownerId, request.getVisibility());
     }
 
+    
+    /**
+     * Check if a player is in any game
+     * GET /api/game-state/in-game/{playerId}
+     */
+    @GetMapping("/in-game/{playerId}")
+    public boolean isPlayerInGame(@PathVariable int playerId) {
+        return gameStateService.isPlayerInAnyGame(playerId);
+    }
+
+
     /**
      * Start a game
      * POST /api/game-state/{gameId}/start
