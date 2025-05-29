@@ -21,44 +21,61 @@ public class GameLoopScheduler {
     /**
      * Check end conditions for all games every 10 seconds
      */
-    @Scheduled(fixedRate = 2000)        // every 10 s
+    @Scheduled(fixedRate = 2000)          // every 2 s
     public void pollTurnTimers() {
 
         Set<String> keys = redisTemplate.keys("game:*");
-        if (keys.isEmpty()) return;
+        if (keys == null || keys.isEmpty()) return;
 
         for (String key : keys) {
-            if (key.endsWith(":players")) continue;
+            if (key.endsWith(":players")) continue;        // skip sets
 
+            /* game id ---------------------------------------------------- */
             int gameId;
-            try { gameId = Integer.parseInt(key.substring(5)); }
-            catch (NumberFormatException ex) { continue; }
+            try {
+                gameId = Integer.parseInt(key.substring(5));   // "game:4"
+            } catch (NumberFormatException ex) {
+                continue;                                      // malformed key
+            }
 
-            // -------- read timer fields ----------
-            String ageStr     = (String) redisTemplate.opsForHash().get(key, "turnAge");
-            String limitStr   = (String) redisTemplate.opsForHash().get(key, "turnTimeout");
+            /* turnAge ---------------------------------------------------- */
+            int age = safeInt((String) redisTemplate.opsForHash().get(key, "turnAge"), 0);
 
-            int age   = ageStr   == null ? 0  : Integer.parseInt(ageStr);
-            int limit = limitStr == null ? 60 : Integer.parseInt(limitStr);
+            /* timeout limit --------------------------------------------- */
+            int limit = safeInt((String) redisTemplate.opsForHash().get(key, "turnTimeout"), 60);
 
-            // bump age by scheduler interval (10 s)
-            redisTemplate.opsForHash().put(key, "turnAge", String.valueOf(age + 10));
+            /* bump timer by scheduler interval (2 s) --------------------- */
+            age += 2;
+            redisTemplate.opsForHash().put(key, "turnAge", String.valueOf(age));
 
-            if (age + 10 < limit) continue;                 // still time left
+            if (age < limit) continue;                         // still time left
 
-            // ------------- timeout reached -------------
+            /* player on turn -------------------------------------------- */
             String stalled = (String) redisTemplate.opsForHash().get(key, "playerTurn");
+            if (stalled == null || stalled.isBlank()) {        // nothing to rotate
+                continue;
+            }
+
             System.out.println("Skipping stalled player " + stalled + " in game " + gameId);
 
-            /* mark player AFK so UI can show it */
-            gameStateService.setPlayerField(Integer.parseInt(stalled), "afk", "true");
+            /* mark AFK safely ------------------------------------------- */
+            try {
+                gameStateService.setPlayerField(
+                    Integer.parseInt(stalled), "afk", "true");
+            } catch (NumberFormatException ignored) {
+                /* skip bad id */
+            }
 
-            // rotate to next player
+            /* rotate turn + reset timer ---------------------------------- */
             gameStateService.forceRotateTurn(gameId, stalled);
-
-            // reset age
             redisTemplate.opsForHash().put(key, "turnAge", "0");
         }
     }
+
+    /* helper -------------------------------------------------------------- */
+    private int safeInt(String str, int fallback) {
+        try { return Integer.parseInt(str); } catch (Exception e) { return fallback; }
+    }
+
 
 }

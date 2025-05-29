@@ -25,10 +25,10 @@ function Home() {
     const handleCreateGame = async () => {
         try {
             const result = await GameAPI.createGame(visibility);
+            console.log("Result:", result);
             const gameId = result.gameId ?? result.id ?? result.game_id;
-            const isPrivate = visibility === "private";
 
-            navigate(`/lobby?game_id=${gameId}`);
+            navigate(`/lobby?game_id=${gameId}&visibility=${visibility}`);
         } catch (err) {
             console.error(err);
             message.error("Failed to create game.");

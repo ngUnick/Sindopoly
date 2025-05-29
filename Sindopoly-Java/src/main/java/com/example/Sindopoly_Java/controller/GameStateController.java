@@ -31,6 +31,10 @@ public class GameStateController {
     @Autowired
     private PlayerRepository playerRepo;
 
+    /**
+     * Get all players in a game with detailed information
+     * GET /api/game-state/players-detailed/{gameId}
+     */
     @GetMapping("/players-detailed/{gameId}")
     public List<Map<String, Object>> getPlayerDetailsInGame(@PathVariable int gameId) {
         Set<String> playerIds = gameStateService.getPlayersInGame(gameId);
@@ -87,6 +91,16 @@ public class GameStateController {
     }
 
     /**
+     * Get all public games in lobby state
+     * GET /api/game-state/public-lobby
+     */
+    @GetMapping("/public-lobby")
+    public List<Map<String, String>> getAllPublicLobbyGames() {
+        System.out.println("📥 /public-lobby endpoint was called");
+        return gameStateService.getAllPublicLobbyGames();
+    }
+
+    /**
      * Add a player to a game
      * POST /api/game-state/add/{gameId}/{playerId}
      */
@@ -117,9 +131,18 @@ public class GameStateController {
      * POST /api/game-state/join-with-invite?inviteCode=ABC123&playerId=2
      */
     @PostMapping("/join-with-invite")
-    public String joinWithInvite(@RequestParam String inviteCode, @RequestParam int playerId) {
-        return gameStateService.addPlayerToGameWithInviteCode(inviteCode, playerId);
+    public Map<String, String> joinWithInvite(@RequestParam String inviteCode,
+                                            @RequestParam int playerId) {
+
+        String id = gameStateService.addPlayerToGameWithInviteCode(inviteCode, playerId);
+
+        // for error paths we still return the message
+        if (!id.chars().allMatch(Character::isDigit)) {
+            return Map.of("error", id);
+        }
+        return Map.of("gameId", id);
     }
+
 
 
     /**
