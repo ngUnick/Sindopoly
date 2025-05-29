@@ -2,6 +2,14 @@
 INSERT INTO player (p_name) VALUES ('Bob'), ('Alice');
 
 
+-- ── Initialize Stats ──────────────────────────────────────────
+INSERT INTO stats (player, total_wins, total_losses, total_games,
+                   total_money, total_time_played)
+VALUES
+  -- Player #1  (all counters start at zero)
+  (1, 0, 0, 0, 0, 0),
+  -- Player #2  (also zeroed)
+  (2, 0, 0, 0, 0, 0);
 
 -- ── Initialize Squares ───────────────────────────────────────
 INSERT INTO square(id, s_type, price, rent) VALUES
