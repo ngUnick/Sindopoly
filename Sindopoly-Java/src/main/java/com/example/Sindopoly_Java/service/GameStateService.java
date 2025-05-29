@@ -244,6 +244,7 @@ public class GameStateService {
     public String addPlayerToGameWithInviteCode(String inviteCode, int playerId) {
 
         validationUtils.validatePlayerExists(playerId);
+        validationUtils.validateInviteCode(inviteCode);
 
         Set<String> keys = redisTemplate.keys(GAME_PREFIX + "*");
         if (keys.isEmpty()) return "No games found.";
