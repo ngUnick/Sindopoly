@@ -154,6 +154,53 @@ public class GameStateService {
         redisTemplate.delete(gameKey + PLAYERS_KEY_SUFFIX);
     }
 
+    /** Get All Public Lobby Games */
+    public List<Map<String, String>> getAllPublicLobbyGames() {
+        Set<String> keys = redisTemplate.keys("game:*");
+        if (keys.isEmpty()) return List.of();
+
+        List<Map<String, String>> publicLobbyGames = new ArrayList<>();
+
+        for (String key : keys) {
+            try {
+                /* keep "game:4", skip "game:4:players" */
+                if (key.endsWith(":players")) continue;
+
+                String visibility = hashOps.get(key, "visibility");
+                String status     = hashOps.get(key, "status");
+
+                if ("public".equalsIgnoreCase(visibility) &&
+                    "lobby".equalsIgnoreCase(status)) {
+
+                    String gameId = key.replace("game:", "");
+
+                    Map<String, String> gameData = hashOps.entries(key);
+                    /* creator is the owner → same as gameId */
+                    String creatorIdStr = gameId;
+                    String creatorName  = playerRepo.findById(Integer.parseInt(creatorIdStr))
+                                                    .map(Player::getName)
+                                                    .orElse(creatorIdStr);
+
+                    gameData.put("creatorNickname", creatorName);
+
+                    /* how many players are in */
+                    long count = Optional.ofNullable(
+                                    redisTemplate.opsForSet()
+                                                .size("game:" + gameId + ":players")
+                                ).orElse(0L);
+                    gameData.put("playerCount", String.valueOf(count));
+                    gameData.put("gameId",      gameId);
+
+                    publicLobbyGames.add(gameData);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return publicLobbyGames;
+    }
+
+
     /** Add Player */
     public String addPlayerToGame(int gameId, int playerId) {
 
@@ -196,41 +243,39 @@ public class GameStateService {
     /** Add Player with Invite Code */
     public String addPlayerToGameWithInviteCode(String inviteCode, int playerId) {
 
-
-
         validationUtils.validatePlayerExists(playerId);
 
-        // Loop through all games to match invite code (or add an index later)
         Set<String> keys = redisTemplate.keys(GAME_PREFIX + "*");
-        
-        // The keys variable is never null with redisTemplate.keys(), so we can just handle the case when keys is empty
         if (keys.isEmpty()) return "No games found.";
-    
+
         for (String gameKey : keys) {
+        /* 🚫 skip auxiliary hashes like game:4:players */
+        if (gameKey.endsWith(":players")) continue;
+
             String storedInvite = hashOps.get(gameKey, "inviteCode");
-            String status = hashOps.get(gameKey, "status");
-            validationUtils.ensureLobby(status);            
-    
+            String status       = hashOps.get(gameKey, "status");
+
+            /* Add player when invite matches */
             if (inviteCode.equalsIgnoreCase(storedInvite)) {
-                if (!"lobby".equalsIgnoreCase(status)) {
+
+                if (!"lobby".equalsIgnoreCase(status))
                     return "Game is already in progress or ended.";
-                }
-    
+
                 String playerSetKey = gameKey + PLAYERS_KEY_SUFFIX;
-                Long playerCount = setOps.size(playerSetKey);
-                if (playerCount == null) playerCount = 0L;
-    
-                if (playerCount >= MAX_PLAYERS) {
-                    return "Game is full.";
-                }
-    
+                Long count = Optional.ofNullable(setOps.size(playerSetKey)).orElse(0L);
+                if (count >= MAX_PLAYERS) return "Game is full.";
+
+                /* ✅ add player */
                 setOps.add(playerSetKey, String.valueOf(playerId));
-                return "Player added to private game.";
+
+                /* ✅ send back just the id, e.g.  "4" */
+                return gameKey.replace("game:", "");
             }
+
         }
-    
         return "Invalid invite code.";
     }
+
     
 
     /** Remove Player */

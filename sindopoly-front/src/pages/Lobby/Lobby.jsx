@@ -1,6 +1,7 @@
-import { Button } from 'antd';
+import { Button, message } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useState, useMemo } from 'react';
+import { GameAPI } from '../../apis/GameAPI';
 
 const Lobby = () => {
   const navigate = useNavigate();
@@ -8,22 +9,17 @@ const Lobby = () => {
   const params = new URLSearchParams(location.search);
 
   const gameId = params.get('game_id');
-
   const visibility = params.get('visibility') || 'public';
   const playerId = localStorage.getItem('player_id');
   const nickname = sessionStorage.getItem("nickname");
 
   const [players, setPlayers] = useState([]);
-  const isOwner = String(playerId) === String(gameId); // Owner is always the creator, who is gameId
-
-
+  const [inviteCode, setInviteCode] = useState(null); // ✅ new
+  const isOwner = String(playerId) === String(gameId); // ✅ owner check logic
 
   const handleStartGame = async () => {
     try {
-      const response = await fetch(`http://localhost:8080/api/game-state/start/${gameId}`, {
-        method: 'POST',
-      });
-
+      const response = await GameAPI.startGame(gameId);
       if (!response.ok) throw new Error('Failed to start game');
       navigate(`/Game?player=${playerId}`);
     } catch (err) {
@@ -31,7 +27,6 @@ const Lobby = () => {
     }
   };
 
-  
   const fetchPlayers = async () => {
     try {
       const resPlayers = await fetch(`http://localhost:8080/api/game-state/players-detailed/${gameId}`);
@@ -43,6 +38,10 @@ const Lobby = () => {
 
       setPlayers(players);
 
+      // ✅ Store invite code if private
+      if (visibility === 'private' && game.inviteCode) {
+        setInviteCode(game.inviteCode);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -53,9 +52,8 @@ const Lobby = () => {
       const response = await fetch(`http://localhost:8080/api/game-state/${gameId}/remove-player?playerId=${playerId}`, {
         method: 'POST'
       });
-
       if (!response.ok) throw new Error("Failed to leave game");
-      navigate("/"); // go back to home
+      navigate("/");
     } catch (err) {
       console.error(err);
     }
@@ -66,18 +64,14 @@ const Lobby = () => {
       const response = await fetch(`http://localhost:8080/api/game-state/${gameId}/remove-player?playerId=${targetId}`, {
         method: 'POST'
       });
-
       if (!response.ok) throw new Error("Failed to remove player");
       message.success("Player removed.");
-      fetchPlayers(); // Refresh player list immediately
+      fetchPlayers();
     } catch (err) {
       console.error(err);
       message.error("Failed to remove player.");
     }
   };
-
-
-
 
   useEffect(() => {
     const interval = setInterval(fetchPlayers, 1000);
@@ -96,6 +90,12 @@ const Lobby = () => {
           Visibility: <strong>{visibility}</strong>
         </p>
 
+        {visibility === 'private' && inviteCode && (
+          <p className="text-center mb-4 text-sm text-gray-700">
+            Invite Code: <strong>{inviteCode}</strong>
+          </p>
+        )}
+
         <p className="text-center mb-6">
           You are playing as <strong>{nickname}</strong> {isOwner && '(Owner)'}
         </p>
@@ -108,8 +108,6 @@ const Lobby = () => {
                 <span>
                   {p.nickname ?? `Player #${p.id}`} {p.id == playerId && "(You)"} {p.id == gameId && "(Owner)"}
                 </span>
-
-                {/* ❌ Show Remove Button if owner and not self */}
                 {isOwner && p.id != playerId && (
                   <button
                     className="text-red-600 hover:text-red-800 text-xs"
@@ -125,20 +123,8 @@ const Lobby = () => {
         </div>
 
         <div className="flex justify-center gap-3">
-          <Button
-            type="primary"
-            disabled={!isOwner}
-            onClick={handleStartGame}
-          >
-            Start Game
-          </Button>
-          <Button
-            type="primary"
-            danger
-            onClick={handleLeaveGame}
-          >
-            Leave Game
-          </Button>
+          <Button type="primary" disabled={!isOwner} onClick={handleStartGame}>Start Game</Button>
+          <Button type="primary" danger onClick={handleLeaveGame}>Leave Game</Button>
         </div>
       </div>
     </div>

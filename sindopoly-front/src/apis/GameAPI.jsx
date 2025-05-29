@@ -24,12 +24,19 @@ export const GameAPI = {
 
   // ✅ Start Game
   startGame: async (gameId) => {
-    const response = await fetch(`${API_BASE_URL}/api/game-state/${gameId}/start`, {
+    const response = await fetch(`${API_BASE_URL}/api/game-state/start/${gameId}`, {
       method: "POST",
     });
 
     if (!response.ok) throw new Error("Failed to start game");
     return await response.text();
+  },
+
+  // ✅ Get Public Lobby Games
+  getPublicLobbyGames: async () => {
+    const res = await fetch("http://localhost:8080/api/game-state/public-lobby");
+    if (!res.ok) throw new Error("Failed to fetch public games");
+    return await res.json();
   },
 
   // ✅ Join Public Game
@@ -44,15 +51,23 @@ export const GameAPI = {
   },
 
   // ✅ Join Private Game by Code
-  joinWithInvite: async (code) => {
-    const playerId = parseInt(localStorage.getItem("player_id"));
-    const response = await fetch(`${API_BASE_URL}/api/game-state/join-with-invite?code=${code}&playerId=${playerId}`, {
-      method: "POST",
-    });
+  joinWithInvite: async (inviteCode) => {
+    const playerId = localStorage.getItem("player_id");
+    const res = await fetch(
+      `${API_BASE_URL}/api/game-state/join-with-invite?inviteCode=${inviteCode}&playerId=${playerId}`,
+      { method: "POST" }
+    );
+    if (!res.ok) throw new Error("Failed to join private game");
 
-    if (!response.ok) throw new Error("Failed to join private game");
-    return await response.text();
+    const text = await res.text();        // could be "4"  or  {"gameId":"4"}
+    try {
+      return JSON.parse(text);            // → {gameId:"4"}
+    } catch {
+      return { gameId: text.trim() };     // → {gameId:"4"}
+    }
   },
+
+
 
   // ✅ Get Game Metadata
   getGameInfo: async (gameId) => {
