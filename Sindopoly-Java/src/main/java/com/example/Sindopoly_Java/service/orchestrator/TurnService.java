@@ -178,7 +178,6 @@ public class TurnService {
     // private void handleBankruptcy(int gameId, int playerId, Map<String,Object> pHash) {
     //     pHash.put("bankrupt", true);
     //     playerStateSvc.savePlayerState(playerId, pHash);
-    //     // TODO: transfer properties to bank etc.
     // }
 
     private void handleFullBankruptcy(int gameId,
