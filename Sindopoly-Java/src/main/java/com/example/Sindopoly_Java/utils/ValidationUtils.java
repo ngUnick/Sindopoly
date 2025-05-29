@@ -41,4 +41,19 @@ public class ValidationUtils {
         if (money < 0)
             throw new IllegalStateException("Money cannot be negative.");
     }
+
+    /** Validate a player's nickname */
+    public void validateNickname(String name) {
+        if (name == null || !name.matches("^[A-Za-z0-9_]{2,15}$")) {
+            throw new IllegalArgumentException("Nickname may contain only A-Z, 0-9, _ (2–15 chars)");
+        }
+    }
+
+    /** Validate an invite code */
+    public void validateInviteCode(String code) {
+        if (code == null || !code.matches("^[A-Z0-9]{5}$")) {
+            throw new IllegalArgumentException("Invalid invite code");
+        }
+    }
+
 }

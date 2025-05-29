@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.example.Sindopoly_Java.utils.ValidationUtils;
 
 import java.util.HashMap;
 import java.util.List;
@@ -22,6 +23,9 @@ import java.util.Set;
 public class GameStateController {
 
     private final GameStateService gameStateService;
+
+    @Autowired
+    private ValidationUtils validationUtils;
 
     public GameStateController(GameStateService gameStateService) {
         this.gameStateService = gameStateService;

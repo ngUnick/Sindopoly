@@ -13,7 +13,6 @@ import Login from "./pages/Login/Login";
 import { AuthProvider } from './AuthContext/AuthContext';
 import { ProtectedRoute } from './AuthContext/ProtectedRoute';
 import GetToken from './pages/GetToken/GetToken';
-import WaitingLobby from './pages/WaitingLobby/WaitingLobby';
 import Statistics from './pages/Statistics/Statistics';
 import Lobby from './pages/Lobby/Lobby';
 
@@ -30,7 +29,6 @@ function App() {
                 <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>}/>
                 <Route path="/searchGame" element={<ProtectedRoute><SearchGame /></ProtectedRoute>}/>
                 <Route path="/lobby" element={<ProtectedRoute><Lobby /></ProtectedRoute>}/>
-                <Route path="/lobby" element={<ProtectedRoute><WaitingLobby /></ProtectedRoute>}/>
                 <Route path="/Game" element={<ProtectedRoute><Game /></ProtectedRoute>}/>
                 <Route path="/endgame" element={<ProtectedRoute><EndGame /></ProtectedRoute>}/>
                 <Route path="/statistics" element={<ProtectedRoute><Statistics /></ProtectedRoute>}/>

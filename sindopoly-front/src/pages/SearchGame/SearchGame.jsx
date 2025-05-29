@@ -11,6 +11,7 @@ import {
 } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import { sanitizeText } from "../../utils/sanitizeText";
 
 const antIcon = <LoadingOutlined style={{ fontSize: 24 }} spin />;
 
@@ -115,6 +116,8 @@ function SearchGame() {
     }
   };
 
+  const cleanInvite = (raw) => sanitizeText(raw, 5).toUpperCase();
+
   /* ───────────────────────────────────────────────────────────── */
 
   return (
@@ -160,7 +163,7 @@ function SearchGame() {
           ref={inputRef} 
           placeholder="Enter invite code..."
           value={inviteCode}
-          onChange={(e) => setInviteCode(e.target.value)}
+          onChange={(e) => setInviteCode(cleanInvite(e.target.value))}
           onPressEnter={handleJoinByInvite}
         />
       </Modal>

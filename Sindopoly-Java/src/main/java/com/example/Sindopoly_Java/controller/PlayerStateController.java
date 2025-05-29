@@ -4,7 +4,11 @@ import com.example.Sindopoly_Java.model.Player;
 import com.example.Sindopoly_Java.repository.PlayerRepository; // Add this import
 import com.example.Sindopoly_Java.service.PlayerStateService;
 import com.example.Sindopoly_Java.service.core.SquareActionService;
+import com.example.Sindopoly_Java.utils.ValidationUtils;
 
+import lombok.val;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,6 +21,8 @@ public class PlayerStateController {
     private final PlayerStateService playerStateService;
     private final SquareActionService squareActionService;
     private final PlayerRepository playerRepository; // Add this field
+    @Autowired
+    private ValidationUtils validationUtils;
 
     public PlayerStateController(PlayerStateService playerStateService,
                                  SquareActionService squareActionService,
@@ -34,6 +40,8 @@ public class PlayerStateController {
     @PostMapping("/create")
     public ResponseEntity<Integer> createPlayer(@RequestBody Map<String, String> body) {
         String nickname = body.get("nickname");
+
+        validationUtils.validateNickname(nickname);
 
         if (nickname == null || nickname.trim().isEmpty()) {
             throw new IllegalArgumentException("Nickname is required");
