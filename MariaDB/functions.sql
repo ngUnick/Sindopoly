@@ -22,6 +22,29 @@
 
 
 
+
+/* ───────────  run once in MariaDB  ─────────── */
+
+DELIMITER //
+
+CREATE TRIGGER trg_player_after_insert
+AFTER INSERT ON player
+FOR EACH ROW
+BEGIN
+    INSERT INTO stats
+        (player, total_wins, total_losses, total_games, total_money, total_time_played)
+    VALUES
+        (NEW.id, 0, 0, 0, 0, 0);
+END //
+
+DELIMITER ;
+
+
+
+
+
+
+
 -- DROP ALL TABLES;
 DELIMITER //
 

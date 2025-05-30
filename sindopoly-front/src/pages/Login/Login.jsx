@@ -3,7 +3,7 @@ import { Button, Modal, Input, message } from "antd";
 import monopoly_logo from "../../assets/images/monopoly_logo.png";
 import { useNavigate } from "react-router-dom";
 import { Filter } from "glin-profanity";
-import { sanitizeText } from "../../utils/sanitizeText";
+import { sanitizeText } from "../../utils/sanitize";
 
 const filter = new Filter({
   languages: ["english"],
