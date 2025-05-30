@@ -128,18 +128,24 @@ public class GameStateService {
 
 
     /** Start Game */
-    public void startGame(int gameId) {
-        String gameKey = GAME_PREFIX + gameId;
-        if (!redisTemplate.hasKey(gameKey)) return;
+    public void startGame(int gameId, int actorId) {
+        /* ── only the owner (== gameId) may start ─────────────── */
+        if (gameId != actorId)
+            throw new IllegalStateException("Only the owner can start the game.");
 
-        hashOps.put(gameKey, "status", "inProgress");
-        hashOps.put(gameKey, "playerTurn", getOwner(gameId));
-        hashOps.put(gameKey, "timer", "0");
-        hashOps.put(gameKey, "startTime", Instant.now().toString());
-        hashOps.put(gameKey, "maxTime", String.valueOf(MAX_TIME));
-        hashOps.put(gameKey, "maxMoney", String.valueOf(MAX_MONEY));
-        hashOps.put(gameKey, "winner", "null");
+        String key = GAME_PREFIX + gameId;
+        if (!redisTemplate.hasKey(key))
+            throw new IllegalStateException("Game not found");
+
+        hashOps.put(key, "status",       "inProgress");
+        hashOps.put(key, "playerTurn",   String.valueOf(gameId));
+        hashOps.put(key, "timer",        "0");
+        hashOps.put(key, "startTime",    Instant.now().toString());
+        hashOps.put(key, "maxTime",      String.valueOf(MAX_TIME));
+        hashOps.put(key, "maxMoney",     String.valueOf(MAX_MONEY));
+        hashOps.put(key, "winner",       "null");
     }
+
 
     /** Get Game */
     public Map<String, String> getGame(int gameId) {

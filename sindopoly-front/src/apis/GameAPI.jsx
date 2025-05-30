@@ -24,13 +24,17 @@ export const GameAPI = {
 
   // ✅ Start Game
   startGame: async (gameId) => {
-    const response = await fetch(`${API_BASE_URL}/api/game-state/start/${gameId}`, {
-      method: "POST",
-    });
+    const playerId = localStorage.getItem("player_id");
+    const res = await fetch(
+      `${API_BASE_URL}/api/game-state/${gameId}/start?playerId=${playerId}`,
+      { method: "POST" }
+    );
 
-    if (!response.ok) throw new Error("Failed to start game");
-    return await response.text();
+    if (!res.ok) throw new Error(await res.text() || "Failed to start");
+    return await res.json();          // → { status:"inProgress", gameId: 9 }
   },
+
+
 
   // ✅ Get Public Lobby Games
   getPublicLobbyGames: async () => {
