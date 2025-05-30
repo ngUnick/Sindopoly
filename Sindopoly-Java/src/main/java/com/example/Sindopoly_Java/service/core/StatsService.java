@@ -34,9 +34,22 @@ public class StatsService {
                 .orElseThrow(() -> new IllegalArgumentException("Player not found"));
 
         Stats stats = statsRepository.findByPlayer(player)
-                .orElseThrow(() -> new IllegalArgumentException("Stats not found for player"));
+                .orElseGet(() -> {               // if row is missing, fabricate zeros
+                Stats s = new Stats();
+                s.setPlayer(player);
+                return s;
+            });
 
-        return new PlayerStatsDto(stats);
+        double winRate = stats.getTotalGames() == 0
+                    ? 0.0
+                    : (double) stats.getTotalWins() / stats.getTotalGames();
+
+        return new PlayerStatsDto(
+                player.getName(),               // ✅ nickname present!
+                stats.getTotalWins(),
+                stats.getTotalGames(),
+                winRate
+        );
     }
 
     public List<LeaderboardEntryDto> getLeaderboard() {

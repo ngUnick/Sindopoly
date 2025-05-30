@@ -11,7 +11,7 @@ import {
 } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
-import { sanitizeText } from "../../utils/sanitizeText";
+import { sanitizeText } from "../../utils/sanitize";
 
 const antIcon = <LoadingOutlined style={{ fontSize: 24 }} spin />;
 
