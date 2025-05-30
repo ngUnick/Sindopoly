@@ -1,123 +1,135 @@
 # 🎓 Sindopoly – A Monopoly-inspired University-themed Online Game
 
-## Overview  
-**Sindopoly** is a digital board game inspired by **Monopoly**, themed around the **International Hellenic University (IHU)**. The game is built as a full-stack web application and combines classic Monopoly mechanics with a campus-like social environment.
+## Overview
+
+**Sindopoly** is a full-stack web re-imagining of **Monopoly** set on the
+campus of the *International Hellenic University (IHU)*.
+Play in real time with friends, trade university buildings, pay rent at the
+library kiosk, or end up in the administration building-jail.
 
 ---
 
-## 🧠 Objective  
-The goal is to simulate the Monopoly experience in a university setting while introducing multiplayer gameplay through modern web technologies. Players compete to accumulate money, acquire properties (university-themed), and strategically bankrupt opponents — all in real time.
+## 🧠 Objective
 
-* instantaneous state updates (WebSocket + Redis)  
-* strict adherence to core Monopoly mechanics (rent tiers, colour sets, utilities, trains, jail, cards)  
-* persistent player statistics in MariaDB  
-* clean, modular Spring-Boot backend for easy feature growth
+Simulate the classic board-game while adding:
+
+* 🔴 **Real-time state** (Redis + WebSocket/STOMP)
+* 🟠 Strict Monopoly rules (colour sets, utilities/train scaling, jail, cards)
+* 🟢 Persistent player & leaderboard stats in MariaDB
+* 🔵 A modular Spring-Boot 3 backend that is easy to extend
 
 ---
 
 ## ⚙️ Technology Stack
 
-| Layer        | Technologies                                      |
-|--------------|---------------------------------------------------|
-| Frontend     | React, Three.js, STOMP (WebSocket)                |
-| Backend      | Spring Boot 3, Spring Messaging (STOMP)           |
-| Realtime DB  | Redis (game + player state)                       |
-| SQL DB       | MariaDB 11 (players, squares, cards, stats)       |
+| Layer         | Technologies                                                              |
+| ------------- | ------------------------------------------------------------------------- |
+| Front-end     | React + Vite, Three.js (3-D board), TailwindCSS, Ant Design, SockJS/STOMP |
+| Back-end      | Spring Boot 3.2, Spring Web & Messaging, Lombok, MapStruct                |
+| Real-time DB  | Redis 7 (game state, timers, card decks, dice entropy)                    |
+| SQL DB        | MariaDB 11 (players, squares, cards, aggregated statistics)               |
+| Build / Other | Maven, Docker + docker-compose, OpenAPI-generated Postman collection      |
 
 ---
 
-## 💡 How the Game Works ( CURRENT )
+## 💡 Game Lifecycle (Current Implementation)
 
-### ✅ Game Lifecycle
-1. **Create** – owner (must exist in MariaDB & not be in another game) opens a public/private lobby (max 4 players).  
-2. **Join / Leave** –  
-   * public → open join while `status = lobby`  
-   * private → join with invite code  
-   * if owner leaves while in lobby → whole game auto-deletes  
-3. **Start** – owner begins; `status → inProgress`, timer & turn order start.  
-4. **Play** – each turn runs through the **player-move flow** (dice → move → square action → rent / card / tax → bankruptcy check → rotate turn).  
-5. **AFK Skip** – scheduler skips a player who is idle > 60 s (`afk=true`) and rotates the turn.  
-6. **End** – automatic when **(a)** timer ≥ 1200 s, **(b)** only one active player, or **(c)** a player reaches 5000 € cash.  
-7. **Winner** – total wealth = cash + property values; top wealth is stored as `winner`.  
-8. **Stats Persist** – for every player: wins / losses / money / time saved into MariaDB `Stats`.
+| Phase          | Details                                                                                                                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Create**     | `POST /api/game-state/create` – owner ID + visibility → lobby *(auto-creates Redis keys & invite code if **private**).*                                                                          |
+| **Join/Leave** | *Public:* `POST /api/game-state/add/{gameId}/{playerId}`   •   *Private:* `POST /api/game-state/join-with-invite?inviteCode=…&playerId=…`  <br> Owner leaving during **lobby** deletes the game. |
+| **Start**      | Only owner: `POST /api/game-state/{gameId}/start?playerId={ownerId}` → `status=inProgress`, turn = owner, timers zeroed.                                                                         |
+| **Play**       | React calls `POST /api/turn/{gameId}/{playerId}`  ➜ backend rolls dice, resolves square, returns **TurnResponse** *(dice, mandatory, optional)*.                                                 |
+| **AFK Skip**   | `GameLoopScheduler` increments `turnAge` every 2 s; at ≥ 60 s marks player `afk=true` and rotates turn.                                                                                          |
+| **End**        | Game ends automatically when <br>① 1200 s total <br>② only 1 active player <br>③ a player reaches €5 000.                                                                                        |
+| **Scoring**    | Winner = highest **cash + property value**; stats row in MariaDB is updated (`wins / losses / money / time`).                                                                                    |
 
-### 🏠 Rent & Property Logic
-| Square type         | Rent rule                                                                       |
-|---------------------|---------------------------------------------------------------------------------|
-| **Colour property** | Base rent, **×2** if owner holds full colour set                                |
-| **Train**           | 25 / 50 / 100 / 200 € depending on 1-4 trains owned                             |
-| **Utility**         | 4× last dice roll, or **10×** if owner holds both utilities                     |
+---
+
+### 🏠 Rent & Property Rules
+
+| Square type     | Rent computation                                       |
+| --------------- | ------------------------------------------------------ |
+| Colour property | base × 2 if owner controls the full colour set         |
+| Train           | 25 / 50 / 100 / 200 € depending on 1-4 trains owned    |
+| Utility         | 4 × latest dice roll – or 10 × if both utilities owned |
 
 ### 🎴 Card Deck
-* Stored in MariaDB (`Card` table) – two kinds: `money` (± €) & `transport` (teleport to square **n**).  
-* Each game gets a **shuffled deck** (`game:{id}:deck`) on first draw.  
-* Transport cards trigger an immediate follow-up square action.
 
-### 🔄 Turn Timer Safety  
-* Redis fields `turnAge` & `turnTimeout`; scheduler adds +10 s each tick.  
-* If `turnAge ≥ 60` → player marked `afk=true`, skipped, next player starts with `turnAge=0`.
-
-### 📡 Real-Time Push  
-* Spring WebSocket endpoint **`/ws`** (SockJS fallback).  
-* Server broadcasts every `TurnResponse` to **`/topic/game/{gameId}`**; the React client updates instantly.
+* Two kinds: **money** (± €) & **transport** (teleport) – rows in `card` table.
+* Each game receives a *shuffled* deck in `game:{id}:deck` on first draw.
 
 ---
 
-## 📦 Redis Schema
+## 📦 Redis Key-Schema (runtime)
 
-| Key                               | Type | Notes                                                   |
-|-----------------------------------|------|---------------------------------------------------------|
-| `game:{id}`                       | Hash | status, visibility, timer, playerTurn, winner, turnAge… |
-| `game:{id}:players`               | Set  | IDs of active players                                   |
-| `player:{id}`                     | Hash | money, position, properties[], jail flags, bankrupt…    |
-| `square:{id}`                     | Hash | transient owner field                                   |
-| `game:{id}:deck`                  | List | shuffled card IDs                                       |
-
----
-
-## 🧪 API Preview (Current)
-
-| Method | Endpoint                                         | Purpose                                            |
-|--------|--------------------------------------------------|----------------------------------------------------|
-| POST   | `/api/game-state/create`                         | Create lobby                                       |
-| POST   | `/api/game-state/{gameId}/start`                 | Start game                                         |
-| POST   | `/api/game-state/{gameId}/add-player`            | Join public lobby                                  |
-| POST   | `/api/game-state/join-with-invite`               | Join private lobby                                 |
-| POST   | `/api/game-state/{gameId}/remove-player`         | Leave game / kick player                           |
-| GET    | `/api/game-state/{gameId}`                       | Full game hash                                     |
-| GET    | `/api/game-state/{gameId}/players`               | Player IDs set                                     |
-| POST   | `/api/turn/{gameId}/{playerId}`                  | **Play a turn** (roll, move, actions)              |
-| DELETE | `/api/game-state/{gameId}`                       | Delete game (owner only)                           |
-| WS     | `/topic/game/{gameId}`                           | Real-time `TurnResponse` events (STOMP subscribe)  |
+| Key                 | Type  | Description                                            |
+| ------------------- | ----- | ------------------------------------------------------ |
+| `game:{id}`         | Hash  | status, visibility, playerTurn, winner, timers, etc.   |
+| `game:{id}:players` | Set   | active player IDs                                      |
+| `player:{id}`       | Hash  | money, position, jail flags, bankrupt, properties list |
+| `game:{id}:deck`    | List  | shuffled card IDs                                      |
+| `dice:entropy`      | List  | pre-fetched random.org dice values (refilled 30 s job) |
+| `stats:leaderboard` | Z-SET | *(materialised leaderboard – recreated if missing)*    |
 
 ---
 
-## 🛢️ MariaDB Entities
+## 🧪 REST & WS API Snapshot
 
-* **Player** – fixed roster (name, created_at)  
-* **Square** – board definition (type, price, rent)  
-* **Card** – event cards (title, description, type, amount)  
-* **Stats** – aggregated per-player stats (wins, losses, money, play time)
+| Method            | Endpoint & Query                                             | Purpose / Notes                                 |
+| ----------------- | ------------------------------------------------------------ | ----------------------------------------------- |
+| **Players**       |                                                              |                                                 |
+| `POST`            | `/api/player-state/create` *(body:{nickname})*               | Create player → returns ID                      |
+| `GET`             | `/api/player-state/{playerId}`                               | Current money/position/properties               |
+| **Games / Lobby** |                                                              |                                                 |
+| `POST`            | `/api/game-state/create`                                     | New lobby (body: `{ownerId, visibility}`)       |
+| `GET`             | `/api/game-state/public-lobby`                               | List open public lobbies                        |
+| `POST`            | `/api/game-state/add/{gameId}/{playerId}`                    | Join public                                     |
+| `POST`            | `/api/game-state/join-with-invite?inviteCode=ABC&playerId=7` | Join private                                    |
+| `GET`             | `/api/game-state/players-detailed/{gameId}`                  | IDs + nicknames                                 |
+| `POST`            | `/api/game-state/{gameId}/start?playerId=OWNER`              | Owner starts game                               |
+| `POST`            | `/api/game-state/{gameId}/remove-player?playerId=X`          | Leave / kick                                    |
+| **Turn / Play**   |                                                              |                                                 |
+| `POST`            | `/api/turn/{gameId}/{playerId}`                              | Roll dice, move, returns **TurnResponse** JSON  |
+| `POST`            | `/api/player-state/{gameId}/{playerId}/buy?propertyId=N`     | Forced buy (optional turn action)               |
+| **Statistics**    |                                                              |                                                 |
+| `GET`             | `/api/statistics/leaderboard`                                | Top players (wins & win-rate)                   |
+| `GET`             | `/api/statistics/user/{playerId}`                            | Personal aggregated stats                       |
+| **WebSocket**     |                                                              |                                                 |
+| `STOMP SUB`       | `/topic/game/{gameId}`                                       | Broadcast of every TurnResponse (instant board) |
+
+---
+
+## 🛢️ MariaDB Schema Highlights
+
+```text
+player(id, name, created_at)
+square(id, type, colour, price, rent_base, rent_set, rent_train_index, ...)
+card(id, title, description, card_type, amount, target_square)
+stats(id, player (FK->player.id), total_wins, total_losses, total_games,
+      total_money, total_time_played)
+```
+
+A trigger ensures a zero-filled **stats** row is created whenever a new player
+row is inserted.
 
 ---
 
-## 🔐 Validation & Error Handling (Highlights)
+## 🔐 Validation & Error Handling
 
-* Cannot create / join if player already in another game.  
-* Join only when `status=lobby` and game not full (4).  
-* Turn endpoint denied unless it’s **exactly** that player’s turn.  
-* `writeMoney` guard: money can’t go negative except inside bankruptcy flow.  
-* All rule violations throw `IllegalStateException` → `HTTP 400` with JSON `{"error": "..."}` via global `@ControllerAdvice`.
-
----
-
-## 🚧 Work in Progress
-
-- 🖥️ Front-end WebSocket integration & board rendering  
-- 💬 In-game chat (share `/topic/game/{id}/chat`)  
-- 🪙 Mortgage / property sell before bankruptcy  
-- 🛑 Full dice-double rules & three-doubles-to-jail  
-- 🧪 Unit + Testcontainers integration-tests suite  
-- 📈 Admin dashboard for live games / stats  
+* **One-game-at-a-time** check before join/create.
+* **Owner-only** guards (`start`, `kick`, `delete`) – 403 on violation.
+* Turn endpoint validates *it is exactly the caller’s turn*.
+* All rule breaches throw `IllegalStateException` → JSON
+  `{ "error": "reason" }` with correct HTTP status by `@ControllerAdvice`.
 
 ---
+
+## 🚧 Planned / Work-In-Progress
+
+* 🎲 Dice-double logic & three-doubles-to-jail
+* 🖼️ WebSocket-powered 3-D board updates (eliminate poll)
+* 💬 In-game chat on `/topic/game/{id}/chat`
+* 🪙 Mortgage & auction flow
+* 🧪 Testcontainers integration-tests
+
