@@ -89,10 +89,18 @@ public class GameStateController {
      * POST /api/game-state/{gameId}/start
      */
     @PostMapping("/{gameId}/start")
-    public String startGame(@PathVariable int gameId) {
-        gameStateService.startGame(gameId);
-        return "Game started.";
+    public ResponseEntity<?> startGame(@PathVariable int gameId,
+                                    @RequestParam int playerId) {
+        try {
+            gameStateService.startGame(gameId, playerId);
+            return ResponseEntity.ok(Map.of("status", "inProgress", "gameId", gameId));
+        } catch (IllegalStateException ex) {        // not owner / wrong state …
+            return ResponseEntity.status(403).body(Map.of("error", ex.getMessage()));
+        }
     }
+
+
+
 
     /**
      * Get all public games in lobby state
