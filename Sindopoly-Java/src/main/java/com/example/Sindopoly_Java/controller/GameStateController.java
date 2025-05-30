@@ -86,7 +86,7 @@ public class GameStateController {
 
     /**
      * Start a game
-     * POST /api/game-state/{gameId}/start
+     * POST /api/game-state/${gameId}/start?playerId=${playerId}
      */
     @PostMapping("/{gameId}/start")
     public ResponseEntity<?> startGame(@PathVariable int gameId,
