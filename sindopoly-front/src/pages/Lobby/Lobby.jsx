@@ -19,7 +19,7 @@ const Lobby = () => {
 
   const handleStartGame = async () => {
     try {
-      await GameAPI.startGame(gameId);
+      await GameAPI.startGame(gameId, playerId);
       navigate(`/Game?player=${playerId}`);
     } catch (err) {
       console.error(err);

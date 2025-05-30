@@ -1,72 +1,80 @@
 import API_BASE_URL from "./apiConfig";
+import { TurnAPI }   from "./TurnAPI";
+
+/* helper: collect game + every player’s state in one shot */
+const assembleBoard = async (gameId) => {
+  /* 1️⃣ core game hash --------------------------------------------- */
+  const gameRes = await fetch(`${API_BASE_URL}/api/game-state/${gameId}`);
+  if (!gameRes.ok) throw new Error("Game state fetch failed");
+  const gameHash = await gameRes.json();           // status, playerTurn …
+
+  /* 2️⃣ player id list --------------------------------------------- */
+  const listRes = await fetch(`${API_BASE_URL}/api/game-state/players/${gameId}`);
+  if (!listRes.ok) throw new Error("Player list fetch failed");
+  const ids = await listRes.json();                // Set<String>
+
+  /* 3️⃣ fetch state of every player in parallel -------------------- */
+  const states = await Promise.all(
+    [...ids].map(async id => {
+      const detailRes = await fetch(`${API_BASE_URL}/api/player-state/${id}`);
+      if (!detailRes.ok) throw new Error("Player state fetch failed");
+      const s = await detailRes.json();
+      return { player_id : id, ...s };             // position, money, properties …
+    })
+  );
+
+  /* 👇 Board.jsx expects an *array* that also carries some
+   *    top-level fields on element [0].                           */
+  if (states.length === 0) return [];
+  return [
+    { gameStatus : gameHash.status,
+      playerTurn : gameHash.playerTurn,
+      winner     : gameHash.winner,
+      ...states[0] },                             // merge first element
+    ...states.slice(1),
+  ];
+};
 
 export const GamePlayAPI = {
+  /* ──────────────────────────────────────────────────────────────── */
+  /*   simple helpers that already existed                          */
+  /* ──────────────────────────────────────────────────────────────── */
 
-    // ✅ Check if Player is In-Game
-    getInGameStatus: async (playerId) => {
-        const response = await fetch(`${API_BASE_URL}/api/game-state/in-game/${playerId}`);
-        if (!response.ok) throw new Error("Failed to check game state");
-        return await response.json();
-    },
+  getInGameStatus: async (playerId) => {
+    const r = await fetch(`${API_BASE_URL}/api/game-state/in-game/${playerId}`);
+    if (!r.ok) throw new Error("Failed to check game state");
+    return r.json();
+  },
 
-    // ✅ Play Turn (Roll Dice + Move + Handle Tile)
-    playTurn: async (gameId, playerId) => {
-    const response = await fetch(`${API_BASE_URL}/api/turn/play`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gameId, playerId }),
-    });
+  /* 🆕 single call used in Board.jsx – no dedicated /board route
+   *    required, we build it here                                   */
+  getBoard: assembleBoard,
 
-    if (!response.ok) throw new Error("Failed to play turn");
-    return await response.json(); // returns TurnService.TurnResponse
-    },
+  /* 🎲 full turn (dice → actions → pass) – the shape Board.jsx
+   *    already expects (dice + actions)                             */
+  playTurn: async (gameId, playerId) => {
+    const dice    = await TurnAPI.rollDice (gameId, playerId);
+    const actions = await TurnAPI.actions  (gameId, playerId);
+    await TurnAPI.passTurn(gameId, playerId);
+    return { ...dice, actions };
+  },
 
-    // ✅ Get Player State from Redis
-    getPlayerState: async (playerId) => {
-    const response = await fetch(`${API_BASE_URL}/api/player-state/${playerId}`);
-    if (!response.ok) throw new Error("Failed to get player state");
-    return await response.json(); // position, money, etc.
-    },
+  /* forced buy – endpoint already present in PlayerStateController  */
+  buyProperty: async (gameId, playerId, squareId) => {
+    const r = await fetch(
+      `${API_BASE_URL}/api/player-state/${gameId}/${playerId}/buy?propertyId=${squareId}`,
+      { method: "POST" }
+    );
+    if (!r.ok) throw new Error("Failed to buy");
+    return r.json();
+  },
 
-    // ✅ Update Player State (optional)
-    updatePlayerState: async (playerId, data) => {
-    const response = await fetch(`${API_BASE_URL}/api/player-state/${playerId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-    });
-
-    if (!response.ok) throw new Error("Failed to update player state");
-    return await response.text();
-    },
-
-    // ✅ Buy Property (forced buy)
-    buyProperty: async (gameId, playerId, propertyId) => {
-    const response = await fetch(`${API_BASE_URL}/api/player-state/${gameId}/${playerId}/buy?propertyId=${propertyId}`, {
-        method: "POST",
-    });
-
-    if (!response.ok) throw new Error("Failed to buy property");
-    return await response.json();
-    },
-
-    // ✅ Pay Jail Fine (50 by default)
-    payJailFine: async (gameId, playerId) => {
-    const response = await fetch(`${API_BASE_URL}/api/player-state/${gameId}/${playerId}/pay-jail`, {
-        method: "POST",
-    });
-
-    if (!response.ok) throw new Error("Failed to pay jail fine");
-    return await response.json(); // { status: "freed", paid: 50 }
-    },
-
-    // ✅ End Game / Remove Player (if you want this manually exposed)
-    deletePlayerState: async (playerId) => {
-    const response = await fetch(`${API_BASE_URL}/api/player-state/${playerId}`, {
-        method: "DELETE",
-    });
-
-    if (!response.ok) throw new Error("Failed to delete player state");
-    return await response.text();
-    }
+  payJailFine: async (gameId, playerId) => {
+    const r = await fetch(
+      `${API_BASE_URL}/api/player-state/${gameId}/${playerId}/pay-jail`,
+      { method: "POST" }
+    );
+    if (!r.ok) throw new Error("Jail payment failed");
+    return r.json();
+  },
 };

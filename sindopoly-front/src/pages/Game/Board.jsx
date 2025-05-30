@@ -2,17 +2,22 @@ import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { GamePlayAPI } from "../../apis/GamePlayAPI";
-import { useSearchParams } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faHouseUser } from "@fortawesome/free-solid-svg-icons";
-import { faDice } from "@fortawesome/free-solid-svg-icons";
-import { faVolumeHigh } from "@fortawesome/free-solid-svg-icons";
-import { faVolumeXmark } from "@fortawesome/free-solid-svg-icons";
-import { useNavigate } from "react-router-dom";
+import {
+  faHouseUser,
+  faDice,
+  faVolumeHigh,
+  faVolumeXmark,
+} from "@fortawesome/free-solid-svg-icons";
+import { GamePlayAPI }   from "../../apis/GamePlayAPI";
+import { useSearchParams, useNavigate } from "react-router-dom";
+
 
 const Board = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const gameId   = searchParams.get("game_id");           // ← passed by Lobby
+  const playerId = localStorage.getItem("player_id");
 
   // Declarations and Initializations ---------------------------------------------------------------------------------------------
   const canvasRef = useRef(null);
@@ -695,81 +700,64 @@ const Board = () => {
     };
 
 
-    setInterval(async () => {
-        // console.log('hellooo');
-        const player_id = searchParams.get('player');
-        const playersPosition = await GamePlayAPI.getBoard(player_id);
-        setPlayersAmount(playersPosition.length);
-        updateProperties(playersPosition);
-        const gameStatus = playersPosition[0]["gameStatus"];
+    const fetchBoard = async () => {
+    /* a) who’s in the game & whose turn is it? */
+    const [pRes, gRes] = await Promise.all([
+      fetch(`${API_BASE_URL}/api/game-state/players-detailed/${gameId}`),
+      fetch(`${API_BASE_URL}/api/game-state/${gameId}`)
+    ]);
+    if (!pRes.ok || !gRes.ok) return;
 
-        if(gameStatus == "completed")
-        {
-          const winner_id = playersPosition[0]["winner"];
-          let winner_name = "no_winner_just_for_debug";
-          for (let index = 0; index < playersPosition.length; index++) {
-            const element = playersPosition[index]["player_id"];
-            if(element == winner_id)
-              winner_name = playersPosition[index]["name"];
-          }
-          navigate(`/endgame?winner=${winner_name}`);
-        }
+    const roster = await pRes.json();   // [{id,nickname}, … ]
+    const game   = await gRes.json();   // {status, playerTurn, winner …}
 
-        const currentTurn = playersPosition[0]["playerTurn"];
-        // console.log('currentTurn',currentTurn);
-        // console.log('player_id',player_id);
-        if(currentTurn == player_id)
-        {
-          setIsMyTurn(true);
-          enableDice();
-        }
-        else
-        {
-          setIsMyTurn(false);
-          disableDice();
-        }
-          HideUnnecessaryPlayers(playersPosition.length);
+    /* b) each player’s state (position / money) */
+    const enriched = await Promise.all(
+      roster.map(async p => {
+        const sRes = await fetch(`${API_BASE_URL}/api/player-state/${p.id}`);
+        const s    = sRes.ok ? await sRes.json() : {};
+        return {
+          player_id : p.id,
+          name      : p.nickname,
+          position  : s.position ?? 0,
+          money     : s.money    ?? 0
+        };
+      })
+    );
 
-        for (let index = 0; index < playersPosition.length; index++) {
-          if(index == 0)
-            {
-              findSteps(cubeRef.current,playersPosition[index]["position"]);
-              setPlayer1Info({money : playersPosition[index]["money"]});
-              if(playersPosition[index]["player_id"] == player_id)
-              {
-                setSira(index);
-              }
-            }
-          else if(index == 1)
-            {
-              findSteps(sphereRef.current,playersPosition[index]["position"]);
-              setPlayer2Info({money : playersPosition[index]["money"]});
-              if(playersPosition[index]["player_id"] == player_id)
-              {
-                setSira(index);
-              }
-            }
-          else if(index == 2)
-            {
-              findSteps(torusRef.current,playersPosition[index]["position"]);
-              setPlayer3Info({money : playersPosition[index]["money"]});
-              if(playersPosition[index]["player_id"] == player_id)
-              {
-                setSira(index);
-              }
-            }
-          else if(index == 3)
-            {
-              findSteps(coneRef.current,playersPosition[index]["position"]);
-              setPlayer4Info({money : playersPosition[index]["money"]});
-              if(playersPosition[index]["player_id"] == player_id)
-              {
-                setSira(index);
-              }
-            }
-        }
-      // console.log(playersPosition);
-    }, 1000);
+    return { board: enriched, game };
+  };
+
+  const interval = setInterval(async () => {
+    const data = await fetchBoard();
+    if (!data) return;
+
+    const { board, game } = data;
+
+    /* --- UI wiring kept from your old code --- */
+    setPlayersAmount(board.length);
+    updateProperties(board);
+    setIsMyTurn(String(game.playerTurn) === String(playerId));
+    (game.playerTurn === playerId ? enableDice() : disableDice());
+
+    /* winner / completed check */
+    if (game.status === "completed") {
+      const winnerObj = board.find(b => b.player_id == game.winner);
+      navigate(`/endgame?winner=${winnerObj?.name ?? "Unknown"}`);
+    }
+
+    /* money & pawn positions -------------- */
+    board.forEach((p,i) => {
+      if      (i===0){ findSteps(cubeRef.current  , p.position); setPlayer1Info({money:p.money}); }
+      else if (i===1){ findSteps(sphereRef.current, p.position); setPlayer2Info({money:p.money}); }
+      else if (i===2){ findSteps(torusRef.current , p.position); setPlayer3Info({money:p.money}); }
+      else if (i===3){ findSteps(coneRef.current  , p.position); setPlayer4Info({money:p.money}); }
+      if (p.player_id == playerId) setSira(i);
+    });
+  }, 1000);
+
+  return () => clearInterval(interval);
+
 
     return () => {
       // Clean up or dispose Three.js elements (if needed)
@@ -804,100 +792,44 @@ const Board = () => {
   });
 
   const throwDiceAction = async () => {
-    if(isMyTurn)
-    {
-      const player_id = searchParams.get("player");
-      const dices = await GamePlayAPI.rollDice(player_id);
-      setDice1(dices["dice1"]);
-      setDice2(dices["dice2"]);
-      randomDiceThrow(dice1, dices["dice1"]);
-      setTimeout(async () => {
-        randomDiceThrow(dice2, dices["dice2"]);
-        const actions = await GamePlayAPI.getActions(player_id);
-        console.log("celanideee", actions);
-  
-        if(actions["mandatory"].length > 0)
-        {
-          const mandatory_action = actions["mandatory"][0][0];
-          if(mandatory_action["actionName"] == "drawCard")
-          {
-            updateCard(
-              mandatory_action["title"],
-              mandatory_action["description"],
-              null,
-              null
-            );
-          }
-          else if(mandatory_action["actionName"] == "rent")
-          {
-            updateCard(
-              "Prostimo",
-              `Pay ${mandatory_action["amount"]}`,
-              null,
-              null
-            );
-          }
-          else if(mandatory_action["actionName"] == "jail")
-          {
-            updateCard(
-              "Go to jail",
-              `Police troubles`,
-              null,
-              null
-            );
-          }
-        }
-        if(actions["optional"].length > 0)
-        {
-          const optional_action = actions["optional"][0]["actionName"];
-          if(optional_action == "BuyProperty")
-          {
-            updateCard(
-              "Buy property",
-              `Do you want to buy this property that costs ${actions["optional"][0]["price"]}?`,
-              {
-                "text" : "Buy property",
-                "function" : async () => {
-                  await GamePlayAPI.buyProperty(player_id);
-                  closeCard();
-                  updateCard(
-                    "Success",
-                    "The property now is yours!! WOWOWOWOWOWOWO",
-                    null,
-                    null
-                  );
-                }
-              },
-              null
-            );
-          }
-        }
-        await GamePlayAPI.passTurn(player_id);
+    if (!isMyTurn) return;
+    try {
+      const turn = await GamePlayAPI.playTurn(gameId, playerId);
+      /** turn = {
+       *    dice1, dice2,
+       *    mandatory: [ {actionName,…}, … ],
+       *    optional : [ {actionName, price, propertyId}, … ]
+       * }  ⬅ adjust if your TurnResponse differs */
+      setDice1(turn.dice1); setDice2(turn.dice2);
+      randomDiceThrow(dice1, turn.dice1);
+      setTimeout(()=>randomDiceThrow(dice2, turn.dice2), 300);
 
-        if(searchParams.get('bot') == 'true')
-        {
-          // alert("bot");
-          await GamePlayAPI.rollDice(5);
-          const actions = await GamePlayAPI.getActions(player_id);
-          if(actions["optional"].length > 0)
-          {
-            try {
-              const optional_action = actions["optional"][0]["actionName"];
-              if(optional_action == "BuyProperty")
-              {
-                await GamePlayAPI.buyProperty(5);
-              }
-            } catch (error) {
-              console.error('bot doesnt buy property')
-            }
-            
-          }
-          await GamePlayAPI.passTurn(5);
-        }
-      }, 1000);
+      /* ─ mandatory actions (rent / jail / card) */
+      const m = turn.mandatory?.[0];
+      if (m) {
+        if (m.actionName === "drawCard") updateCard(m.title, m.description, null, null);
+        if (m.actionName === "rent")     updateCard("Rent",`Pay ${m.amount}`,null,null);
+        if (m.actionName === "jail")     updateCard("Go to jail","Police troubles",null,null);
+      }
+
+      /* ─ optional buy */
+      const o = turn.optional?.[0];
+      if (o?.actionName === "BuyProperty") {
+        updateCard(
+          "Buy property",
+          `Do you want to buy this property for ${o.price}?`,
+          { text:"Buy", function: async () => {
+              await GamePlayAPI.buyProperty(gameId, playerId, o.propertyId);
+              closeCard(); updateCard("Purchased!","",null,null);
+          }},
+          null
+        );
+      }
+    } catch {
+      console.error("Failed turn");
     }
+  };
 
-  }
 
   // UI Elements ----------------------------------------------------------------------------------------------------
   return (
