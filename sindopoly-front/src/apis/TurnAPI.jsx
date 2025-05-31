@@ -1,32 +1,23 @@
 import API_BASE_URL from "./apiConfig";
 
 /* ------------------------------------------------------------------
- *  Every per-turn call that already exists in Spring
- *  (your TurnController has them, even if the code wasn’t pasted).
+ *  Minimal wrapper around every /api/turn/* endpoint that exists
  * -----------------------------------------------------------------*/
 export const TurnAPI = {
-  /* 🎲 roll the dice */
-  rollDice: (gameId, playerId) =>
-    fetch(`${API_BASE_URL}/api/turn/${gameId}/${playerId}/dice`, {
+  /* 🎲 perform the entire turn (dice → move → optionalAction|rotate) */
+  playTurn: (gameId, playerId) =>
+    fetch(`${API_BASE_URL}/api/turn/${gameId}/${playerId}`, {
       method: "POST",
-    }).then(r => {
-      if (!r.ok) throw new Error("Dice roll failed");
-      return r.json();                       // { dice1 , dice2 }
+    }).then((r) => {
+      if (!r.ok) throw new Error("Turn execution failed");
+      return r.json();                       // <- TurnResponse JSON
     }),
 
-  /* 📋 list mandatory / optional actions */
-  actions: (gameId, playerId) =>
-    fetch(`${API_BASE_URL}/api/turn/${gameId}/${playerId}/actions`)
-      .then(r => {
-        if (!r.ok) throw new Error("Failed to fetch actions");
-        return r.json();                     // { mandatory:[…], optional:[…] }
-      }),
-
-  /* ✅ pass turn */
+  /* ✅ skip / pass when the player declines an optional action */
   passTurn: (gameId, playerId) =>
     fetch(`${API_BASE_URL}/api/turn/${gameId}/${playerId}/pass`, {
       method: "POST",
-    }).then(r => {
+    }).then((r) => {
       if (!r.ok) throw new Error("Pass-turn failed");
     }),
 };

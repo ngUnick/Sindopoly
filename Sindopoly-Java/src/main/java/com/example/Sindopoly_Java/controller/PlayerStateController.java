@@ -2,8 +2,10 @@ package com.example.Sindopoly_Java.controller;
 
 import com.example.Sindopoly_Java.model.Player;
 import com.example.Sindopoly_Java.repository.PlayerRepository; // Add this import
+import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.PlayerStateService;
 import com.example.Sindopoly_Java.service.core.SquareActionService;
+import com.example.Sindopoly_Java.service.orchestrator.TurnService;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
 
 import lombok.val;
@@ -19,17 +21,25 @@ import java.util.Map;
 public class PlayerStateController {
 
     private final PlayerStateService playerStateService;
-    private final SquareActionService squareActionService;
-    private final PlayerRepository playerRepository; // Add this field
-    @Autowired
-    private ValidationUtils validationUtils;
+    private final SquareActionService squareActionSvc;
+    private final PlayerRepository playerRepository;
+    private final GameStateService gameStateSvc;
+    private final TurnService turnSvc;
+    private final ValidationUtils validationUtils;
 
+    @Autowired
     public PlayerStateController(PlayerStateService playerStateService,
-                                 SquareActionService squareActionService,
-                                 PlayerRepository playerRepository) { // Add PlayerRepository to constructor
+                                 SquareActionService squareActionSvc,
+                                 PlayerRepository playerRepository,
+                                 GameStateService gameStateSvc,
+                                 TurnService turnSvc,
+                                 ValidationUtils v) {
         this.playerStateService = playerStateService;
-        this.squareActionService = squareActionService;
-        this.playerRepository = playerRepository; // Assign it
+        this.squareActionSvc= squareActionSvc;
+        this.playerRepository     = playerRepository;
+        this.gameStateSvc   = gameStateSvc;
+        this.turnSvc        = turnSvc;
+        this.validationUtils= v;
     }
 
     /**
@@ -85,26 +95,43 @@ public class PlayerStateController {
         return "Player state deleted successfully.";
     }
 
-     /** 
-      * Pay to get out of jail
-      * POST /api/player-state/{gameId}/{playerId}/pay-jail   (body empty)
-      */
+    /** POST /api/player-state/{gameId}/{playerId}/pay-jail  */
     @PostMapping("/{gameId}/{playerId}/pay-jail")
     public ResponseEntity<?> payJail(@PathVariable int gameId,
-                                     @PathVariable int playerId){
+                                     @PathVariable int playerId) {
+
+        /* 1️⃣ validate optionalAction = jailPay and belongs to player */
+        gameStateSvc.assertOptionalAction(gameId, playerId, "payJail");
+
+        /* 2️⃣ perform business logic */
         playerStateService.payToExitJail(playerId, 50);
-        return ResponseEntity.ok(Map.of("status","freed","paid",50));
+
+        /* 3️⃣ clear + finish turn */
+        gameStateSvc.clearOptionalAction(gameId);
+        turnSvc.finishTurn(gameId);
+
+        return ResponseEntity.ok(Map.of("status", "freed", "paid", 50));
     }
 
-    /**
-     * Buy a property 
-     * POST /api/player-state/{gameId}/{playerId}/buy?propertyId=12
-     * */
+    /** POST /api/player-state/{gameId}/{playerId}/buy?propertyId=12 */
     @PostMapping("/{gameId}/{playerId}/buy")
     public ResponseEntity<?> buyProperty(@PathVariable int gameId,
                                          @PathVariable int playerId,
-                                         @RequestParam int propertyId){
-        squareActionService.forceBuyProperty(gameId, playerId, propertyId);
-        return ResponseEntity.ok(Map.of("status","bought","property",propertyId));
+                                         @RequestParam int propertyId) {
+
+        /* 1️⃣ validate optionalAction = buyOffer and matches */
+        gameStateSvc.assertOptionalAction(gameId, playerId, "buyOffer", propertyId);
+
+        /* 2️⃣ complete purchase */
+        squareActionSvc.completeOptionalBuy(gameId, playerId, propertyId);
+
+        /* 3️⃣ clear + finish turn  */
+        gameStateSvc.clearOptionalAction(gameId);
+        turnSvc.finishTurn(gameId);
+
+        return ResponseEntity.ok(Map.of("status", "bought", "property", propertyId));
     }
+
+    /* --------------------------------------------------------------------- */
+    /* createPlayer, savePlayer, getPlayer, deletePlayer     – unchanged     */
 }

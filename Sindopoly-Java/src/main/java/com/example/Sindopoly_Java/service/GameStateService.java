@@ -61,6 +61,18 @@ public class GameStateService {
         this.playerRepo = playerRepo;
     }
 
+    /* =============================================================== */
+    /* DTO kept in Redis as JSON – used by SquareActionService,        */
+    /* TurnService and the controllers to verify/complete decisions.   */
+    /* =============================================================== */
+    private static record OptionalAction(
+            String  type,        // "buyOffer", "payJail", … (add more later)
+            int     playerId,    // who must answer
+            Integer squareId,    // property offered (nullable)
+            Integer price,       // price of property (nullable)
+            Integer fee          // jail fee etc.        (nullable)
+    ) {}
+
 
 
     /** Create Game */
@@ -547,4 +559,70 @@ public class GameStateService {
     }
     
     
+    /* ──────────────────────────────────────────────────────────── */
+    /* Optional-action helpers – buy / pay-jail “pause” mechanism   */
+    /* ──────────────────────────────────────────────────────────── */
+
+    private static final String OPT_KEY = "optionalAction";   // field in game hash
+    private record Opt(int playerId, String type, String arg) {}
+
+    public void setOptionalAction(int gameId, int playerId,
+                                String type, String arg) {
+
+        String payload = playerId + ":" + type + ":" + arg;   // simple CSV
+        hashOps.put(gameKey(gameId), OPT_KEY, payload);
+    }
+
+    public void clearOptionalAction(int gameId) {
+        hashOps.delete(gameKey(gameId), OPT_KEY);
+    }
+
+    /** Generic check – only verifies that an optionalAction exists and
+     *  that it belongs to <code>playerId</code>.  No type / square match. */
+    public void assertOptionalAction(int gameId, int playerId) {
+
+        String json = hashOps.get("game:" + gameId, "optionalAction");
+        if (json == null)
+            throw new IllegalStateException("No pending optional action.");
+
+        try {
+            OptionalAction dto =
+                new ObjectMapper().readValue(json, OptionalAction.class);
+
+            if (dto.playerId() != playerId)
+                throw new IllegalStateException("Action belongs to another player");
+        } catch (Exception e) {
+            throw new IllegalStateException("Corrupted optionalAction JSON", e);
+        }
+    }
+
+    /** verify that an optional action exists and matches what the caller tries */
+    public void assertOptionalAction(int gameId, int playerId,
+                                    String expectedType) {
+
+        assertOptionalAction(gameId, playerId, expectedType, null);
+    }
+
+    public void assertOptionalAction(int gameId, int playerId,
+                                    String expectedType, Integer expectedArg) {
+
+        String raw = hashOps.get(gameKey(gameId), OPT_KEY);
+        if (raw == null)
+            throw new IllegalStateException("No optional action pending");
+
+        String[] parts = raw.split(":");
+        Opt opt = new Opt(Integer.parseInt(parts[0]), parts[1],
+                        parts.length > 2 ? parts[2] : "");
+
+        if (opt.playerId != playerId)
+            throw new IllegalStateException("Not your pending action");
+        if (!opt.type.equals(expectedType))
+            throw new IllegalStateException("Wrong action type");
+        if (expectedArg != null && !opt.arg.equals(String.valueOf(expectedArg)))
+            throw new IllegalStateException("Argument mismatch");
+    }
+
+    /* helper */
+    private String gameKey(int id) { return "game:" + id; }
+
 }

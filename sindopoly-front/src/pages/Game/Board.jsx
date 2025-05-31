@@ -9,8 +9,8 @@ import {
   faVolumeHigh,
   faVolumeXmark,
 } from "@fortawesome/free-solid-svg-icons";
-import { GamePlayAPI }   from "../../apis/GamePlayAPI";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import API_BASE_URL      from "../../apis/apiConfig";
 
 
 const Board = () => {
@@ -41,8 +41,7 @@ const Board = () => {
   const [player3Info, setPlayer3Info] = useState({ money: '-' });
   const [player4Info, setPlayer4Info] = useState({ money: '-' });
 
-  const [dice_var1, setDice1] = useState(0);
-  const [dice_var2, setDice2] = useState(0);
+  const [diceTotal , setDice ] = useState(0);
 
 
   const [my_sira, setSira] = useState(1);
@@ -800,9 +799,8 @@ const Board = () => {
        *    mandatory: [ {actionName,…}, … ],
        *    optional : [ {actionName, price, propertyId}, … ]
        * }  ⬅ adjust if your TurnResponse differs */
-      setDice1(turn.dice1); setDice2(turn.dice2);
-      randomDiceThrow(dice1, turn.dice1);
-      setTimeout(()=>randomDiceThrow(dice2, turn.dice2), 300);
+      setDice(turn.dice);                       // numeric counter
+      randomDiceThrow(dice1, turn.dice);   
 
       /* ─ mandatory actions (rent / jail / card) */
       const m = turn.mandatory?.[0];
@@ -813,13 +811,12 @@ const Board = () => {
       }
 
       /* ─ optional buy */
-      const o = turn.optional?.[0];
-      if (o?.actionName === "BuyProperty") {
+      if (turn.optionalAction?.type === "buyOffer") {
         updateCard(
           "Buy property",
           `Do you want to buy this property for ${o.price}?`,
           { text:"Buy", function: async () => {
-              await GamePlayAPI.buyProperty(gameId, playerId, o.propertyId);
+              await GamePlayAPI.buyProperty(gameId, playerId, squareId);
               closeCard(); updateCard("Purchased!","",null,null);
           }},
           null
@@ -834,7 +831,7 @@ const Board = () => {
   // UI Elements ----------------------------------------------------------------------------------------------------
   return (
     <div className="relative h-screen w-screen">
-      <canvas ref={canvasRef} />
+      <canvas ref={canvasRef} className=""/>
 
       <div className="first-nav">
         <span className={`px-5  ${my_sira == 0 ? "animated-box" : ""}`} id="money1">
@@ -883,12 +880,7 @@ const Board = () => {
       </div>
 
       <div className="third-nav">
-        <span>
-          <p>{dice_var1}</p>
-        </span>
-        <span>
-          <p>{dice_var2}</p>
-        </span>
+        <span><p>{diceTotal}</p></span>
       </div>
 
       <div
