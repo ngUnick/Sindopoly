@@ -24,7 +24,6 @@ export const GameAPI = {
 
   // ✅ Start Game
   startGame: async (gameId, playerId) => {
-    const playerId = localStorage.getItem("player_id");
     const res = await fetch(
       `${API_BASE_URL}/api/game-state/${gameId}/start?playerId=${playerId}`,
       { method: "POST" }
