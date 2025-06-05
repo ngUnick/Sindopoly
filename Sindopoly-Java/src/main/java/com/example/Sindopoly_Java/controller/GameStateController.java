@@ -86,15 +86,28 @@ public class GameStateController {
 
     /**
      * Start a game
-     * POST /api/game-state/${gameId}/start?playerId=${playerId}
+     * POST /api/game-state/{gameId}/start
+     *
+     * Requires at least 2 players in the lobby to start.
      */
     @PostMapping("/{gameId}/start")
-    public ResponseEntity<?> startGame(@PathVariable int gameId,
-                                    @RequestParam int playerId) {
+    public ResponseEntity<?> startGame(
+            @PathVariable int gameId,
+            @RequestParam int playerId) {
         try {
+            Set<String> currentPlayers = gameStateService.getPlayersInGame(gameId);
+
+            // Reject if fewer than 2 players
+            if (currentPlayers.size() < 2) {
+                return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "At least 2 players are required to start the game."));
+            }
+
             gameStateService.startGame(gameId, playerId);
             return ResponseEntity.ok(Map.of("status", "inProgress", "gameId", gameId));
-        } catch (IllegalStateException ex) {        // not owner / wrong state …
+        } catch (IllegalStateException ex) {
+            // Owner check / other state‐related errors
             return ResponseEntity.status(403).body(Map.of("error", ex.getMessage()));
         }
     }
@@ -108,7 +121,6 @@ public class GameStateController {
      */
     @GetMapping("/public-lobby")
     public List<Map<String, String>> getAllPublicLobbyGames() {
-        System.out.println("📥 /public-lobby endpoint was called");
         return gameStateService.getAllPublicLobbyGames();
     }
 
@@ -121,6 +133,15 @@ public class GameStateController {
         // ❌ Prevent player from joining multiple games
         if (gameStateService.isPlayerInAnyGame(playerId)) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Player is already in another game.");
+        }
+
+        Set<String> currentPlayers = gameStateService.getPlayersInGame(gameId);
+
+        // Reject if lobby already has 4 players
+        if (currentPlayers.size() >= 4) {
+            return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body("This game is already full (4 players).");
         }
 
         // ✅ Proceed to add
@@ -203,26 +224,6 @@ public class GameStateController {
     public String checkGameEnd(@PathVariable int gameId) {
         boolean ended = gameStateService.checkEndCondition(gameId);
         return ended ? "Game ended due to condition." : "Game continues.";
-    }
-
-
-    /**
-     * 
-     * POST /api/turn/{gameId}/{playerId}
-     */
-    @RestController
-    @RequestMapping("/api/turn")
-    public class TurnController {
-
-        private final TurnService turnService;
-        public TurnController(TurnService ts) { this.turnService = ts; }
-
-        @PostMapping("/{gameId}/{playerId}")
-        public TurnService.TurnResponse playTurn(
-                @PathVariable int gameId,
-                @PathVariable int playerId) {
-            return turnService.playTurn(gameId, playerId);
-        }
     }
 
 
