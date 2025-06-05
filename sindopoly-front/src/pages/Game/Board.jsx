@@ -831,7 +831,7 @@ const Board = () => {
   // UI Elements ----------------------------------------------------------------------------------------------------
   return (
     <div className="relative h-screen w-screen">
-      <canvas ref={canvasRef} className=""/>
+      <canvas ref={canvasRef} />
 
       <div className="first-nav">
         <span className={`px-5  ${my_sira == 0 ? "animated-box" : ""}`} id="money1">
@@ -879,7 +879,7 @@ const Board = () => {
         </button>
       </div>
 
-      <div className="third-nav">
+      <div className="third-nav max-w-[100px]">
         <span><p>{diceTotal}</p></span>
       </div>
 
