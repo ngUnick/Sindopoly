@@ -46,6 +46,8 @@ public class GameStateService {
     private ValidationUtils validationUtils;
     @Autowired
     private final PlayerRepository playerRepo;
+    
+    private final PlayerStateService playerStateService;
 
     
 
@@ -53,12 +55,14 @@ public class GameStateService {
     @Autowired
     public GameStateService(RedisTemplate<String, String> redisTemplate,
                             StatsRepository statsRepo,
-                            PlayerRepository playerRepo) {
+                            PlayerRepository playerRepo,
+                            PlayerStateService playerStateService) {
         this.redisTemplate = redisTemplate;
         this.hashOps = redisTemplate.opsForHash();
         this.setOps = redisTemplate.opsForSet();
         this.statsRepo = statsRepo;
         this.playerRepo = playerRepo;
+        this.playerStateService = playerStateService;
     }
 
     /* =============================================================== */
@@ -139,23 +143,45 @@ public class GameStateService {
 
 
 
-    /** Start Game */
+    /**
+     * Owner kicks off the game:
+     *  - set status, turn, timers, etc.
+     *  - initialize each player’s Redis state hash
+     */
     public void startGame(int gameId, int actorId) {
-        /* ── only the owner (== gameId) may start ─────────────── */
-        if (gameId != actorId)
+        // only the owner may start
+        if (gameId != actorId) {
             throw new IllegalStateException("Only the owner can start the game.");
+        }
 
-        String key = GAME_PREFIX + gameId;
-        if (!redisTemplate.hasKey(key))
+        String gameKey = GAME_PREFIX + gameId;
+        if (!redisTemplate.hasKey(gameKey)) {
             throw new IllegalStateException("Game not found");
+        }
 
-        hashOps.put(key, "status",       "inProgress");
-        hashOps.put(key, "playerTurn",   String.valueOf(gameId));
-        hashOps.put(key, "timer",        "0");
-        hashOps.put(key, "startTime",    Instant.now().toString());
-        hashOps.put(key, "maxTime",      String.valueOf(MAX_TIME));
-        hashOps.put(key, "maxMoney",     String.valueOf(MAX_MONEY));
-        hashOps.put(key, "winner",       "null");
+        // 1) mark inProgress and seed game‐level fields
+        hashOps.put(gameKey, "status",     "inProgress");
+        hashOps.put(gameKey, "playerTurn", String.valueOf(actorId));
+        hashOps.put(gameKey, "timer",      "0");
+        hashOps.put(gameKey, "startTime",  Instant.now().toString());
+        hashOps.put(gameKey, "maxTime",    String.valueOf(MAX_TIME));
+        hashOps.put(gameKey, "maxMoney",   String.valueOf(MAX_MONEY));
+        hashOps.put(gameKey, "winner",     "null");
+
+        // 2) fetch the set of players in this game
+        @SuppressWarnings("unchecked")
+        Set<String> playerIds = redisTemplate
+            .opsForSet()
+            .members(GAME_PREFIX + gameId + ":players");
+
+        // 3) initialize each player's state hash
+        for (String pidStr : playerIds) {
+            int pid = Integer.parseInt(pidStr);
+            playerStateService.initializePlayer(pid);
+        }
+
+        // (Optional) Set TTL on the game hash as well
+        // redisTemplate.expire(gameKey, Duration.ofHours(2));
     }
 
 

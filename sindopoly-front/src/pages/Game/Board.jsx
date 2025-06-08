@@ -13,11 +13,16 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import API_BASE_URL      from "../../apis/apiConfig";
 
 
+
 const Board = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const gameId   = searchParams.get("game_id");           // ← passed by Lobby
-  const playerId = localStorage.getItem("player_id");
+
+  const gameParam   = searchParams.get("game");    // e.g. "3"
+  const playerParam = searchParams.get("player");  // e.g. "3"
+
+  const gameId   = gameParam   ? parseInt(gameParam, 10)   : null;
+  const playerId = playerParam ? parseInt(playerParam, 10) : null;
 
   // Declarations and Initializations ---------------------------------------------------------------------------------------------
   const canvasRef = useRef(null);
@@ -456,7 +461,58 @@ const Board = () => {
   }
 
 
+
+
+
+
+  // Handle Game Tick --------------------------------------------------------------------------------------------------
+  const handleTick = async () => {
+    if (!gameId) return;
+
+      // pull the entire board+game blob in one shot
+      const all = await GamePlayAPI.getBoard(gameId);
+      if (!all.length) return;
+
+      // first element carries game‐level fields
+      const { gameStatus: status, playerTurn, winner, ...me } = all[0];
+
+      // rest is per‐player state
+      const board = all.map(r => ({
+        player_id: r.player_id,
+        position:  r.position,
+        money:     r.money,
+        name:      r.nickname   // your players‐detailed endpoint returns 'nickname'
+      }));
+
+      // update turn + UI
+      setPlayersAmount(board.length);
+      setIsMyTurn(playerTurn === playerId);
+      playerTurn === playerId ? enableDice() : disableDice();
+
+      // completed?
+      if (status === "completed") {
+        const w = board.find(p => p.player_id === winner);
+        navigate(`/endgame?winner=${w?.name ?? "Unknown"}`);
+        return;
+      }
+
+      // pawn movement & money wiring
+      board.forEach((p,i) => {
+      if      (i === 0) { findSteps(cubeRef.current,   p.position); setPlayer1Info({ money: p.money }); }
+      else if (i === 1) { findSteps(sphereRef.current, p.position); setPlayer2Info({ money: p.money }); }
+      else if (i === 2) { findSteps(torusRef.current,  p.position); setPlayer3Info({ money: p.money }); }
+      else if (i === 3) { findSteps(coneRef.current,   p.position); setPlayer4Info({ money: p.money }); }
+      if (p.player_id === playerId) setSira(i);
+    });
+  };
+
+
+
+
+
+
   useEffect(() => {
+
     // Board Creation --------------------------------------------------------------------------------------------------------
     const scene = new THREE.Scene(); // Create a Three.js scene
     sceneRef.current = scene;
@@ -699,69 +755,54 @@ const Board = () => {
     };
 
 
-    const fetchBoard = async () => {
-    /* a) who’s in the game & whose turn is it? */
-    const [pRes, gRes] = await Promise.all([
-      fetch(`${API_BASE_URL}/api/game-state/players-detailed/${gameId}`),
-      fetch(`${API_BASE_URL}/api/game-state/${gameId}`)
-    ]);
-    if (!pRes.ok || !gRes.ok) return;
 
-    const roster = await pRes.json();   // [{id,nickname}, … ]
-    const game   = await gRes.json();   // {status, playerTurn, winner …}
 
-    /* b) each player’s state (position / money) */
-    const enriched = await Promise.all(
-      roster.map(async p => {
-        const sRes = await fetch(`${API_BASE_URL}/api/player-state/${p.id}`);
-        const s    = sRes.ok ? await sRes.json() : {};
-        return {
-          player_id : p.id,
-          name      : p.nickname,
-          position  : s.position ?? 0,
-          money     : s.money    ?? 0
-        };
-      })
-    );
-
-    return { board: enriched, game };
-  };
-
-  const interval = setInterval(async () => {
-    const data = await fetchBoard();
-    if (!data) return;
-
-    const { board, game } = data;
-
-    /* --- UI wiring kept from your old code --- */
-    setPlayersAmount(board.length);
-    updateProperties(board);
-    setIsMyTurn(String(game.playerTurn) === String(playerId));
-    (game.playerTurn === playerId ? enableDice() : disableDice());
-
-    /* winner / completed check */
-    if (game.status === "completed") {
-      const winnerObj = board.find(b => b.player_id == game.winner);
-      navigate(`/endgame?winner=${winnerObj?.name ?? "Unknown"}`);
+    // don’t even try to call the API if gameId is missing
+    if (gameId == null) {
+      console.error("Board.jsx: missing or invalid gameId");
+      return;
     }
 
-    /* money & pawn positions -------------- */
-    board.forEach((p,i) => {
-      if      (i===0){ findSteps(cubeRef.current  , p.position); setPlayer1Info({money:p.money}); }
-      else if (i===1){ findSteps(sphereRef.current, p.position); setPlayer2Info({money:p.money}); }
-      else if (i===2){ findSteps(torusRef.current , p.position); setPlayer3Info({money:p.money}); }
-      else if (i===3){ findSteps(coneRef.current  , p.position); setPlayer4Info({money:p.money}); }
-      if (p.player_id == playerId) setSira(i);
-    });
-  }, 1000);
+    // tick function: pulls the entire “board blob” via your helper
+    const handleTick = async () => {
+      const all = await GamePlayAPI.getBoard(gameId);
+      if (!all?.length) return;
 
-  return () => clearInterval(interval);
+      // first row carries game‐level fields
+      const { gameStatus, playerTurn, winner, ...me } = all[0];
+      // the rest is per‐player positions & money
+      const board = all.map(r => ({
+        player_id: r.player_id,
+        position:  r.position,
+        money:     r.money,
+        name:      r.name
+      }));
+      const game = { status: gameStatus, playerTurn, winner };
 
+      // update your React state just like before:
+      setPlayersAmount(board.length);
+      setIsMyTurn(game.playerTurn == playerId);
+      (game.playerTurn === playerId ? enableDice() : disableDice());
 
-    return () => {
-      // Clean up or dispose Three.js elements (if needed)
+      if (game.status === "completed") {
+        const w = board.find(b => b.player_id === game.winner);
+        navigate(`/endgame?winner=${w?.name ?? "Unknown"}`);
+        return;
+      }
+
+      // pawn movement & money wiring
+      board.forEach((p,i) => {
+        if      (i===0) { findSteps(cubeRef.current,   p.position); setPlayer1Info({money:p.money}); }
+        else if (i===1) { findSteps(sphereRef.current, p.position); setPlayer2Info({money:p.money}); }
+        else if (i===2) { findSteps(torusRef.current,  p.position); setPlayer3Info({money:p.money}); }
+        else if (i===3) { findSteps(coneRef.current,   p.position); setPlayer4Info({money:p.money}); }
+        if (p.player_id === playerId) setSira(i);
+      });
     };
-  }, [isMyTurn]);
+
+    const id = setInterval(handleTick, 1000);
+    return () => clearInterval(id);
+  }, [gameId, playerId, navigate]);
 
   // Add Responsiveness ------------------------------------------------------------------------------------------------
   window.addEventListener("resize", () => {
@@ -794,38 +835,66 @@ const Board = () => {
     if (!isMyTurn) return;
     try {
       const turn = await GamePlayAPI.playTurn(gameId, playerId);
-      /** turn = {
-       *    dice1, dice2,
-       *    mandatory: [ {actionName,…}, … ],
-       *    optional : [ {actionName, price, propertyId}, … ]
-       * }  ⬅ adjust if your TurnResponse differs */
-      setDice(turn.dice);                       // numeric counter
-      randomDiceThrow(dice1, turn.dice);   
+      setDice(turn.dice);
+      // randomDiceThrow(dice1, turn.dice);
 
-      /* ─ mandatory actions (rent / jail / card) */
-      const m = turn.mandatory?.[0];
-      if (m) {
-        if (m.actionName === "drawCard") updateCard(m.title, m.description, null, null);
-        if (m.actionName === "rent")     updateCard("Rent",`Pay ${m.amount}`,null,null);
-        if (m.actionName === "jail")     updateCard("Go to jail","Police troubles",null,null);
-      }
-
-      /* ─ optional buy */
-      if (turn.optionalAction?.type === "buyOffer") {
+      // … mandatory card / rent / jail logic …
+      if (turn.mandatory?.[0]?.actionName === "jail") {
         updateCard(
-          "Buy property",
-          `Do you want to buy this property for ${o.price}?`,
-          { text:"Buy", function: async () => {
-              await GamePlayAPI.buyProperty(gameId, playerId, squareId);
-              closeCard(); updateCard("Purchased!","",null,null);
-          }},
-          null
+          "Go to Jail",
+          `Fine: ${turn.mandatory[0].fine}`,
+          {
+            text: "Pay Fine",
+            function: async () => {
+              await GamePlayAPI.payJailFine(gameId, playerId);
+              closeCard();
+              await handleTick();
+            }
+          },
+          {
+            text: "Decline",
+            function: async () => {
+              await GamePlayAPI.passOptional(gameId, playerId);
+              closeCard();
+              await handleTick();
+            }
+          }
         );
       }
-    } catch {
-      console.error("Failed turn");
+
+      // … optional buy logic …
+      if (turn.optional?.type === "buyOffer") {
+        updateCard(
+          "Buy Property",
+          `Price: ${turn.optional.price}`,
+          {
+            text: "Yes",
+            function: async () => {
+              await GamePlayAPI.buyProperty(
+                gameId,
+                playerId,
+                turn.optional.propertyId
+              );
+              closeCard();
+              await handleTick();
+            }
+          },
+          {
+            text: "No",
+            function: async () => {
+              await GamePlayAPI.passOptional(gameId, playerId);
+              closeCard();
+              await handleTick();
+            }
+          }
+        );
+      }
+    } catch (e) {
+      console.error("Turn failed:", e);
     }
   };
+
+
 
 
   // UI Elements ----------------------------------------------------------------------------------------------------
@@ -871,7 +940,7 @@ const Board = () => {
         </button>
         <button
           disabled={!isMyTurn}
-          className={`property-btn ${!isMyTurn ? "hidden" : ""}`}
+          className={`property-btn`}
           onClick={throwDiceAction}
           
         >
