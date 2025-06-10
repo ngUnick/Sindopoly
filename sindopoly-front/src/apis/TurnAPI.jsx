@@ -1,23 +1,26 @@
+
 import API_BASE_URL from "./apiConfig";
 
-/* ------------------------------------------------------------------
- *  Minimal wrapper around every /api/turn/* endpoint that exists
- * -----------------------------------------------------------------*/
 export const TurnAPI = {
-  /* 🎲 perform the entire turn (dice → move → optionalAction|rotate) */
-  playTurn: (gameId, playerId) =>
-    fetch(`${API_BASE_URL}/api/turn/${gameId}/${playerId}`, {
+  async playTurn(gameId, playerId) {
+    const res = await fetch(`${API_BASE_URL}/api/turn/${gameId}/${playerId}`, {
       method: "POST",
-    }).then((r) => {
-      if (!r.ok) throw new Error("Turn execution failed");
-      return r.json();                       // <- TurnResponse JSON
-    }),
-
-  /* ✅ skip / pass when the player declines an optional action */
-  passTurn: (gameId, playerId) =>
-    fetch(`${API_BASE_URL}/api/turn/${gameId}/${playerId}/pass`, {
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      // bubble the server’s error message
+      throw new Error(body.error || "Turn failed");
+    }
+    return body;
+  },
+  async passTurn(gameId, playerId) {
+    const res = await fetch(`${API_BASE_URL}/api/turn/${gameId}/${playerId}/pass`, {
       method: "POST",
-    }).then((r) => {
-      if (!r.ok) throw new Error("Pass-turn failed");
-    }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      throw new Error(body.error || "Pass turn failed");
+    }
+    return body;
+  },
 };

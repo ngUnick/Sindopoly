@@ -30,7 +30,7 @@ const Lobby = () => {
 
   const fetchPlayers = async () => {
     try {
-      const resPlayers = await fetch(`http://localhost:8080/api/game-state/players-detailed/${gameId}`);
+      const resPlayers = await fetch(`http://localhost:8080/api/game-state/players-detailed-lobby/${gameId}`);
       const resGame = await fetch(`http://localhost:8080/api/game-state/${gameId}`);
       if (!resPlayers.ok || !resGame.ok) throw new Error("Failed to fetch");
 

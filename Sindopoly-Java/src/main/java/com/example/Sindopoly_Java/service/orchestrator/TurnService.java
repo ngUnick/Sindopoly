@@ -4,6 +4,8 @@ import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.PlayerStateService;
 import com.example.Sindopoly_Java.service.core.*;
 import com.example.Sindopoly_Java.service.core.MovementService.MovementResult;
+import com.example.Sindopoly_Java.service.core.SquareActionService.BuyOffer;
+import com.example.Sindopoly_Java.service.core.SquareActionService.JailOffer;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -138,16 +140,38 @@ public class TurnService {
 
         // 6️⃣ optional follow-up?
         if (tile.optional().isPresent()) {
-            storeOptionalAction(gameId, tile.optional().get());
-            resetIdleTimer(gameId, g);
-            return publish(gameId, new TurnResponse(
-                dice, pos, money, mv.passedGo(),
-                /*wasInJail=*/false, /*wentBankrupt=*/false,
-                tile.message(),
-                /*turnComplete=*/false,
-                List.of(tile.optional().get())
-            ));
+        Object raw = tile.optional().get();
+        Map<String,Object> payload;
+        if (raw instanceof BuyOffer buy) {
+            payload = Map.of(
+            "type",     "buyOffer",
+            "squareId", buy.squareId(),
+            "price",    buy.price()
+            );
         }
+        else if (raw instanceof JailOffer payJail) {
+            payload = Map.of(
+            "type", "payJail",
+            "fee",  payJail.fee()
+            );
+        }
+        else {
+            throw new IllegalStateException("Unknown optional action");
+        }
+
+        // store for the follow-up endpoints
+        storeOptionalAction(gameId, raw);
+        resetIdleTimer(gameId, g);
+
+        // return with exactly one‐element list of your typed payload
+        return publish(gameId, new TurnResponse(
+            dice, pos, money, mv.passedGo(),
+            /*wasInJail=*/false, /*wentBankrupt=*/false,
+            tile.message(),/*turnComplete=*/false,
+            List.of(payload)
+        ));
+    }
+
 
         // 7️⃣ normal end-of-turn
         finishAndRotate(gameId, g);
@@ -246,6 +270,7 @@ public class TurnService {
         boolean wentBankrupt,
         String tileMessage,
         boolean turnComplete,
-        List<Object> optional
+        List<Map<String,Object>> optional
     ) {}
+
 }
