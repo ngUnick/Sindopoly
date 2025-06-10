@@ -1,35 +1,34 @@
 import API_BASE_URL from "./apiConfig";
-import { TurnAPI }    from "./TurnAPI";
+import { TurnAPI }  from "./TurnAPI";
 
-/** 
+/**
  * Helper that builds the "board" blob Board.jsx expects.
- * Now backed by your new /players-detailed API.
+ * Uses your existing /players-detailed endpoint.
  */
 async function assembleBoard(gameId) {
-  // 1) fetch the game-level bits
+  // 1) fetch game‐level fields
   const gameRes = await fetch(`${API_BASE_URL}/api/game-state/${gameId}`);
   if (!gameRes.ok) throw new Error("Game state fetch failed");
-  const gameHash = await gameRes.json(); 
+  const gameHash = await gameRes.json();
 
-  // 2) fetch the full per-player array
+  // 2) fetch per‐player list
   const playersRes = await fetch(
     `${API_BASE_URL}/api/game-state/players-detailed/${gameId}`
   );
   if (!playersRes.ok) throw new Error("Players fetch failed");
   const players = await playersRes.json();
-
   if (!players.length) return [];
 
-  // 3) normalize every player
+  // 3) normalize
   const normalized = players.map(p => ({
-    player_id: p.player_id ?? p.id,        // your DTO was using `id`
-    nickname:  p.nickname,                 // or whatever your field is
-    position:  p.position,                 // ensure your backend is returning this
-    money:     p.money,                    // ensure your backend is returning this
-    properties: p.properties               // if you need them
+    player_id: p.player_id ?? p.id,
+    nickname:  p.nickname,
+    position:  p.position,
+    money:     p.money,
+    properties: p.properties,
   }));
 
-  // 4) merge game-level into the first object
+  // 4) merge game‐level into the first slot
   return [
     {
       ...normalized[0],
@@ -37,13 +36,39 @@ async function assembleBoard(gameId) {
       playerTurn: gameHash.playerTurn,
       winner:     gameHash.winner,
     },
-    ...normalized.slice(1)
+    ...normalized.slice(1),
   ];
 }
 
 export const GamePlayAPI = {
-  /** Is this player already in an active game? */
-  getInGameStatus: async (playerId) => {
+  /** snapshot of board + game */
+  getBoard: assembleBoard,
+
+  /******
+   * TWO-STEP TURN:
+   ******/
+
+  /** Step 1: roll & move */
+  playThrow: async (gameId, playerId) => {
+    return await TurnAPI.throwDice(gameId, playerId);
+  },
+
+  /** Step 2: apply the modal decision */
+  playAction: async (gameId, playerId, action, squareId = null) => {
+    return await TurnAPI.doAction(gameId, playerId, action, squareId);
+  },
+
+  /****** legacy, you can delete these once React is updated ******/
+  playTurn: async (gameId, playerId) => {
+    const data = await TurnAPI.throwDice(gameId, playerId);
+    return data;
+  },
+  passOptional: async (gameId, playerId) => {
+    return await TurnAPI.doAction(gameId, playerId, "pass", null);
+  },
+
+  /****** other APIs unchanged ******/
+  getInGameStatus: async playerId => {
     const r = await fetch(
       `${API_BASE_URL}/api/game-state/in-game/${playerId}`
     );
@@ -51,17 +76,6 @@ export const GamePlayAPI = {
     return r.json();
   },
 
-  /** snapshot of the entire board+game */
-  getBoard: assembleBoard,
-
-  /** roll & move – returns parsed JSON or throws with server error */
-  playTurn: async (gameId, playerId) => {
-    // this will throw if res.ok===false, with the server’s `error` message
-    const data = await TurnAPI.playTurn(gameId, playerId);
-    return data;
-  },
-
-  /** buy a property when offered */
   buyProperty: async (gameId, playerId, propertyId) => {
     const r = await fetch(
       `${API_BASE_URL}/api/player-state/${gameId}/${playerId}/buy?propertyId=${propertyId}`,
@@ -71,7 +85,6 @@ export const GamePlayAPI = {
     return r.json();
   },
 
-  /** pay your way out of jail */
   payJailFine: async (gameId, playerId) => {
     const r = await fetch(
       `${API_BASE_URL}/api/player-state/${gameId}/${playerId}/pay-jail`,
@@ -80,22 +93,12 @@ export const GamePlayAPI = {
     if (!r.ok) throw new Error("Jail payment failed");
     return r.json();
   },
-
-  /** skip / decline the optional action */
-  passOptional: async (gameId, playerId) => {
-    const r = await fetch(
-      `${API_BASE_URL}/api/turn/${gameId}/${playerId}/pass`,
-      { method: "POST" }
-    );
-    if (!r.ok) throw new Error("Pass turn failed");
-    return r.json();
-  },
 };
 
 export async function getGameState(gameId) {
   const r = await fetch(`${API_BASE_URL}/api/game-state/${gameId}`);
   if (!r.ok) throw new Error("Game state fetch failed");
-  return r.json();  // { status, playerTurn, winner, … }
+  return r.json();
 }
 
 export async function getPlayersDetailed(gameId) {
@@ -103,5 +106,5 @@ export async function getPlayersDetailed(gameId) {
     `${API_BASE_URL}/api/game-state/players-detailed/${gameId}`
   );
   if (!r.ok) throw new Error("Players fetch failed");
-  return r.json();  // [ { player_id, nickname, position, money, … }, … ]
+  return r.json();
 }

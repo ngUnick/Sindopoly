@@ -10,237 +10,230 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import com.example.Sindopoly_Java.model.dto.SquareEventDto;
+import com.example.Sindopoly_Java.model.dto.ApplyResultDto;
 
-/**
- * Logic that fires when a player lands on a square (rent, tax, jail,
- * cards …).  If the square triggers a **decision** the optional payload is
- * returned so {@link com.example.Sindopoly_Java.service.orchestrator.TurnService}
- * can pause the turn.
- */
 @Service
 public class SquareActionService {
 
-    /* injected collaborators */
-    private final SquareRepository squareRepo;
-    private final CardService      cardSvc;
-    private final ValidationUtils  validationUtils;
-
-    /* low-level Redis helper */
+    private final SquareRepository      squareRepo;
+    private final CardService           cardSvc;
+    private final ValidationUtils       validationUtils;
     private final HashOperations<String,String,String> hashOps;
 
-    /* ------------------------------------------------------------------ */
-    /* constructor                                                        */
-    /* ------------------------------------------------------------------ */
-    public SquareActionService(SquareRepository repo,
-                               RedisTemplate<String,String> redis,
-                               CardService cardSvc,
-                               ValidationUtils v) {
-
+    public SquareActionService(
+        SquareRepository repo,
+        RedisTemplate<String,String> redis,
+        CardService cardSvc,
+        ValidationUtils v
+    ) {
         this.squareRepo      = repo;
         this.cardSvc         = cardSvc;
         this.validationUtils = v;
-        this.hashOps         = redis.opsForHash();   // centralised ops handle
+        this.hashOps         = redis.opsForHash();
     }
 
-    /* =============================================================== */
-    /* public entry point                                              */
-    /* =============================================================== */
-    public TileResult execute(int playerId, int position, int gameId) {
-
+    // ───────────────────────────────────────────────────────────────
+    // 1) PEEK STAGE: figure out what event/modal to show
+    // ───────────────────────────────────────────────────────────────
+    public SquareEventDto peekSquare(int playerId, int position, int gameId) {
         Square sq = squareRepo.findById(position)
-                              .orElseThrow(() ->
-                                      new IllegalArgumentException("Bad square id"));
+            .orElseThrow(() -> new IllegalArgumentException("Bad square id"));
 
-        return switch (sq.getType()) {
+        switch (sq.getType()) {
+            case START:
+                return SquareEventDto.justInfo("start", "Visiting Start", 0);
 
-            /* ─── simple tiles ─────────────────────────────────────── */
-            case START   -> new TileResult(0,"Just visiting Start");
-            case PARKING -> new TileResult(0,"Relaxing at Free Parking");
+            case PARKING:
+                return SquareEventDto.justInfo("parking", "Free Parking", 0);
 
-            /* ─── tax ──────────────────────────────────────────────── */
-            case TAX -> {
-                int amt = sq.getPrice()==null ? 0 : sq.getPrice();
-                writeMoney(playerId, readMoney(playerId) - amt);
-                yield new TileResult(-amt,"Paid tax");
-            }
+            case TAX:
+                int tax = Optional.ofNullable(sq.getPrice()).orElse(0);
+                return SquareEventDto.justInfo("tax", "Pay tax: €" + tax, -tax);
 
-            /* ─── card ─────────────────────────────────────────────── */
-            case CARD -> applyCard(playerId, cardSvc.drawCard(gameId));
+            case CARD:
+                Card c = cardSvc.drawCard(gameId);
+                return SquareEventDto.card(
+                    c.getTitle(),
+                    c.getType().toString(),         // convert enum → String
+                    (int) Math.round(c.getAmount()) // cast or round your float → int
+                );
 
-            /* ─── jail squares ─────────────────────────────────────── */
-            case JAIL, GOJAIL -> {
-                sendPlayerToJail(playerId);
-                // now signal “pay jail” is optional
-                yield new TileResult(0,
-                "Go to Jail – pay fine to get out",
-                Optional.of(new JailOffer(gameId, /* your fee, e.g. */ 50)));
-            }
+            case JAIL:
+            case GOJAIL:
+                int fee = 50;  // or sq.getFee()
+                return SquareEventDto.jailOffer(fee);
 
-            /* ─── properties / rent / offers ─────────────────────── */
-            default -> handleProperty(playerId, sq, gameId);
-        };
+            default:
+                return peekProperty(playerId, sq, gameId);
+        }
     }
 
-    /* =============================================================== */
-    /*  property handling                                              */
-    /* =============================================================== */
-    private TileResult handleProperty(int playerId, Square sq, int gameId) {
+    private SquareEventDto peekProperty(int playerId, Square sq, int gameId) {
+        String skey = "square:" + sq.getId();
+        String owner = hashOps.get(skey, "owner");
 
-        String skey  = "square:" + sq.getId();
-        String owner = hashOps.get(skey,"owner");          // nullable
-
-        /* 1️⃣ Un-owned → send BUY-OFFER */
         if (owner == null) {
-            int price   = sq.getPrice()==null ? 0 : sq.getPrice();
+            int price = Optional.ofNullable(sq.getPrice()).orElse(0);
             int balance = readMoney(playerId);
-
             if (balance >= price) {
-                return new TileResult(0,
-                        "Un-owned property",
-                        Optional.of(new BuyOffer(gameId, sq.getId(), price)));
+                return SquareEventDto.buyOffer(sq.getId(), price);
+            } else {
+                return SquareEventDto.justInfo("no-money", "Cannot afford: €" + price, 0);
             }
-            return new TileResult(0,"Un-owned (insufficient funds)");
         }
 
-        /* 2️⃣ Own property – nothing happens */
-        if (owner.equals(String.valueOf(playerId)))
-            return new TileResult(0,"Own property – no rent");
+        if (owner.equals(String.valueOf(playerId))) {
+            return SquareEventDto.justInfo("own", "Your own property", 0);
+        }
 
-        /* 3️⃣ Pay rent to somebody else */
-        int rent;
+        int rent = calculateRent(owner, sq, gameId);
+        return SquareEventDto.rentDue(owner, rent);
+    }
+
+    private int calculateRent(String owner, Square sq, int gameId) {
+        // utilities: 4× or 10× the last dice roll
         if (sq.getType() == SquareType.UTILITY) {
             int dice = readLastDice(gameId);
-            rent = ownsBothUtilities(owner) ? dice * 10 : dice * 4;
-
-        } else if (sq.getType() == SquareType.TRAIN) {
-            rent = rentForTrainsOwned(owner);
-
-        } else {                                 // colour property
-            rent = maybeDoubleForFullSet(sq, owner);
+            return ownsBothUtilities(owner)
+                    ? dice * 10
+                    : dice * 4;
         }
-        return processRent(playerId, owner, rent);
-    }
-
-    /* =============================================================== */
-    /* helpers for CARD / JAIL                                         */
-    /* =============================================================== */
-
-    private TileResult applyCard(int pid, Card c) {
-        return switch (c.getType()) {
-            case money -> {
-                int delta = (int) c.getAmount();
-                writeMoney(pid, readMoney(pid) + delta);
-                yield new TileResult(delta,
-                        c.getTitle() + " (" + delta + ")");
-            }
-            case transport -> {
-                int dest = (int) c.getAmount();
-                hashOps.put("player:" + pid, "position", String.valueOf(dest));
-                yield new TileResult(0,
-                        c.getTitle() + " – moved to " + dest);
-            }
-        };
-    }
-
-    private void sendPlayerToJail(int pid) {
-        hashOps.putAll("player:" + pid, Map.of(
-                "position", "10",
-                "jail",     "true",
-                "jailTime", "3"));
-    }
-
-    /* =============================================================== */
-    /* rent helpers                                                    */
-    /* =============================================================== */
-
-    private TileResult processRent(int tenantId, String ownerId, int rent) {
-
-        int tenantMoney = readMoney(tenantId);
-        if (tenantMoney < rent) {
-            writeMoney(tenantId, 0);
-            return new TileResult(-tenantMoney,
-                    "Could not pay full rent – bankrupt");
+        // railroads/trains
+        else if (sq.getType() == SquareType.TRAIN) {
+            return rentForTrainsOwned(owner);
         }
+        // color properties: base rent, doubled if full set
+        else {
+            return maybeDoubleForFullSet(sq, owner);
+        }
+    }
 
-        writeMoney(tenantId, tenantMoney - rent);
-        writeMoney(Integer.parseInt(ownerId),
-                   readMoney(Integer.parseInt(ownerId)) + rent);
-
-        return new TileResult(-rent,
-                "Paid rent " + rent + " to player " + ownerId);
+    /** returns last dice rolled for this game, or 0 if missing */
+    private int readLastDice(int gid) {
+        String v = hashOps.get("game:" + gid, "lastDice");
+        return v == null ? 0 : Integer.parseInt(v);
     }
 
     private boolean ownsBothUtilities(String owner) {
-        return owner.equals(hashOps.get("square:12","owner")) &&
-               owner.equals(hashOps.get("square:28","owner"));
+        return owner.equals(hashOps.get("square:12","owner"))
+            && owner.equals(hashOps.get("square:28","owner"));
     }
 
     private int rentForTrainsOwned(String owner) {
         int n = 0;
         for (int id : List.of(5, 15, 25, 35))
             if (owner.equals(hashOps.get("square:" + id, "owner"))) n++;
-        return switch (n) { case 1 -> 25; case 2 -> 50; case 3 -> 100; default -> 200; };
+        return switch (n) {
+        case 1 -> 25;
+        case 2 -> 50;
+        case 3 -> 100;
+        default -> 200;
+        };
     }
 
     private int maybeDoubleForFullSet(Square sq, String owner) {
         List<Integer> ids = squareRepo.findIdsByColour(sq.getType());
-        boolean full     = ids.stream()
-                              .allMatch(id -> owner.equals(hashOps.get("square:" + id, "owner")));
+        boolean full = ids.stream()
+            .allMatch(id -> owner.equals(hashOps.get("square:" + id, "owner")));
         int base = sq.getRent() == null ? 0 : sq.getRent();
         return full ? base * 2 : base;
     }
 
-    /* =============================================================== */
-    /* tiny Redis utils                                                */
-    /* =============================================================== */
+
+    // ───────────────────────────────────────────────────────────────
+    // 2) APPLY STAGE: client chose an action, now mutate state
+    // ───────────────────────────────────────────────────────────────
+    public ApplyResultDto applySquareEvent(
+        int playerId,
+        SquareEventDto event,
+        String action  // "buy", "pass", "ok"
+    ) {
+        switch (event.getType()) {
+            case "tax":
+                writeMoney(playerId, event.getAmount());
+                return new ApplyResultDto(readMoney(playerId), List.of(), "Paid tax");
+
+            case "start":
+            case "parking":
+                return new ApplyResultDto(readMoney(playerId), List.of(), event.getMessage());
+
+            case "card":
+                return applyCardEvent(playerId, event);
+
+            case "jailOffer":
+                if ("buy".equals(action)) {
+                    payJailFee(playerId, event.getFee());
+                    return new ApplyResultDto(readMoney(playerId), List.of(), "Paid jail €" + event.getFee());
+                } else {
+                    // maybe let them stay? or skip turn?
+                    return new ApplyResultDto(readMoney(playerId), List.of(), "Stayed in Jail");
+                }
+
+            case "buyOffer":
+                if ("buy".equals(action)) {
+                    buyProperty(playerId, event.getSquareId(), event.getPrice());
+                    return new ApplyResultDto(readMoney(playerId),
+                         List.of(event.getSquareId()), "Bought property");
+                } else {
+                    return new ApplyResultDto(readMoney(playerId), List.of(), "Declined purchase");
+                }
+
+            case "rentDue":
+                writeMoney(playerId, readMoney(playerId) - event.getAmount());
+                writeMoney(Integer.parseInt(event.getOwnerId()), readMoney(Integer.parseInt(event.getOwnerId())) + event.getAmount());
+                return new ApplyResultDto(readMoney(playerId), List.of(), "Paid rent €" + event.getAmount());
+
+            default:
+                throw new IllegalArgumentException("Unknown event type: " + event.getType());
+        }
+    }
+
+    private ApplyResultDto applyCardEvent(int playerId, SquareEventDto event) {
+        // mirror your old applyCard(): money-amount or movement.
+        if ("money".equals(event.getCardType())) {
+            writeMoney(playerId, readMoney(playerId) + event.getAmount());
+            return new ApplyResultDto(readMoney(playerId), List.of(), event.getMessage());
+        } else {
+            // movement card
+            hashOps.put("player:" + playerId, "position", String.valueOf(event.getAmount()));
+            return new ApplyResultDto(readMoney(playerId), List.of(), event.getMessage());
+        }
+    }
+
+    /**
+     * Deducts the purchase price from the player and sets ownership in Redis.
+     */
+    private void buyProperty(int playerId, int squareId, int price) {
+        int balance = readMoney(playerId);
+        if (balance < price) {
+            throw new IllegalStateException("Not enough funds to buy square " + squareId);
+        }
+        // deduct money
+        writeMoney(playerId, balance - price);
+        // set the owner of the square in Redis
+        hashOps.put("square:" + squareId, "owner", String.valueOf(playerId));
+    }
+
+
+    // ───────────────────────────────────────────────────────────────
+    // 3) Redis helpers (unchanged)
+    // ───────────────────────────────────────────────────────────────
     private int readMoney(int pid) {
         String v = hashOps.get("player:" + pid, "money");
         return v == null ? 0 : Integer.parseInt(v);
     }
+
     private void writeMoney(int pid, int amount) {
         validationUtils.assertNonNegativeMoney(amount);
         hashOps.put("player:" + pid, "money", String.valueOf(amount));
     }
-    private int readLastDice(int gid) {
-        String v = hashOps.get("game:" + gid, "lastDice");
-        return v == null ? 0 : Integer.parseInt(v);
+
+    private void payJailFee(int pid, int fee) {
+        int m = readMoney(pid);
+        if (m < fee) throw new IllegalStateException("Insufficient funds");
+        writeMoney(pid, m - fee);
+        hashOps.put("player:" + pid, "jail", "false");
     }
 
-    /* =============================================================== */
-    /* DTOs returned to TurnService                                    */
-    /* =============================================================== */
-
-    /** Output of every square resolution. */
-    public record TileResult(int deltaMoney,
-                             String message,
-                             Optional<Object> optional) {
-        public TileResult(int delta, String msg) { this(delta, msg, Optional.empty()); }
-    }
-
-    /** Payload for an optional buy decision. */
-    public record BuyOffer(int gameId, int squareId, int price) {}
-
-    /** Payload for an optional pay-jail decision. */
-    public record JailOffer(int gameId, int fee) {}
-
-    /* --------------------------------------------------------------- */
-    /* called by controller once the client accepted the offer         */
-    /* --------------------------------------------------------------- */
-    public void completeOptionalBuy(int gameId, int playerId, int squareId) {
-
-        Square sq = squareRepo.findById(squareId + 1)
-                              .orElseThrow(() -> new IllegalArgumentException("Bad square"));
-
-        String skey = "square:" + squareId;
-        if (hashOps.get(skey, "owner") != null)
-            throw new IllegalStateException("Already owned");
-
-        int price = sq.getPrice() == null ? 0 : sq.getPrice();
-        int money = readMoney(playerId);
-        if (money < price)
-            throw new IllegalStateException("Not enough cash");
-
-        writeMoney(playerId, money - price);
-        hashOps.put(skey, "owner", String.valueOf(playerId));
-    }
 }

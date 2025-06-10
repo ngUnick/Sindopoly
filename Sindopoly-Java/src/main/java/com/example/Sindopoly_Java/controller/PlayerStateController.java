@@ -1,6 +1,8 @@
 package com.example.Sindopoly_Java.controller;
 
 import com.example.Sindopoly_Java.model.Player;
+import com.example.Sindopoly_Java.model.dto.ActionRequestDto;
+import com.example.Sindopoly_Java.model.dto.ActionResultDto;
 import com.example.Sindopoly_Java.repository.PlayerRepository; // Add this import
 import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.PlayerStateService;
@@ -95,43 +97,30 @@ public class PlayerStateController {
         return "Player state deleted successfully.";
     }
 
-    /** POST /api/player-state/{gameId}/{playerId}/pay-jail  */
-    @PostMapping("/{gameId}/{playerId}/pay-jail")
-    public ResponseEntity<?> payJail(@PathVariable int gameId,
-                                     @PathVariable int playerId) {
+       /** 
+     * POST /api/player-state/{gameId}/{playerId}/action
+     * Body: { "gameId":.., "playerId":.., "action":"buy", "squareId":12 }
+     */
+    @PostMapping("/{gameId}/{playerId}/action")
+    public ResponseEntity<ActionResultDto> doAction(
+        @PathVariable   int gameId,
+        @PathVariable   int playerId,
+        @RequestBody    ActionRequestDto req
+    ) {
+        // sanity: path vars must match body
+        if (req.getGameId()!=gameId || req.getPlayerId()!=playerId) {
+            throw new IllegalArgumentException("Payload path mismatch");
+        }
 
-        /* 1️⃣ validate optionalAction = jailPay and belongs to player */
-        gameStateSvc.assertOptionalAction(gameId, playerId, "payJail");
+        // validate any pending optional action exists
+        var game = gameStateSvc.getGame(gameId);
+        validationUtils.validatePlayerExists(playerId);
+        gameStateSvc.assertOptionalAction(gameId, playerId, req.getAction(),
+                                         req.getSquareId());
 
-        /* 2️⃣ perform business logic */
-        playerStateService.payToExitJail(playerId, 50);
+        // delegate to TurnService
+        ActionResultDto result = turnSvc.handleAction(req);
 
-        /* 3️⃣ clear + finish turn */
-        gameStateSvc.clearOptionalAction(gameId);
-        turnSvc.finishTurn(gameId);
-
-        return ResponseEntity.ok(Map.of("status", "freed", "paid", 50));
+        return ResponseEntity.ok(result);
     }
-
-    /** POST /api/player-state/{gameId}/{playerId}/buy?propertyId=12 */
-    @PostMapping("/{gameId}/{playerId}/buy")
-    public ResponseEntity<?> buyProperty(@PathVariable int gameId,
-                                         @PathVariable int playerId,
-                                         @RequestParam int propertyId) {
-
-        /* 1️⃣ validate optionalAction = buyOffer and matches */
-        gameStateSvc.assertOptionalAction(gameId, playerId, "buyOffer", propertyId);
-
-        /* 2️⃣ complete purchase */
-        squareActionSvc.completeOptionalBuy(gameId, playerId, propertyId);
-
-        /* 3️⃣ clear + finish turn  */
-        gameStateSvc.clearOptionalAction(gameId);
-        turnSvc.finishTurn(gameId);
-
-        return ResponseEntity.ok(Map.of("status", "bought", "property", propertyId));
-    }
-
-    /* --------------------------------------------------------------------- */
-    /* createPlayer, savePlayer, getPlayer, deletePlayer     – unchanged     */
 }
