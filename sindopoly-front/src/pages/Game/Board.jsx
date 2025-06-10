@@ -470,20 +470,12 @@ const Board = () => {
     if (!gameId) return;
 
       // pull the entire board+game blob in one shot
-      const all = await GamePlayAPI.getBoard(gameId);
+      const board = await GamePlayAPI.getBoard(gameId);
       // console.log("🏷️ getBoard returned:", all);
-      if (!all.length) return;
+      
+      if (!board.length) return;
 
-      // first element carries game‐level fields
-      const { gameStatus: status, playerTurn, winner, ...me } = all[0];
-
-      // rest is per‐player state
-      const board = all.map(r => ({
-        player_id: r.player_id,
-        position:  r.position,
-        money:     r.money,
-        name:      r.nickname   // your players‐detailed endpoint returns 'nickname'
-      }));
+      const { gameStatus: status, playerTurn, winner, ...me } = board[0];
 
       // update turn + UI
       setPlayersAmount(board.length);
@@ -493,7 +485,7 @@ const Board = () => {
       // completed?
       if (status === "completed") {
         const w = board.find(p => p.player_id === winner);
-        navigate(`/endgame?winner=${w?.name ?? "Unknown"}`);
+        navigate(`/endgame?winner=${w?.nickname ?? "Unknown"}`);
         return;
       }
 
@@ -795,70 +787,62 @@ const Board = () => {
     }
   });
 
+  /** STEP 1: click dice → throw & move */
   const throwDiceAction = async () => {
     if (!isMyTurn) return;
+
     try {
-      const turn = await GamePlayAPI.playTurn(gameId, playerId);
-      
-      // randomDiceThrow(dice1, turn.dice);
+      // 1️⃣ roll & move
+      const turn = await GamePlayAPI.playThrow(gameId, playerId);
+      const { dice, newPosition, event } = turn;
 
-            // ② disable the dice button immediately
+      // disable UI & show dice
       setIsMyTurn(false);
-      disableDice();
+      setDice(dice);
+      randomDiceThrow(dice1, dice);
+      await new Promise(r => setTimeout(r, 1000));
+      findSteps(pieceRef.current, newPosition);
 
-      // ③ show the dice total on your chip
-      setDice(turn.dice);
-
-      // ④ animate movement
-      await new Promise(res => setTimeout(res, 1000));
-      randomDiceThrow(dice1, turn.dice);
-      await new Promise(res => setTimeout(res, 1000));
-      // assume you stored newPosition in turn.newPosition
-      findSteps(pieceRef.current, turn.newPosition);
-
-      // ⑤ if there’s an optional action, pop up the modal
-      if (turn.optional?.length) {
-        // example for buyOffer
-        const opt = turn.optional[0];
-        updateCard(
-          opt.type === "buyOffer" ? "Buy Property" : "…",
-          opt.type === "buyOffer" ? `Price: ${opt.price}` : opt.message,
-          {
-            text: "Yes",
-            function: async () => {
-              if (opt.type === "buyOffer") {
-                await GamePlayAPI.buyProperty(gameId, playerId, opt.squareId);
-              } else {
-                await GamePlayAPI.payJailFine(gameId, playerId);
-              }
-              closeCard();
-              await handleTick();
-            }
-          },
-          {
-            text: "No",
-            function: async () => {
-              await GamePlayAPI.passTurn(gameId, playerId);
-              closeCard();
-              await handleTick();
-            }
-          }
-        );
+      // 2️⃣ optional?
+      if (event?.type) {
+        // show our modal
+        setModalEvent(event);
+        setModalVisible(true);
       } else {
-        // ⑥ no optional → next turn
-        await GamePlayAPI.passTurn(gameId, playerId);
+        // auto‐pass decision
+        await GamePlayAPI.playAction(gameId, playerId, "ok", null);
         await handleTick();
+        setIsMyTurn(true);
       }
 
     } catch (e) {
-      // if we landed on a pending optional, e.message==='Finish your pending action first.'
-      console.error("Turn failed:", e.message);
-      if (e.message.includes("Finish your pending")) {
-        // clear and re-fetch
-        await GamePlayAPI.passTurn(gameId, playerId);
-        await handleTick();
-      }
+      console.error("Turn failed:", e);
+      // optionally re-sync
+      await handleTick();
+      setIsMyTurn(true);
     }
+  };
+
+  /** STEP 2: modal button handler */
+  const handleModalChoice = async (choice) => {
+    if (!modalEvent) return;
+    const { type, squareId } = modalEvent;
+
+    // map button choice to action
+    let action = "ok";
+    if (type === "buyOffer" && choice === true) action = "buy";
+    else if (type === "buyOffer" && choice === false) action = "pass";
+    else if (type === "payJail" && choice === true) action = "buy";   // pay
+    else if (type === "payJail" && choice === false) action = "pass";
+
+    // call API
+    await GamePlayAPI.playAction(gameId, playerId, action, squareId);
+    setModalVisible(false);
+    setModalEvent(null);
+
+    // refresh board & re-enable dice if it’s now our turn
+    await handleTick();
+    setIsMyTurn(true);
   };
 
 
@@ -919,67 +903,43 @@ const Board = () => {
         <span><p>{diceTotal}</p></span>
       </div>
 
-      <div
-        className="absolute w-full h-full bg-transparent left-0 top-0 z-2 hidden"
-        id="overlay"
-      ></div>
 
-      <div
-        className="absolute -translate-x-2/4 -translate-y-2/4 left-2/4 top-2/4 z-3 hidden"
-        id="card"
-      >
-        <div
-          className="relative shadow flex flex-col justify-around items-stretch min-h-[150px] min-w-[300px]
-        bg-[rgba(255,236,195,0.8)] pt-[20px] pb-[20px] px-5 backdrop-blur-sm border-solid border-[rgba(255,255,255,0.6)] rounded-md"
-        >
-          <span
-            className="text-yellow-700 font-semibold text-xl hidden"
-            id="title"
-          >
-            Title
-          </span>
-          <p className="text-base text-gray-600 hidden" id="desc">
-            Description{" "}
-          </p>
-          <div className="flex flex-col gap-2">
-            <button
-              className="border-2 border-yellow-600 bg-yellow-600 py-1 rounded text-gray-50 hover:bg-[rgba(240,169,16,0.95)] hover:cursor-pointer hidden"
-              id="act1"
-            >
-              Action 1
-            </button>
-            <button
-              className="border-2 border-yellow-600 py-1 rounded hover:bg-gray-100 hover:cursor-pointer hidden"
-              id="act2"
-            >
-              Action 2
-            </button>
-          </div>
-          <div
-            className="absolute top-3 right-2  text-red-300 hover:text-red-500 hover:cursor-pointer"
-            id="close"
-          >
-            <svg
-              y="0"
-              xmlns="http://www.w3.org/2000/svg"
-              x="0"
-              width="100"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="xMidYMid meet"
-              height="100"
-              className="w-12 h-12 fill-current"
-              onClick={() => {
-                closeCard();
-              }}
-            >
-              <path
-                fillRule="evenodd"
-                d="M50,87.4A37.4,37.4,0,1,0,12.6,50,37.3,37.3,0,0,0,50,87.4ZM44,37.3A4.7,4.7,0,0,0,37.3,44l6.1,6-6.1,6A4.7,4.7,0,0,0,44,62.7l6-6.1,6,6.1A4.7,4.7,0,0,0,62.7,56l-6.1-6,6.1-6A4.7,4.7,0,0,0,56,37.3l-6,6.1Z"
-              ></path>
-            </svg>
+
+      {/* Modal Overlay & Card */}
+      {modalVisible && modalEvent && (
+        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[rgba(255,236,195,0.8)] backdrop-blur-sm border border-white/60 rounded-md p-6 shadow-lg">
+            {/* Title / Message */}
+            <h2 className="text-xl font-semibold mb-4">{modalEvent.message}</h2>
+
+            {/* Actions */}
+            {modalEvent.type === "buyOffer" ? (
+              <div className="flex space-x-4">
+                <button
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                  onClick={() => handleModalChoice(true)}
+                >
+                  Ναι
+                </button>
+                <button
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                  onClick={() => handleModalChoice(false)}
+                >
+                  Όχι
+                </button>
+              </div>
+            ) : (
+              <button
+                className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                onClick={() => handleModalChoice(true)}
+              >
+                OK
+              </button>
+            )}
           </div>
         </div>
-      </div>
+      )}
+
     </div>
   ); // Return canvas element for rendering
 };
