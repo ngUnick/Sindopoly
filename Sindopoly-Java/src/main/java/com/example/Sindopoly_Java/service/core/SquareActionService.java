@@ -70,7 +70,10 @@ public class SquareActionService {
             /* ─── jail squares ─────────────────────────────────────── */
             case JAIL, GOJAIL -> {
                 sendPlayerToJail(playerId);
-                yield new TileResult(0,"Go to Jail!");
+                // now signal “pay jail” is optional
+                yield new TileResult(0,
+                "Go to Jail – pay fine to get out",
+                Optional.of(new JailOffer(gameId, /* your fee, e.g. */ 50)));
             }
 
             /* ─── properties / rent / offers ─────────────────────── */
@@ -210,19 +213,22 @@ public class SquareActionService {
     /** Output of every square resolution. */
     public record TileResult(int deltaMoney,
                              String message,
-                             Optional<?> optional) {
+                             Optional<Object> optional) {
         public TileResult(int delta, String msg) { this(delta, msg, Optional.empty()); }
     }
 
     /** Payload for an optional buy decision. */
     public record BuyOffer(int gameId, int squareId, int price) {}
 
+    /** Payload for an optional pay-jail decision. */
+    public record JailOffer(int gameId, int fee) {}
+
     /* --------------------------------------------------------------- */
     /* called by controller once the client accepted the offer         */
     /* --------------------------------------------------------------- */
     public void completeOptionalBuy(int gameId, int playerId, int squareId) {
 
-        Square sq = squareRepo.findById(squareId)
+        Square sq = squareRepo.findById(squareId + 1)
                               .orElseThrow(() -> new IllegalArgumentException("Bad square"));
 
         String skey = "square:" + squareId;

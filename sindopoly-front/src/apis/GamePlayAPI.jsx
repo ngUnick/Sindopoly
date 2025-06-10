@@ -6,29 +6,38 @@ import { TurnAPI }    from "./TurnAPI";
  * Now backed by your new /players-detailed API.
  */
 async function assembleBoard(gameId) {
-  // 1️⃣ fetch game‐level hash
+  // 1) fetch the game-level bits
   const gameRes = await fetch(`${API_BASE_URL}/api/game-state/${gameId}`);
   if (!gameRes.ok) throw new Error("Game state fetch failed");
-  const gameHash = await gameRes.json(); // { status, playerTurn, winner, … }
+  const gameHash = await gameRes.json(); 
 
-  // 2️⃣ fetch the full per-player array in one shot
+  // 2) fetch the full per-player array
   const playersRes = await fetch(
     `${API_BASE_URL}/api/game-state/players-detailed/${gameId}`
   );
   if (!playersRes.ok) throw new Error("Players fetch failed");
-  const players = await playersRes.json(); // [ { player_id, nickname, position, money, … }, … ]
+  const players = await playersRes.json();
 
   if (!players.length) return [];
 
-  // 3️⃣ merge game‐level fields into the first element
+  // 3) normalize every player
+  const normalized = players.map(p => ({
+    player_id: p.player_id ?? p.id,        // your DTO was using `id`
+    nickname:  p.nickname,                 // or whatever your field is
+    position:  p.position,                 // ensure your backend is returning this
+    money:     p.money,                    // ensure your backend is returning this
+    properties: p.properties               // if you need them
+  }));
+
+  // 4) merge game-level into the first object
   return [
     {
-      ...players[0],
+      ...normalized[0],
       gameStatus: gameHash.status,
       playerTurn: gameHash.playerTurn,
-      winner:     gameHash.winner
+      winner:     gameHash.winner,
     },
-    ...players.slice(1)
+    ...normalized.slice(1)
   ];
 }
 
@@ -45,12 +54,12 @@ export const GamePlayAPI = {
   /** snapshot of the entire board+game */
   getBoard: assembleBoard,
 
-  /** roll & move – returns dice, optional payload, etc. */
-  playTurn: (gameId, playerId) =>
-    TurnAPI.playTurn(gameId, playerId).then(r => {
-      if (!r.ok) throw new Error("Turn failed");
-      return r.json();
-    }),
+  /** roll & move – returns parsed JSON or throws with server error */
+  playTurn: async (gameId, playerId) => {
+    // this will throw if res.ok===false, with the server’s `error` message
+    const data = await TurnAPI.playTurn(gameId, playerId);
+    return data;
+  },
 
   /** buy a property when offered */
   buyProperty: async (gameId, playerId, propertyId) => {

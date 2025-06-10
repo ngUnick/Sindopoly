@@ -471,6 +471,7 @@ const Board = () => {
 
       // pull the entire board+game blob in one shot
       const all = await GamePlayAPI.getBoard(gameId);
+      // console.log("🏷️ getBoard returned:", all);
       if (!all.length) return;
 
       // first element carries game‐level fields
@@ -763,43 +764,6 @@ const Board = () => {
       return;
     }
 
-    // tick function: pulls the entire “board blob” via your helper
-    const handleTick = async () => {
-      const all = await GamePlayAPI.getBoard(gameId);
-      if (!all?.length) return;
-
-      // first row carries game‐level fields
-      const { gameStatus, playerTurn, winner, ...me } = all[0];
-      // the rest is per‐player positions & money
-      const board = all.map(r => ({
-        player_id: r.player_id,
-        position:  r.position,
-        money:     r.money,
-        name:      r.name
-      }));
-      const game = { status: gameStatus, playerTurn, winner };
-
-      // update your React state just like before:
-      setPlayersAmount(board.length);
-      setIsMyTurn(game.playerTurn == playerId);
-      (game.playerTurn === playerId ? enableDice() : disableDice());
-
-      if (game.status === "completed") {
-        const w = board.find(b => b.player_id === game.winner);
-        navigate(`/endgame?winner=${w?.name ?? "Unknown"}`);
-        return;
-      }
-
-      // pawn movement & money wiring
-      board.forEach((p,i) => {
-        if      (i===0) { findSteps(cubeRef.current,   p.position); setPlayer1Info({money:p.money}); }
-        else if (i===1) { findSteps(sphereRef.current, p.position); setPlayer2Info({money:p.money}); }
-        else if (i===2) { findSteps(torusRef.current,  p.position); setPlayer3Info({money:p.money}); }
-        else if (i===3) { findSteps(coneRef.current,   p.position); setPlayer4Info({money:p.money}); }
-        if (p.player_id === playerId) setSira(i);
-      });
-    };
-
     const id = setInterval(handleTick, 1000);
     return () => clearInterval(id);
   }, [gameId, playerId, navigate]);
@@ -835,46 +799,38 @@ const Board = () => {
     if (!isMyTurn) return;
     try {
       const turn = await GamePlayAPI.playTurn(gameId, playerId);
-      setDice(turn.dice);
+      
       // randomDiceThrow(dice1, turn.dice);
 
-      // … mandatory card / rent / jail logic …
-      if (turn.mandatory?.[0]?.actionName === "jail") {
-        updateCard(
-          "Go to Jail",
-          `Fine: ${turn.mandatory[0].fine}`,
-          {
-            text: "Pay Fine",
-            function: async () => {
-              await GamePlayAPI.payJailFine(gameId, playerId);
-              closeCard();
-              await handleTick();
-            }
-          },
-          {
-            text: "Decline",
-            function: async () => {
-              await GamePlayAPI.passOptional(gameId, playerId);
-              closeCard();
-              await handleTick();
-            }
-          }
-        );
-      }
+            // ② disable the dice button immediately
+      setIsMyTurn(false);
+      disableDice();
 
-      // … optional buy logic …
-      if (turn.optional?.type === "buyOffer") {
+      // ③ show the dice total on your chip
+      setDice(turn.dice);
+
+      // ④ animate movement
+      await new Promise(res => setTimeout(res, 1000));
+      randomDiceThrow(dice1, turn.dice);
+      await new Promise(res => setTimeout(res, 1000));
+      // assume you stored newPosition in turn.newPosition
+      findSteps(pieceRef.current, turn.newPosition);
+
+      // ⑤ if there’s an optional action, pop up the modal
+      if (turn.optional?.length) {
+        // example for buyOffer
+        const opt = turn.optional[0];
         updateCard(
-          "Buy Property",
-          `Price: ${turn.optional.price}`,
+          opt.type === "buyOffer" ? "Buy Property" : "…",
+          opt.type === "buyOffer" ? `Price: ${opt.price}` : opt.message,
           {
             text: "Yes",
             function: async () => {
-              await GamePlayAPI.buyProperty(
-                gameId,
-                playerId,
-                turn.optional.propertyId
-              );
+              if (opt.type === "buyOffer") {
+                await GamePlayAPI.buyProperty(gameId, playerId, opt.squareId);
+              } else {
+                await GamePlayAPI.payJailFine(gameId, playerId);
+              }
               closeCard();
               await handleTick();
             }
@@ -882,15 +838,26 @@ const Board = () => {
           {
             text: "No",
             function: async () => {
-              await GamePlayAPI.passOptional(gameId, playerId);
+              await GamePlayAPI.passTurn(gameId, playerId);
               closeCard();
               await handleTick();
             }
           }
         );
+      } else {
+        // ⑥ no optional → next turn
+        await GamePlayAPI.passTurn(gameId, playerId);
+        await handleTick();
       }
+
     } catch (e) {
-      console.error("Turn failed:", e);
+      // if we landed on a pending optional, e.message==='Finish your pending action first.'
+      console.error("Turn failed:", e.message);
+      if (e.message.includes("Finish your pending")) {
+        // clear and re-fetch
+        await GamePlayAPI.passTurn(gameId, playerId);
+        await handleTick();
+      }
     }
   };
 

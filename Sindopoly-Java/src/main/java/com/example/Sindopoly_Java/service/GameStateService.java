@@ -558,7 +558,13 @@ public class GameStateService {
     * Convenience: set a single field in the game hash
     * ------------------------------------------------------------------ */
     public void setGameField(int gameId, String field, String value) {
-        hashOps.put("game:" + gameId, field, value);
+        String key = GAME_PREFIX + gameId;
+        if (value == null) {
+            // delete a field when null is passed
+            hashOps.delete(key, field);
+        } else {
+            hashOps.put(key, field, value);
+        }
     }
 
     /* ------------------------------------------------------------------

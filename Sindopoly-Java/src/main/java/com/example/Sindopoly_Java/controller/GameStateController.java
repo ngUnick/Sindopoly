@@ -1,8 +1,11 @@
 package com.example.Sindopoly_Java.controller;
 
 import com.example.Sindopoly_Java.service.GameStateService;
+import com.example.Sindopoly_Java.service.PlayerStateService;
 import com.example.Sindopoly_Java.service.orchestrator.TurnService;
 import com.example.Sindopoly_Java.dto.GameCreationRequest;
+import com.example.Sindopoly_Java.model.Player;
+import com.example.Sindopoly_Java.model.dto.PlayerDetailedDto;
 import com.example.Sindopoly_Java.repository.PlayerRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 
 
@@ -23,11 +27,14 @@ import java.util.Set;
 public class GameStateController {
 
     private final GameStateService gameStateService;
+    private final PlayerStateService playerStateService;
 
     @Autowired
     private ValidationUtils validationUtils;
 
-    public GameStateController(GameStateService gameStateService) {
+    public GameStateController(GameStateService gameStateService, 
+                               PlayerStateService playerStateService) {
+        this.playerStateService = playerStateService;
         this.gameStateService = gameStateService;
     }
 
@@ -39,7 +46,7 @@ public class GameStateController {
      * Get all players in a game with detailed information
      * GET /api/game-state/players-detailed/{gameId}
      */
-    @GetMapping("/players-detailed/{gameId}")
+    @GetMapping("/players-detailed-lobby/{gameId}")
     public List<Map<String, Object>> getPlayerDetailsInGame(@PathVariable int gameId) {
         Set<String> playerIds = gameStateService.getPlayersInGame(gameId);
 
@@ -55,6 +62,51 @@ public class GameStateController {
                 return entry;
             })
             .toList();
+    }
+
+    /**
+     * Get all players in a game with detailed information
+     * GET /api/game-state/players-detailed/{gameId}
+     */
+    @GetMapping("/players-detailed/{gameId}")
+    public ResponseEntity<List<PlayerDetailedDto>> getPlayersDetailed(
+        @PathVariable int gameId) {
+
+    Set<String> ids = gameStateService.getPlayersInGame(gameId);
+
+    List<PlayerDetailedDto> dtos = ids.stream()
+        .sorted()
+        .map(pidStr -> {
+        int pid = Integer.parseInt(pidStr);
+
+        // 1) persistent info
+        String nickname = playerRepo.findById(pid)
+                                .map(Player::getName)
+                                .orElse("Unknown");
+
+        // 2) runtime state from Redis
+        Map<String, Object> state = playerStateService.getPlayerState(pid);
+
+        // safe parsing with defaults
+        int position = parseIntOrDefault(state.get("position"), 0);
+        int money    = parseIntOrDefault(state.get("money"),    0);
+        String props = (String) state.getOrDefault("properties", "[]");
+
+        return new PlayerDetailedDto(pid, nickname, position, money, props);
+        })
+        .collect(Collectors.toList());
+
+    return ResponseEntity.ok(dtos);
+    }
+
+    /** Helper to coerce Object→int or return default if missing/bad */
+    private int parseIntOrDefault(Object o, int defaultValue) {
+    if (o == null) return defaultValue;
+    try {
+        return Integer.parseInt(o.toString());
+    } catch (NumberFormatException e) {
+        return defaultValue;
+    }
     }
 
 
