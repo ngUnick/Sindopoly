@@ -26,7 +26,7 @@ CREATE TABLE card(
 
 
 CREATE TABLE square(
-    id TINYINT AUTO_INCREMENT,
+    id TINYINT NOT NULL,
     s_type ENUM('START', 'CARD', 'TAX', 'JAIL', 'GOJAIL', 'PARKING', 'TRAIN', 'UTILITY', 'BROWN', 'CYAN', 'PURPLE', 'ORANGE', 'RED', 'YELLOW', 'GREEN', 'BLUE'),
     price SMALLINT,
     rent SMALLINT,

@@ -1,11 +1,13 @@
-// src/main/java/com/example/Sindopoly_Java/dto/SquareEventDto.java
 package com.example.Sindopoly_Java.model.dto;
 
 import java.util.Optional;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 /**
  * Describes what happens (or what choice is pending) when a player lands on a square.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class SquareEventDto {
     private String type;         // e.g. "buyOffer","rentDue","card","jailOffer","tax","start",…
     private String message;      // text to display
@@ -15,11 +17,9 @@ public class SquareEventDto {
     private Integer price;       // for buyOffer
     private Integer fee;         // for jailOffer
     private String cardType;     // "money" or "transport"
-    private Optional<Object> optional;  // not used in peek, kept for symmetry
 
-    public SquareEventDto() {
-        this.optional = Optional.empty();
-    }
+
+    public SquareEventDto() {}
 
     // Full constructor
     public SquareEventDto(String type, String message, int amount,
@@ -33,7 +33,6 @@ public class SquareEventDto {
         this.price     = price;
         this.fee       = fee;
         this.cardType  = cardType;
-        this.optional  = Optional.empty();
     }
 
     // Getters & setters
@@ -45,7 +44,6 @@ public class SquareEventDto {
     public Integer getPrice()     { return price; }
     public Integer getFee()       { return fee; }
     public String getCardType()   { return cardType; }
-    public Optional<Object> getOptional() { return optional; }
 
     public void setType(String type)           { this.type      = type; }
     public void setMessage(String message)     { this.message   = message; }
@@ -55,7 +53,6 @@ public class SquareEventDto {
     public void setPrice(Integer price)        { this.price     = price; }
     public void setFee(Integer fee)            { this.fee       = fee; }
     public void setCardType(String cardType)   { this.cardType  = cardType; }
-    public void setOptional(Optional<Object> o){ this.optional  = o; }
 
     // Factory methods for peek-stage
     public static SquareEventDto justInfo(String type, String msg, int amt) {

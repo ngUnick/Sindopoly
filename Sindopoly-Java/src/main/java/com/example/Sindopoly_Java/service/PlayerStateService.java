@@ -15,12 +15,12 @@ import java.util.Map;
 public class PlayerStateService {
     private static final String PLAYER_PREFIX = "player:";
 
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final RedisTemplate<String, String> redisTemplate;
     private final HashOperations<String, String, Object> hashOps;
     private final ValidationUtils validationUtils;
 
     @Autowired
-    public PlayerStateService(RedisTemplate<String, Object> redisTemplate,
+    public PlayerStateService(RedisTemplate<String, String> redisTemplate,
                               ValidationUtils validationUtils) {
         this.redisTemplate    = redisTemplate;
         this.hashOps          = redisTemplate.opsForHash();
@@ -39,15 +39,15 @@ public class PlayerStateService {
         // (Optional) guard against re-initializing an existing player:
         // if (redisTemplate.hasKey(key)) throw new IllegalStateException("Already initialized");
 
-        Map<String, Object> init = new HashMap<>();
-        init.put("position",    0);
-        init.put("money",       1500);
-        init.put("jail",        false);
-        init.put("jailTime",    0);
-        init.put("bankrupt",    false);
-        // represent as JSON list so parsing on the Java side is predictable
-        init.put("properties",  "[]");
-        init.put("afk",         false);
+        Map<String,String> init = Map.of(
+        "position",  "0",
+        "money",     "1500",
+        "jail",      "false",
+        "jailTime",  "0",
+        "bankrupt",  "false",
+        "properties","[]",
+        "afk",       "false"
+        );
 
         // write everything atomically
         hashOps.putAll(key, init);

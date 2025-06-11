@@ -11,6 +11,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import API_BASE_URL      from "../../apis/apiConfig";
+import honeyJam from "../../assets/audio/massobeats-honey_jam.mp3";
 
 
 
@@ -39,7 +40,7 @@ const Board = () => {
   const rHeight = window.innerHeight * 0.99; // Percentage of screen that will be used by the canvas
 
   const [posInput, setposInput] = useState(0); // State to store the numeric value entered
-  const [isMyTurn, setIsMyTurn] = useState(true);
+  const [isMyTurn, setIsMyTurn] = useState(false);
   const [playersAmount, setPlayersAmount] = useState(0);
   const [player1Info, setPlayer1Info] = useState({ money: '-' });
   const [player2Info, setPlayer2Info] = useState({ money: '-' });
@@ -53,7 +54,7 @@ const Board = () => {
 
   // Audio Management --------------------------------------------------------------------------------------------------
   const [isVolumeVisible, setIsVolumeVisible] = useState(true);
-  const [audio] = useState(new Audio('src/assets/audio/massobeats-honey_jam.mp3'));
+  const [audio] = useState(() => new Audio(honeyJam));
 
 
   useEffect(() => {
@@ -72,13 +73,7 @@ const Board = () => {
 
 
   // Card Functionalities --------------------------------------------------------------------------------------------------
-  document.addEventListener("click", function (event) {
-    // Event listener for closing the card when clicked outside of it
-    const overlay = document.querySelector("#overlay");
-    if (overlay.contains(event.target)) {
-      closeCard();
-    }
-  });
+
 
   function updateCard(
     newTitle,
@@ -208,6 +203,13 @@ const Board = () => {
 
   // Example: Accessing a specific game position
   // console.log(gamePositions[0]); // debug
+
+
+  // ─── new state for our two-step turn modal ─────────────────────────
+  // holds the event data (buyOffer, rentDue, card, jailOffer…)
+  const [modalEvent, setModalEvent]    = useState(null);
+  // whether to show the modal overlay
+  const [modalVisible, setModalVisible] = useState(false);
 
   function filterAndDisplayNames() {
     console.log(gamePositions);
@@ -506,6 +508,17 @@ const Board = () => {
 
   useEffect(() => {
 
+
+      document.addEventListener("click", function (event) {
+        // Event listener for closing the card when clicked outside of it
+        const overlay = document.querySelector("#overlay");
+        if (overlay.contains(event.target)) {
+          closeCard();
+        }
+      });
+
+
+
     // Board Creation --------------------------------------------------------------------------------------------------------
     const scene = new THREE.Scene(); // Create a Three.js scene
     sceneRef.current = scene;
@@ -756,6 +769,14 @@ const Board = () => {
       return;
     }
 
+    
+    if (gameId == null) {
+      console.error("Board.jsx: missing or invalid gameId");
+      return;
+    }
+    handleTick();
+    
+    
     const id = setInterval(handleTick, 1000);
     return () => clearInterval(id);
   }, [gameId, playerId, navigate]);
@@ -793,7 +814,7 @@ const Board = () => {
 
     try {
       // 1️⃣ roll & move
-      const turn = await GamePlayAPI.playThrow(gameId, playerId);
+      const turn = await GamePlayAPI.playTurn(gameId, playerId);
       const { dice, newPosition, event } = turn;
 
       // disable UI & show dice
@@ -810,7 +831,7 @@ const Board = () => {
         setModalVisible(true);
       } else {
         // auto‐pass decision
-        await GamePlayAPI.playAction(gameId, playerId, "ok", null);
+        await GamePlayAPI.playAction(gameId, playerId, "ok");
         await handleTick();
         setIsMyTurn(true);
       }
@@ -836,7 +857,7 @@ const Board = () => {
     else if (type === "payJail" && choice === false) action = "pass";
 
     // call API
-    await GamePlayAPI.playAction(gameId, playerId, action, squareId);
+    await GamePlayAPI.playAction(gameId, playerId, action);
     setModalVisible(false);
     setModalEvent(null);
 

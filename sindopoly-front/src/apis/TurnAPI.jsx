@@ -6,12 +6,13 @@ import API_BASE_URL from "./apiConfig";
  *  - doAction:  apply the buy/pass/ok, returns ActionResultDto
  */
 export const TurnAPI = {
-  /** Step 1: roll dice and move: POST /api/turn/:gameId/:playerId/throw */
+  /** Step 1: roll dice and move: POST /api/turn/:gameId/:playerId */
   throwDice: async (gameId, playerId) => {
     const res = await fetch(
-      `${API_BASE_URL}/api/turn/${gameId}/${playerId}/throw`,
+      `${API_BASE_URL}/api/turn/${gameId}/${playerId}`,
       { method: "POST" }
     );
+
     const body = await res.json();
     if (!res.ok) {
       throw new Error(body.error || "Throw dice failed");
