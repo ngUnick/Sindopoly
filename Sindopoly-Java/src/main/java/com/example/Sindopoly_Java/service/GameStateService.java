@@ -69,7 +69,7 @@ public class GameStateService {
     /* DTO kept in Redis as JSON – used by SquareActionService,        */
     /* TurnService and the controllers to verify/complete decisions.   */
     /* =============================================================== */
-    private static record OptionalAction(
+    public static record OptionalAction(
             String  type,        // "buyOffer", "payJail", … (add more later)
             int     playerId,    // who must answer
             Integer squareId,    // property offered (nullable)
@@ -149,6 +149,7 @@ public class GameStateService {
      *  - initialize each player’s Redis state hash
      */
     public void startGame(int gameId, int actorId) {
+        System.out.printf(">>> startGame called: gameId=%d, actorId=%d%n", gameId, actorId);
         // only the owner may start
         if (gameId != actorId) {
             throw new IllegalStateException("Only the owner can start the game.");

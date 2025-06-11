@@ -8,31 +8,27 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * (buy / pass / ok).
  */
 public class ActionRequestDto {
-    @JsonProperty("gameId")
-    private int gameId;
-    @JsonProperty("playerId")
-    private int playerId;
-    @JsonProperty("action")
-    private String action;       // "buy", "pass", "ok"
-    @JsonProperty("squareId")
-    private Integer squareId;    // only set for buy; null otherwise
+    private int  gameId;
+    private int  playerId;
+    private int  squareType;  // from ThrowResultDto
+    private boolean yes;      // true = “Yes/OK”, false = “No”
 
     public ActionRequestDto() {}
 
-    public ActionRequestDto(int gameId, int playerId, String action, Integer squareId) {
+    public ActionRequestDto(int gameId, int playerId, int squareType, boolean yes) {
         this.gameId   = gameId;
         this.playerId = playerId;
-        this.action   = action;
-        this.squareId = squareId;
+        this.squareType = squareType;
+        this.yes   = yes;
     }
 
     public int getGameId()       { return gameId; }
     public int getPlayerId()     { return playerId; }
-    public String getAction()    { return action; }
-    public Integer getSquareId() { return squareId; }
+    public int getSquareType()     { return squareType; }
+    public boolean getYes()    { return yes; }
 
     public void setGameId(int gameId)         { this.gameId   = gameId; }
     public void setPlayerId(int playerId)     { this.playerId = playerId; }
-    public void setAction(String action)      { this.action   = action; }
-    public void setSquareId(Integer squareId) { this.squareId = squareId; }
+    public void setSquareType(int squareType)     { this.squareType = squareType; }
+    public void setYes(boolean yes)      { this.yes   = yes; }
 }

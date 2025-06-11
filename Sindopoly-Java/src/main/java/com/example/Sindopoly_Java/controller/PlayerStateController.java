@@ -96,31 +96,4 @@ public class PlayerStateController {
         playerStateService.deletePlayer(playerId);
         return "Player state deleted successfully.";
     }
-
-       /** 
-     * POST /api/player-state/{gameId}/{playerId}/action
-     * Body: { "gameId":.., "playerId":.., "action":"buy", "squareId":12 }
-     */
-    @PostMapping("/{gameId}/{playerId}/action")
-    public ResponseEntity<ActionResultDto> doAction(
-        @PathVariable   int gameId,
-        @PathVariable   int playerId,
-        @RequestBody    ActionRequestDto req
-    ) {
-        // sanity: path vars must match body
-        if (req.getGameId()!=gameId || req.getPlayerId()!=playerId) {
-            throw new IllegalArgumentException("Payload path mismatch");
-        }
-
-        // validate any pending optional action exists
-        var game = gameStateSvc.getGame(gameId);
-        validationUtils.validatePlayerExists(playerId);
-        gameStateSvc.assertOptionalAction(gameId, playerId, req.getAction(),
-                                         req.getSquareId());
-
-        // delegate to TurnService
-        ActionResultDto result = turnSvc.handleAction(req);
-
-        return ResponseEntity.ok(result);
-    }
 }

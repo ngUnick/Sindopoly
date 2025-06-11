@@ -4,7 +4,10 @@ import com.example.Sindopoly_Java.model.Card;
 import com.example.Sindopoly_Java.model.Square;
 import com.example.Sindopoly_Java.model.Square.SquareType;
 import com.example.Sindopoly_Java.repository.SquareRepository;
+import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -20,6 +23,10 @@ public class SquareActionService {
     private final CardService           cardSvc;
     private final ValidationUtils       validationUtils;
     private final HashOperations<String,String,String> hashOps;
+
+    
+    @Autowired
+    private GameStateService gameStateService; 
 
     public SquareActionService(
         SquareRepository repo,
@@ -144,50 +151,28 @@ public class SquareActionService {
     // ───────────────────────────────────────────────────────────────
     // 2) APPLY STAGE: client chose an action, now mutate state
     // ───────────────────────────────────────────────────────────────
-    public ApplyResultDto applySquareEvent(
-        int playerId,
-        SquareEventDto event,
-        String action  // "buy", "pass", "ok"
-    ) {
-        switch (event.getType()) {
-            case "tax":
-                writeMoney(playerId, event.getAmount());
-                return new ApplyResultDto(readMoney(playerId), List.of(), "Paid tax");
+    // public ApplyResultDto applySquareEvent(
+    //     int playerId,
+    //     boolean yes
+    // ) {
+    //     switch (opt.getType()) {
+    //         case "buyOffer":
+    //             if (yes) {
+    //             // buy logic
+    //             buyProperty(playerId, opt.getSquareId(), opt.getPrice());
+    //             }
+    //             // if no, we simply skip buying
+    //             break;
 
-            case "start":
-            case "parking":
-                return new ApplyResultDto(readMoney(playerId), List.of(), event.getMessage());
+    //         default:
+    //             // for rent/tax/cards/goToJail/parking etc. yes==true means “OK” so apply it:
+    //             applyAutomatic(opt);
+    //             break;
+    //         }
 
-            case "card":
-                return applyCardEvent(playerId, event);
-
-            case "jailOffer":
-                if ("buy".equals(action)) {
-                    payJailFee(playerId, event.getFee());
-                    return new ApplyResultDto(readMoney(playerId), List.of(), "Paid jail €" + event.getFee());
-                } else {
-                    // maybe let them stay? or skip turn?
-                    return new ApplyResultDto(readMoney(playerId), List.of(), "Stayed in Jail");
-                }
-
-            case "buyOffer":
-                if ("buy".equals(action)) {
-                    buyProperty(playerId, event.getSquareId(), event.getPrice());
-                    return new ApplyResultDto(readMoney(playerId),
-                         List.of(event.getSquareId()), "Bought property");
-                } else {
-                    return new ApplyResultDto(readMoney(playerId), List.of(), "Declined purchase");
-                }
-
-            case "rentDue":
-                writeMoney(playerId, readMoney(playerId) - event.getAmount());
-                writeMoney(Integer.parseInt(event.getOwnerId()), readMoney(Integer.parseInt(event.getOwnerId())) + event.getAmount());
-                return new ApplyResultDto(readMoney(playerId), List.of(), "Paid rent €" + event.getAmount());
-
-            default:
-                throw new IllegalArgumentException("Unknown event type: " + event.getType());
-        }
-    }
+    //         // clear the pending in Redis
+    //         clearOptionalAction(gameId);
+    // }
 
     private ApplyResultDto applyCardEvent(int playerId, SquareEventDto event) {
         // mirror your old applyCard(): money-amount or movement.
@@ -235,5 +220,65 @@ public class SquareActionService {
         writeMoney(pid, m - fee);
         hashOps.put("player:" + pid, "jail", "false");
     }
+
+     /** for buyOffer: squareId is the board position of the property */
+    public void completeOptionalBuy(int gameId, int playerId, int squareId) {
+        Square sq = squareRepo.findById(squareId)
+                    .orElseThrow(() -> new IllegalArgumentException("Invalid square"));
+        int price = Optional.ofNullable(sq.getPrice()).orElse(0);
+        int bal   = readMoney(playerId);
+        if (bal < price) throw new IllegalStateException("Insufficient funds");
+        writeMoney(playerId, bal - price);
+        hashOps.put("square:" + squareId, "owner", String.valueOf(playerId));
+    }
+
+    /** for jailOffer: fee extracted from ev.getFee() */
+    public void completeOptionalJail(int gameId, int playerId, int fee) {
+        int bal = readMoney(playerId);
+        if (bal < fee) throw new IllegalStateException("Insufficient funds");
+        writeMoney(playerId, bal - fee);
+        // send to jail square 10
+        hashOps.putAll("player:" + playerId, Map.of(
+          "position", "10",
+          "jail",     "true",
+          "jailTime", "3"
+        ));
+    }
+
+    /** applies all other automatic effects based on ev.getType() and ev.getAmount() */
+    public void applyAutomatic(SquareEventDto ev, int playerId, int gameId) {
+        switch (ev.getType()) {
+          case "rentDue" -> {
+            int rent = ev.getAmount();
+            writeMoney(playerId, readMoney(playerId) - rent);
+            int owner = Integer.parseInt(ev.getOwnerId());
+            writeMoney(owner, readMoney(owner) + rent);
+          }
+          case "money" -> writeMoney(playerId, readMoney(playerId) + ev.getAmount());
+          case "transport" ->
+            hashOps.put("player:" + playerId,
+                        "position",
+                        String.valueOf(ev.getAmount()));
+          case "tax" -> writeMoney(playerId, readMoney(playerId) - ev.getAmount());
+          case "goToJail" -> {
+            hashOps.putAll("player:" + playerId, Map.of(
+              "position", "10",
+              "jail",     "true",
+              "jailTime", "3"
+            ));
+          }
+          // parking, jail (no-op), own property, etc.
+          default -> {}
+        }
+    }
+
+  // helper to move someone to jail
+  private void sendPlayerToJail(int pid) {
+    hashOps.putAll("player:" + pid, Map.of(
+      "position", "10",
+      "jail",     "true",
+      "jailTime", "3"
+    ));
+  }
 
 }

@@ -4,12 +4,14 @@ import com.example.Sindopoly_Java.model.dto.ActionRequestDto;
 import com.example.Sindopoly_Java.model.dto.ActionResultDto;
 import com.example.Sindopoly_Java.model.dto.ApplyResultDto;
 import com.example.Sindopoly_Java.model.dto.SquareEventDto;
+import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.PlayerStateService;
 import com.example.Sindopoly_Java.service.core.*;
 import com.example.Sindopoly_Java.service.core.MovementService.MovementResult;
 import com.example.Sindopoly_Java.model.dto.SquareEventDto;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -40,7 +42,7 @@ public class TurnService {
     /**
      * Main entry: roll dice, move pawn, apply tile logic, handle optional events and rotate turn.
      */
-    public TurnResponse playTurn(int gameId, int playerId) {
+    public ThrowResultDto throwDice(int gameId, int playerId) {
         // 0. Guard rails
         validationUtils.validatePlayerExists(playerId);
         Map<String,String> game = gameStateSvc.getGame(gameId);
@@ -52,6 +54,8 @@ public class TurnService {
             throw new IllegalStateException("Finish your pending action first.");
         }
 
+        System.out.println("0");
+
         // Clear AFK
         var pstate = playerStateSvc.getPlayerState(playerId);
         pstate.put("afk", "false");
@@ -62,80 +66,219 @@ public class TurnService {
         boolean inJail  = Boolean.parseBoolean(pstate.get("jail").toString());
         int jailTime    = asInt(pstate.get("jailTime"));
 
+        System.out.println("0.0");
+
         // 1. Early bankruptcy
         if (bankSvc.isBankrupt(money)) {
             handleFullBankruptcy(gameId, playerId, pstate);
             rotateTurn(gameId);
-            return createResponse(
-                gameId,
-                0, pos, money, false, inJail, true,
-                "Bankrupt", true, Collections.emptyList()
-            );
+            System.out.println("1");
+            return new ThrowResultDto(
+                0,
+                -1,
+                false,
+                -2,
+                -1
+                );
         }
 
         // 2. Jail logic
         if (inJail) {
             if (jailTime > 1) {
-                pstate.put("jailTime", jailTime - 1);
+                jailTime -= 1;
+                pstate.put("jailTime", jailTime);
                 playerStateSvc.savePlayerState(playerId, pstate);
                 rotateTurn(gameId);
-                return createResponse(
-                    gameId,
-                    0, pos, money, false, true, false,
-                    "Stayed in jail", true, Collections.emptyList()
+                System.out.println("2");
+                return new ThrowResultDto(
+                0,
+                -1,
+                false,
+                -1,
+                jailTime
                 );
             }
             // Release from jail
             pstate.put("jail", false);
-            pstate.put("jailTime", 0);
+            pstate.put("jailTime", jailTime);
         }
 
-        // 3. Roll dice and move
+        
+        // 3. roll & move
         var dm = performDiceMove(gameId, playerId, pos);
         int dice = dm.dice();
         MovementResult mv = dm.movement();
-
         pos = mv.newPosition();
-        if (mv.passedGo()) {
-            money += 200;
-        }
+        if (mv.passedGo()) money += 200;
+
         pstate.put("position", String.valueOf(pos));
         pstate.put("money",    String.valueOf(money));
         playerStateSvc.savePlayerState(playerId, pstate);
 
-        // 4. Square effects (peek stage)
-        SquareEventDto tile = squareActionSvc.peekSquare(playerId, pos, gameId);
+        System.out.println("3");
 
-        // 5. Post-move bankruptcy
-        if (bankSvc.isBankrupt(money)) {
-            handleFullBankruptcy(gameId, playerId, pstate);
-            rotateTurn(gameId);
-            return createResponse(
-                gameId,
-                dice, pos, money, mv.passedGo(), false, true,
-                "Bankrupt", true, Collections.emptyList()
-            );
+        // 4. peek the square for any optional follow-up
+        SquareEventDto ev = squareActionSvc.peekSquare(playerId, pos, gameId);
+        // 4a) always persist the event for the next step
+        try {
+            String json = mapper.writeValueAsString(ev);
+            gameStateSvc.setGameField(gameId, K_OPTIONAL, json);
+            // you don’t need a deadline for informational tiles if you don’t auto-skip
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Cannot serialize next‐step event", e);
         }
 
-        // 6. Optional follow-up?
-        if (tile.getOptional().isPresent()) {
-            Object raw = tile.getOptional();
-            storeOptionalAction(gameId, raw);
-            return createResponse(
-                gameId,
-                dice, pos, money, mv.passedGo(), false, false,
-                tile.getMessage(), false, List.of(raw)
-            );
+        System.out.println("4");
+
+        // 5. map ev.getType() → (squareType, data)
+        int squareType, data;
+        switch (ev.getType()) {
+        case "transport" -> {
+            squareType = 1;
+            data       = ev.getAmount();            // new board index
+        }
+        case "money" -> {
+            squareType = 2;
+            data       = (int) ev.getAmount();     // card gives/takes money
+        }
+        case "buyOffer" -> {
+            squareType = 5;
+            data       = ev.getPrice();            // purchase price
+        }
+        case "rentDue" -> {
+            squareType = 3;
+            data       = ev.getAmount();           // rent owed
+        }
+        case "tax" -> {
+            squareType = 6;
+            data       = ev.getAmount();           // tax amount
+        }
+        case "goToJail" -> {
+            squareType = 7;
+            data       = -1;
+        }
+        case "jail" -> {
+            squareType = 8;
+            data       = -1;
+        }
+        case "parking" -> {
+            squareType = 9;
+            data       = -1;
+        }
+        default -> {
+            // includes “own” or any informational tile
+            squareType = 4;   // treat as “own property” / no-op
+            data       = -1;
+        }
         }
 
-        // 7. Normal end-of-turn
-        finishAndRotate(gameId, game);
-        return createResponse(
-            gameId,
-            dice, pos, money, mv.passedGo(), false, false,
-            tile.getMessage(), true, Collections.emptyList()
+        System.out.println("5");
+
+        // 6. return our slim DTO
+        return new ThrowResultDto(
+        dice,
+        pos,
+        mv.passedGo(),
+        squareType,
+        data
         );
     }
+
+
+
+
+
+    /** STEP 2: consume the event stored by throwDice and finish turn */
+    public ActionResultDto applyAction(ActionRequestDto req) {
+        int gameId   = req.getGameId();
+        int playerId = req.getPlayerId();
+        boolean yes  = req.getYes();
+
+        // 1) fetch & deserialize the full SquareEventDto
+        String raw = gameStateSvc.getGame(gameId).get(K_OPTIONAL);
+        if (raw == null) throw new IllegalStateException("No pending action");
+
+        // **DEBUG**: dump it out so we can inspect
+        System.out.println("🔔 Pending event JSON: " + raw);
+
+        SquareEventDto ev;
+        try {
+            ev = mapper.readValue(raw, SquareEventDto.class);
+        } catch (JsonProcessingException e) {
+            String msg = e.getOriginalMessage() != null
+                ? e.getOriginalMessage()
+                : e.getMessage();
+            throw new IllegalStateException("Bad pending event: " + msg, e);
+        }
+
+        // 2) dispatch on ev.getType()
+        switch (ev.getType()) {
+        case "buyOffer":
+            if (yes) {
+            squareActionSvc.completeOptionalBuy(
+                gameId,
+                playerId,
+                ev.getSquareId()  // squareId is just the board position
+            );
+            }
+            break;
+
+        case "jailOffer":
+            if (yes) {
+            squareActionSvc.completeOptionalJail(
+                gameId,
+                playerId,
+                ev.getFee()       // fee from the jailOffer
+            );
+            }
+            break;
+
+        default:
+            if (yes) {
+            squareActionSvc.applyAutomatic(
+                ev,              // full DTO (contains type, amount, ownerId, etc.)
+                playerId,
+                gameId
+            );
+            }
+            break;
+        }
+
+        // 3) clear + rotate + broadcast
+        gameStateSvc.clearOptionalAction(gameId);
+        rotateTurn(gameId);
+        broker.convertAndSend(
+        "/topic/game/" + gameId,
+        Map.of("event","actionCompleted",
+                "next", gameStateSvc.getGame(gameId).get("playerTurn"))
+        );
+
+        // 4) build response
+        int next       = Integer.parseInt(gameStateSvc.getGame(gameId).get("playerTurn"));
+        Map<String,Object> p = playerStateSvc.getPlayerState(playerId);
+        int newBalance = Integer.parseInt(p.get("money").toString());
+        return new ActionResultDto(newBalance, List.of(), next);
+    }
+
+
+
+
+
+
+
+
+
+
+    private static record OptionalAction(
+        String type,        // e.g. "buyOffer","payJail",…
+        int    playerId,
+        Integer squareId,   // nullable
+        Integer price,      // nullable (for buyOffer)
+        Integer fee         // nullable (for payJail)
+    ) {}
+
+
+
 
     /**
      * Called by external schedulers or controllers to abort the current
@@ -161,45 +304,45 @@ public class TurnService {
     * Applies the client’s “buy” / “pass” / “ok” action for a pending optional,
     * clears it, rotates the turn, and returns the new state.
     */
-    public ActionResultDto handleAction(ActionRequestDto req) {
-        // 1) sanity: path params match body
-        if (req.getGameId() != req.getGameId() || req.getPlayerId() != req.getPlayerId()) {
-            throw new IllegalArgumentException("Mismatched request");
-        }
+    // public ActionResultDto handleAction(ActionRequestDto req) {
+    //     // 1) sanity: path params match body
+    //     if (req.getGameId() != req.getGameId() || req.getPlayerId() != req.getPlayerId()) {
+    //         throw new IllegalArgumentException("Mismatched request");
+    //     }
 
-        // 2) deserialize and apply
-        String raw = gameStateSvc.getGame(req.getGameId()).get(K_OPTIONAL);
-        if (raw == null) throw new IllegalStateException("No pending action");
-        SquareEventDto event;
-        try {
-            event = mapper.readValue(raw, SquareEventDto.class);
-        } catch (Exception e) {
-            throw new IllegalStateException("Bad optional payload", e);
-        }
+    //     // 2) deserialize and apply
+    //     String raw = gameStateSvc.getGame(req.getGameId()).get(K_OPTIONAL);
+    //     if (raw == null) throw new IllegalStateException("No pending action");
+    //     SquareEventDto event;
+    //     try {
+    //         event = mapper.readValue(raw, SquareEventDto.class);
+    //     } catch (Exception e) {
+    //         throw new IllegalStateException("Bad optional payload", e);
+    //     }
 
-        // 3) apply business logic
-        ApplyResultDto ar = squareActionSvc.applySquareEvent(
-            req.getPlayerId(),
-            event,
-            req.getAction()
-        );
+    //     // 3) apply business logic
+    //     ApplyResultDto ar = squareActionSvc.applySquareEvent(
+    //         req.getPlayerId(),
+    //         event,
+    //         req.getAction()
+    //     );
 
-        // 4) clear optional + rotate
-        gameStateSvc.setGameField(req.getGameId(), K_OPTIONAL, null);
-        rotateTurn(req.getGameId());
+    //     // 4) clear optional + rotate
+    //     gameStateSvc.setGameField(req.getGameId(), K_OPTIONAL, null);
+    //     rotateTurn(req.getGameId());
 
-        // 5) broadcast
-        broker.convertAndSend(
-            "/topic/game/" + req.getGameId(),
-            Map.of("event", "actionCompleted")
-        );
+    //     // 5) broadcast
+    //     broker.convertAndSend(
+    //         "/topic/game/" + req.getGameId(),
+    //         Map.of("event", "actionCompleted")
+    //     );
 
-        // 6) build result DTO
-        int next = Integer.parseInt(
-            gameStateSvc.getGame(req.getGameId()).get("playerTurn")
-        );
-        return new ActionResultDto(ar.getNewBalance(), ar.getAcquiredProperties(), next);
-    }
+    //     // 6) build result DTO
+    //     int next = Integer.parseInt(
+    //         gameStateSvc.getGame(req.getGameId()).get("playerTurn")
+    //     );
+    //     return new ActionResultDto(ar.getNewBalance(), ar.getAcquiredProperties(), next);
+    // }
 
 
     //────────────────────────────────────────────────
@@ -286,8 +429,17 @@ public class TurnService {
     }
 
     private int asInt(Object o) {
-        return Integer.parseInt(o.toString());
+    if (o == null) return 0;
+    String raw = o == null ? "null" : o.toString();
+    System.out.println("🔍 asInt raw value: [" + raw + "]");
+    String s = o.toString().trim();
+    // remove wrapping JSON quotes if present
+    if (s.length() >= 2 && s.startsWith("\"") && s.endsWith("\"")) {
+        s = s.substring(1, s.length()-1);
     }
+    return Integer.parseInt(s);
+    }
+
 
     /** Response DTO */
     public record TurnResponse(
