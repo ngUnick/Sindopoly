@@ -6,6 +6,8 @@ import com.example.Sindopoly_Java.model.Square.SquareType;
 import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.HashOperations;
@@ -16,6 +18,10 @@ import java.util.*;
 import com.example.Sindopoly_Java.model.dto.SquareEventDto;
 import com.example.Sindopoly_Java.model.dto.ApplyResultDto;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 @Service
 public class SquareActionService {
 
@@ -23,6 +29,7 @@ public class SquareActionService {
     private final CardService           cardSvc;
     private final ValidationUtils       validationUtils;
     private final HashOperations<String,String,String> hashOps;
+    private final ObjectMapper mapper;
 
     
     @Autowired
@@ -32,12 +39,14 @@ public class SquareActionService {
         SquareRepository repo,
         RedisTemplate<String,String> redis,
         CardService cardSvc,
-        ValidationUtils v
+        ValidationUtils v,
+        ObjectMapper mapper
     ) {
         this.squareRepo      = repo;
         this.cardSvc         = cardSvc;
         this.validationUtils = v;
         this.hashOps         = redis.opsForHash();
+        this.mapper        = mapper;
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -77,8 +86,8 @@ public class SquareActionService {
     }
 
     private SquareEventDto peekProperty(int playerId, Square sq, int gameId) {
-        String skey = "square:" + sq.getId();
-        String owner = hashOps.get(skey, "owner");
+        Integer ownerId = findOwner(gameId, sq.getId());
+        String owner = ownerId == null ? null : String.valueOf(ownerId);   
 
         if (owner == null) {
             int price = Optional.ofNullable(sq.getPrice()).orElse(0);
@@ -108,11 +117,11 @@ public class SquareActionService {
         }
         // railroads/trains
         else if (sq.getType() == SquareType.TRAIN) {
-            return rentForTrainsOwned(owner);
+            return rentForTrainsOwned(gameId, owner);
         }
         // color properties: base rent, doubled if full set
         else {
-            return maybeDoubleForFullSet(sq, owner);
+            return maybeDoubleForFullSet(gameId, sq, owner);
         }
     }
 
@@ -127,10 +136,10 @@ public class SquareActionService {
             && owner.equals(hashOps.get("square:28","owner"));
     }
 
-    private int rentForTrainsOwned(String owner) {
+    private int rentForTrainsOwned(Integer gameId, String owner) {
         int n = 0;
         for (int id : List.of(5, 15, 25, 35))
-            if (owner.equals(hashOps.get("square:" + id, "owner"))) n++;
+            if (owner.equals(findOwner(gameId, id).toString())) n++;
         return switch (n) {
         case 1 -> 25;
         case 2 -> 50;
@@ -139,10 +148,10 @@ public class SquareActionService {
         };
     }
 
-    private int maybeDoubleForFullSet(Square sq, String owner) {
+    private int maybeDoubleForFullSet(Integer gameId, Square sq, String owner) {
         List<Integer> ids = squareRepo.findIdsByColour(sq.getType());
         boolean full = ids.stream()
-            .allMatch(id -> owner.equals(hashOps.get("square:" + id, "owner")));
+            .allMatch(id -> owner.equals(findOwner(gameId, id).toString()));
         int base = sq.getRent() == null ? 0 : sq.getRent();
         return full ? base * 2 : base;
     }
@@ -189,16 +198,16 @@ public class SquareActionService {
     /**
      * Deducts the purchase price from the player and sets ownership in Redis.
      */
-    private void buyProperty(int playerId, int squareId, int price) {
-        int balance = readMoney(playerId);
-        if (balance < price) {
-            throw new IllegalStateException("Not enough funds to buy square " + squareId);
-        }
-        // deduct money
-        writeMoney(playerId, balance - price);
-        // set the owner of the square in Redis
-        hashOps.put("square:" + squareId, "owner", String.valueOf(playerId));
-    }
+    // private void buyProperty(int playerId, int squareId, int price) {
+    //     int balance = readMoney(playerId);
+    //     if (balance < price) {
+    //         throw new IllegalStateException("Not enough funds to buy square " + squareId);
+    //     }
+    //     // deduct money
+    //     writeMoney(playerId, balance - price);
+    //     // set the owner of the square in Redis
+    //     hashOps.put("square:" + squareId, "owner", String.valueOf(playerId));
+    // }
 
 
     // ───────────────────────────────────────────────────────────────
@@ -223,13 +232,35 @@ public class SquareActionService {
 
      /** for buyOffer: squareId is the board position of the property */
     public void completeOptionalBuy(int gameId, int playerId, int squareId) {
+        // 1) Deduct money & set square owner
         Square sq = squareRepo.findById(squareId)
-                    .orElseThrow(() -> new IllegalArgumentException("Invalid square"));
+                    .orElseThrow(() -> new IllegalArgumentException("Bad square id: " + squareId));
         int price = Optional.ofNullable(sq.getPrice()).orElse(0);
-        int bal   = readMoney(playerId);
+
+        int bal = Integer.parseInt(hashOps.get("player:" + playerId, "money"));
         if (bal < price) throw new IllegalStateException("Insufficient funds");
-        writeMoney(playerId, bal - price);
-        hashOps.put("square:" + squareId, "owner", String.valueOf(playerId));
+        hashOps.put("player:" + playerId, "money", String.valueOf(bal - price));
+
+        // 2) Append to the player’s properties list
+        String propsJson = hashOps.get("player:" + playerId, "properties");
+        List<Integer> props;
+        try {
+            props = mapper.readValue(
+                propsJson == null ? "[]" : propsJson,
+                new TypeReference<List<Integer>>(){}
+            );
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Malformed properties JSON", e);
+        }
+        if (!props.contains(squareId)) {
+            props.add(squareId);
+        }
+        try {
+            String updated = mapper.writeValueAsString(props);
+            hashOps.put("player:" + playerId, "properties", updated);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Cannot serialize properties list", e);
+        }
     }
 
     /** for jailOffer: fee extracted from ev.getFee() */
@@ -280,5 +311,30 @@ public class SquareActionService {
       "jailTime", "3"
     ));
   }
+
+    // 1) helper to fetch and parse a player's properties
+    private List<Integer> fetchProperties(int playerId) {
+        String json = hashOps.get("player:" + playerId, "properties");
+        try {
+            return mapper.readValue(
+                json == null ? "[]" : json,
+                new TypeReference<List<Integer>>() {}
+            );
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Bad properties JSON for player " + playerId, e);
+        }
+    }
+
+    // 2) helper to find the owner by scanning all players in the game
+    private Integer findOwner(int gameId, int squareId) {
+        Set<String> pids = gameStateService.getPlayersInGame(gameId);
+        for (String pidStr : pids) {
+            int pid = Integer.parseInt(pidStr);
+            if (fetchProperties(pid).contains(squareId)) {
+                return pid;
+            }
+        }
+        return null;
+    }
 
 }
