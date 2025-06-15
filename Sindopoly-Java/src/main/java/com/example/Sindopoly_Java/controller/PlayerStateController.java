@@ -96,4 +96,18 @@ public class PlayerStateController {
         playerStateService.deletePlayer(playerId);
         return "Player state deleted successfully.";
     }
+
+        /**
+     * Create a new Player
+     * POST /api/player-state/create
+     * Body: JSON like { "nickname": "Player1" }
+     */
+    @PostMapping("/grant-money/{playerId}/{amount}")
+    public ResponseEntity<Integer> grantPlayerMoney(@PathVariable int playerId, @PathVariable int  amount) {
+        validationUtils.validatePlayerExists(playerId);
+        playerStateService.grantMoney(playerId, amount);
+        return ResponseEntity.ok(playerId); // return player ID
+        
+    }
+        
 }

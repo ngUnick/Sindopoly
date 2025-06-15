@@ -298,6 +298,19 @@ public class TurnService {
         "/topic/game/" + gameId,
         Map.of("event","turnFinished")
         );
+
+        // 4) Now check for end-of-game and, if so, broadcast it
+        if (gameStateSvc.checkEndCondition(gameId)) {
+        // assume your gameHash has written the winner into "winner"
+        String winnerId = gameStateSvc.getGame(gameId).get("winner");
+        broker.convertAndSend(
+            "/topic/game/" + gameId,
+            Map.of(
+            "event",  "gameOver",
+            "winner", winnerId
+            )
+        );
+    }
     }
 
     /**

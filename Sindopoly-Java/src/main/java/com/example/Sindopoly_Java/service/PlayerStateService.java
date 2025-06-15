@@ -115,4 +115,14 @@ public class PlayerStateService {
         p.put("jailTime", 0);
         savePlayerState(playerId, p);
     }
+
+    /**
+     * Adds the given amount to the player's balance.
+     */
+    public void grantMoney(int playerId, int amount) {
+        String key = PLAYER_PREFIX + playerId;
+        String moneyStr = (String) redisTemplate.opsForHash().get(key, "money");
+        int current = moneyStr == null ? 0 : Integer.parseInt(moneyStr);
+        redisTemplate.opsForHash().put(key, "money", String.valueOf(current + amount));
+    }
 }
