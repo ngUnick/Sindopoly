@@ -31,7 +31,7 @@ export default function Statistics() {
             nickname: p.nickname,
             totalWins: p.totalWins,
             totalGames: p.totalGames,
-            winRate: (p.winRate * 100).toFixed(2) + " %",
+            winRate: (p.winRate).toFixed(2) + " %",
           }))
         );
 

@@ -45,7 +45,7 @@ export const GameAPI = {
   // ✅ Join Public Game
   joinGame: async (gameId) => {
     const playerId = parseInt(localStorage.getItem("player_id"));
-    const response = await fetch(`${API_BASE_URL}/api/game-state/${gameId}/add-player?playerId=${playerId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/game-state/add/${gameId}/${playerId}`, {
       method: "POST",
     });
 

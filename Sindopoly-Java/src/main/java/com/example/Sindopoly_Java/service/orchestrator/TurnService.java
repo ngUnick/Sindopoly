@@ -54,135 +54,121 @@ public class TurnService {
             throw new IllegalStateException("Finish your pending action first.");
         }
 
-        System.out.println("0");
-
         // Clear AFK
         var pstate = playerStateSvc.getPlayerState(playerId);
         pstate.put("afk", "false");
         playerStateSvc.savePlayerState(playerId, pstate);
 
-        int money     = asInt(pstate.get("money"));
-        int pos       = asInt(pstate.get("position"));
-        boolean inJail  = Boolean.parseBoolean(pstate.get("jail").toString());
-        int jailTime    = asInt(pstate.get("jailTime"));
-
-        System.out.println("0.0");
+        int money    = asInt(pstate.get("money"));
+        int pos      = asInt(pstate.get("position"));
+        boolean inJail = Boolean.parseBoolean(pstate.get("jail").toString());
+        int jailTime   = asInt(pstate.get("jailTime"));
 
         // 1. Early bankruptcy
         if (bankSvc.isBankrupt(money)) {
             handleFullBankruptcy(gameId, playerId, pstate);
             rotateTurn(gameId);
-            System.out.println("1");
-            return new ThrowResultDto(
-                0,
-                -1,
-                false,
-                -2,
-                -1
-                );
+            return new ThrowResultDto(0, -1, false, -2, -1);
         }
 
         // 2. Jail logic
         if (inJail) {
             if (jailTime > 1) {
-                jailTime -= 1;
+                jailTime--;
                 pstate.put("jailTime", jailTime);
                 playerStateSvc.savePlayerState(playerId, pstate);
                 rotateTurn(gameId);
-                System.out.println("2");
-                return new ThrowResultDto(
-                0,
-                -1,
-                false,
-                -1,
-                jailTime
-                );
+                return new ThrowResultDto(0, -1, false, -1, jailTime);
             }
             // Release from jail
-            pstate.put("jail", false);
-            pstate.put("jailTime", jailTime);
+            pstate.put("jail", "false");
+            pstate.put("jailTime", String.valueOf(jailTime));
         }
 
-        
-        // 3. roll & move
+        // 3. Roll & compute move (in‐memory, not yet saved)
         var dm = performDiceMove(gameId, playerId, pos);
         int dice = dm.dice();
         MovementResult mv = dm.movement();
         pos = mv.newPosition();
-        if (mv.passedGo()) money += 200;
+        if (mv.passedGo()) {
+            money += 200;
+        }
 
+        // 4. Peek the square for any optional follow-up
+        SquareEventDto ev = squareActionSvc.peekSquare(playerId, pos, gameId);
+
+        // 4a. Serialize optional event, but guard against errors
+        String optionalJson = null;
+        try {
+            optionalJson = mapper.writeValueAsString(ev);
+        } catch (JsonProcessingException e) {
+            // Log and continue; we don't want to abort the entire turn
+            System.err.printf(
+                "Warning: could not serialize optional event for game %d player %d: %s%n",
+                gameId, playerId, e.getMessage()
+            );
+        }
+
+        // 5. Commit state and optional payload in one go
         pstate.put("position", String.valueOf(pos));
         pstate.put("money",    String.valueOf(money));
         playerStateSvc.savePlayerState(playerId, pstate);
-
-        System.out.println("3");
-
-        // 4. peek the square for any optional follow-up
-        SquareEventDto ev = squareActionSvc.peekSquare(playerId, pos, gameId);
-        // 4a) always persist the event for the next step
-        try {
-            String json = mapper.writeValueAsString(ev);
-            gameStateSvc.setGameField(gameId, K_OPTIONAL, json);
-            // you don’t need a deadline for informational tiles if you don’t auto-skip
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Cannot serialize next‐step event", e);
+        if (optionalJson != null) {
+            gameStateSvc.setGameField(gameId, K_OPTIONAL, optionalJson);
         }
 
-        System.out.println("4");
-
-        // 5. map ev.getType() → (squareType, data)
+        // 6. Map ev.getType() → (squareType, data)
         int squareType, data;
         switch (ev.getType()) {
-        case "transport" -> {
-            squareType = 1;
-            data       = ev.getAmount();            // new board index
-        }
-        case "money" -> {
-            squareType = 2;
-            data       = (int) ev.getAmount();     // card gives/takes money
-        }
-        case "buyOffer" -> {
-            squareType = 5;
-            data       = ev.getPrice();            // purchase price
-        }
-        case "rentDue" -> {
-            squareType = 3;
-            data       = ev.getAmount();           // rent owed
-        }
-        case "tax" -> {
-            squareType = 6;
-            data       = ev.getAmount();           // tax amount
-        }
-        case "goToJail" -> {
-            squareType = 7;
-            data       = -1;
-        }
-        case "jail" -> {
-            squareType = 8;
-            data       = -1;
-        }
-        case "parking" -> {
-            squareType = 9;
-            data       = -1;
-        }
-        default -> {
-            // includes “own” or any informational tile
-            squareType = 4;   // treat as “own property” / no-op
-            data       = -1;
-        }
+            case "transport" -> {
+                squareType = 1;
+                data       = ev.getAmount();
+            }
+            case "money" -> {
+                squareType = 2;
+                data       = (int) ev.getAmount();
+            }
+            case "buyOffer" -> {
+                squareType = 5;
+                data       = ev.getPrice();
+            }
+            case "rentDue" -> {
+                squareType = 3;
+                data       = ev.getAmount();
+            }
+            case "tax" -> {
+                squareType = 6;
+                data       = ev.getAmount();
+            }
+            case "goToJail" -> {
+                squareType = 7;
+                data       = -1;
+            }
+            case "jail" -> {
+                squareType = 8;
+                data       = -1;
+            }
+            case "parking" -> {
+                squareType = 9;
+                data       = -1;
+            }
+            default -> {
+                // includes “own” or any informational tile
+                squareType = 4;
+                data       = -1;
+            }
         }
 
-        System.out.println("5");
-
-        // 6. return our slim DTO
+        // 7. Return DTO
         return new ThrowResultDto(
-        dice,
-        pos,
-        mv.passedGo(),
-        squareType,
-        data
+            dice,
+            pos,
+            mv.passedGo(),
+            squareType,
+            data
         );
     }
+
 
 
 

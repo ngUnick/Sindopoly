@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,34 +71,26 @@ public class GameStateController {
      */
     @GetMapping("/players-detailed/{gameId}")
     public ResponseEntity<List<PlayerDetailedDto>> getPlayersDetailed(
-        @PathVariable int gameId) {
+        @PathVariable int gameId
+    ) {
+        // 1) getPlayersInGame now returns a LinkedHashSet in join-order
+        Set<String> ids = gameStateService.getPlayersInGame(gameId);
 
-    Set<String> ids = gameStateService.getPlayersInGame(gameId);
-
-    List<PlayerDetailedDto> dtos = ids.stream()
-        .sorted()
-        .map(pidStr -> {
-        int pid = Integer.parseInt(pidStr);
-
-        // 1) persistent info
-        String nickname = playerRepo.findById(pid)
+        List<PlayerDetailedDto> dtos = new ArrayList<>();
+        for (String pidStr : ids) {
+            int pid = Integer.parseInt(pidStr);
+            String nickname = playerRepo.findById(pid)
                                 .map(Player::getName)
                                 .orElse("Unknown");
-
-        // 2) runtime state from Redis
-        Map<String, Object> state = playerStateService.getPlayerState(pid);
-
-        // safe parsing with defaults
-        int position = parseIntOrDefault(state.get("position"), 0);
-        int money    = parseIntOrDefault(state.get("money"),    0);
-        String props = (String) state.getOrDefault("properties", "[]");
-
-        return new PlayerDetailedDto(pid, nickname, position, money, props);
-        })
-        .collect(Collectors.toList());
-
-    return ResponseEntity.ok(dtos);
+            Map<String,Object> state = playerStateService.getPlayerState(pid);
+            int position = parseIntOrDefault(state.get("position"), 0);
+            int money    = parseIntOrDefault(state.get("money"),    0);
+            String props = (String) state.getOrDefault("properties","[]");
+            dtos.add(new PlayerDetailedDto(pid, nickname, position, money, props));
+        }
+        return ResponseEntity.ok(dtos);
     }
+
 
     /** Helper to coerce Object→int or return default if missing/bad */
     private int parseIntOrDefault(Object o, int defaultValue) {
