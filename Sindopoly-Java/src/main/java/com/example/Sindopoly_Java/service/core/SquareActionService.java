@@ -281,7 +281,7 @@ public class SquareActionService {
         switch (ev.getType()) {
           case "rentDue" -> {
             int rent = ev.getAmount();
-            writeMoney(playerId, readMoney(playerId) - rent);
+            writeMoney(playerId, readMoney(playerId) + rent);
             int owner = Integer.parseInt(ev.getOwnerId());
             writeMoney(owner, readMoney(owner) + rent);
           }

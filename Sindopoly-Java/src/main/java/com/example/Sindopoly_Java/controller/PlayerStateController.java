@@ -97,9 +97,9 @@ public class PlayerStateController {
         return "Player state deleted successfully.";
     }
 
-        /**
-     * Create a new Player
-     * POST /api/player-state/create
+    /**
+     * Grant a Player Money
+     * POST /api/player-state/grant-money/{playerId}/{amount}
      * Body: JSON like { "nickname": "Player1" }
      */
     @PostMapping("/grant-money/{playerId}/{amount}")

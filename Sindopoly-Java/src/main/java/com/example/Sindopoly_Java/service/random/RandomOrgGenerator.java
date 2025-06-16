@@ -13,7 +13,7 @@ import java.security.SecureRandom;
 import java.util.List;
 
 @Component("randomOrgRng")
-@ConditionalOnProperty(name = "dice.source", havingValue = "randomorg")
+@ConditionalOnProperty(name = "dice.source", havingValue = "randomorg", matchIfMissing  = true)
 public class RandomOrgGenerator implements RandomIntGenerator {
 
     private final ListOperations<String, String> listOps;

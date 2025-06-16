@@ -10,6 +10,7 @@ import com.example.Sindopoly_Java.utils.ValidationUtils;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class PlayerStateService {
@@ -78,12 +79,24 @@ public class PlayerStateService {
 
     /**
      * Save arbitrary updates to a player state hash.
+     * All values are converted to String to satisfy Redis’s StringRedisSerializer.
      */
     public void savePlayerState(int playerId, Map<String, Object> playerData) {
         validationUtils.validatePlayerExists(playerId);
         String playerKey = PLAYER_PREFIX + playerId;
-        hashOps.putAll(playerKey, playerData);
+
+        // Coerce every value to String
+        Map<String, String> stringData = playerData.entrySet().stream()
+            .collect(Collectors.toMap(
+                Map.Entry::getKey,
+                e -> e.getValue() == null
+                        ? ""                         // or null-safe default
+                        : e.getValue().toString()
+            ));
+
+        hashOps.putAll(playerKey, stringData);
     }
+
 
     /**
      * Fetch the full Redis hash of a player.

@@ -1,24 +1,23 @@
-FROM node:17-alpine as build
-WORKDIR /usr/app
-COPY . /usr/app
+# ─── Stage 1: build the React app ─────────────────────────────────
+FROM node:18-alpine AS builder
+WORKDIR /app
+
+# 1) Copy only lockfile & manifest → install deps (cacheable)
+COPY package.json package-lock.json ./
 RUN npm ci
-CMD ["npm", "run", "dev", "--", "--host"]
-# RUN npm run build
 
-# # Use the official Nginx image as the base image
-# FROM nginx:latest
+# 2) Copy app sources → build
+COPY . ./
+RUN npm run build
 
-# # Remove the default Nginx configuration file
-# RUN rm /etc/nginx/conf.d/default.conf
+# ─── Stage 2: serve with Nginx ────────────────────────────────────
+FROM nginx:stable-alpine
+# remove default site
+RUN rm /etc/nginx/conf.d/default.conf
+# copy your custom nginx.conf (if you have one) or just serve /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d
+# copy built assets into nginx’s web root
+COPY --from=builder /app/dist/ /usr/share/nginx/html
 
-# # Copy your custom Nginx configuration
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# # Copy your React app build files to the Nginx document root
-# COPY --from=build /usr/app/dist /usr/share/nginx/html
-
-# # Expose port 80
-# EXPOSE 80
-
-# # Start Nginx when the container starts
-# CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

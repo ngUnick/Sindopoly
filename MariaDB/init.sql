@@ -1,3 +1,79 @@
+
+-- This file is used to initialize the database for the game.
+
+
+
+-- TABLES -----------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS player(
+    id INT AUTO_INCREMENT,
+    p_name VARCHAR(255),
+
+    -- will see later if this is needed, depending on if I add a login system
+    -- email VARCHAR(255),
+
+    -- store the timestamp when a player is created, in order to delete them after 1 day
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+
+CREATE TABLE IF NOT EXISTS card(
+    id SMALLINT AUTO_INCREMENT,
+    title VARCHAR(200),
+    description VARCHAR(1000),
+    type ENUM('money','transport'),
+    amount FLOAT, -- if 'money' then amount is the money (negative if the player has to pay), if 'transport' then amount is the position
+    PRIMARY KEY (id)
+);
+
+
+CREATE TABLE IF NOT EXISTS square(
+    id TINYINT NOT NULL,
+    s_type ENUM('START', 'CARD', 'TAX', 'JAIL', 'GOJAIL', 'PARKING', 'TRAIN', 'UTILITY', 'BROWN', 'CYAN', 'PURPLE', 'ORANGE', 'RED', 'YELLOW', 'GREEN', 'BLUE'),
+    price SMALLINT,
+    rent SMALLINT,
+
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS stats(
+    id INT AUTO_INCREMENT,
+    player INT,
+    total_wins INT DEFAULT 0,
+    total_losses INT DEFAULT 0,
+    total_games INT DEFAULT 0,
+    total_money INT DEFAULT 0,
+    total_time_played INT DEFAULT 0,
+    PRIMARY KEY (id),
+    FOREIGN KEY (player) REFERENCES player(id)
+);
+
+
+
+
+-- FUNCTIONS -----------------------------------------------------------------------
+
+DELIMITER //
+
+CREATE TRIGGER trg_player_after_insert
+AFTER INSERT ON player
+FOR EACH ROW
+BEGIN
+    INSERT INTO stats
+        (player, total_wins, total_losses, total_games, total_money, total_time_played)
+    VALUES
+        (NEW.id, 0, 0, 0, 0, 0);
+END //
+
+DELIMITER ;
+
+
+
+
+-- INITIALIZATION DATA -----------------------------------------------------------------------
+
+
 -- ── Seed three players for testing ───────────────────────────
 INSERT INTO player (p_name) VALUES ('Bob'), ('Alice');
 
@@ -7,9 +83,9 @@ INSERT INTO stats (player, total_wins, total_losses, total_games,
                    total_money, total_time_played)
 VALUES
   -- Player #1  (all counters start at zero)
-  (1, 0, 0, 0, 0, 0),
+  (1, 10, 2, 12, 55000, 215),
   -- Player #2  (also zeroed)
-  (2, 0, 0, 0, 0, 0);
+  (2, 5, 0, 5, 25000, 80);
 
 -- ── Initialize Squares ───────────────────────────────────────
 INSERT INTO square(id, s_type, price, rent) VALUES
