@@ -47,28 +47,28 @@ export const GamePlayAPI = {
 
   /****** TWO-STEP TURN ******/
 
-  /** Step 1: roll & peek */
-  playTurn: async (gameId, playerId) => {
-    const r = await TurnAPI.throwDice(gameId, playerId);
-    if (!r) throw new Error("Roll failed");
-    return r;
-  },
+  // /** Step 1: roll & peek */
+  // playTurn: async (gameId, playerId) => {
+  //   const r = await TurnAPI.throwDice(gameId, playerId);
+  //   if (!r) throw new Error("Roll failed");
+  //   return r;
+  // },
 
-  /** Step 2: apply the modal decision */
-  playAction: async (gameId, playerId, action, squareId = null) => {
-    const r = await TurnAPI.doAction(gameId, playerId, action, squareId);
-    if (!r) throw new Error("Action failed");
-    return r;
-  },
+  // /** Step 2: apply the modal decision */
+  // playAction: async (gameId, playerId, action, squareId = null) => {
+  //   const r = await TurnAPI.doAction(gameId, playerId, action, squareId);
+  //   if (!r) throw new Error("Action failed");
+  //   return r;
+  // },
 
-  /****** legacy, you can delete these once React is updated ******/
-  playTurn: async (gameId, playerId) => {
-    const data = await TurnAPI.throwDice(gameId, playerId);
-    return data;
-  },
-  passOptional: async (gameId, playerId) => {
-    return await TurnAPI.doAction(gameId, playerId, "pass", null);
-  },
+  // /****** legacy, you can delete these once React is updated ******/
+  // playTurn: async (gameId, playerId) => {
+  //   const data = await TurnAPI.throwDice(gameId, playerId);
+  //   return data;
+  // },
+  // passOptional: async (gameId, playerId) => {
+  //   return await TurnAPI.doAction(gameId, playerId, "pass", null);
+  // },
 
   /****** other APIs unchanged ******/
   getInGameStatus: async playerId => {

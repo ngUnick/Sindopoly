@@ -1,28 +1,29 @@
 import API_BASE_URL from "./apiConfig";
 
 /**
- * Low-level wrappers around the two new turn endpoints:
- *  - throwDice: roll & move, returns ThrowResultDto
- *  - doAction:  apply the buy/pass/ok, returns ActionResultDto
+ * Low-level wrappers around your two turn endpoints:
+ *  • POST /api/turn/:gameId/:playerId/throw
+ *  • POST /api/turn/:gameId/:playerId/action
  */
 export const TurnAPI = {
-  /** Step 1: roll dice and move: POST /api/turn/:gameId/:playerId */
+  /** STEP 1: roll dice & peek → POST /throw */
   throwDice: async (gameId, playerId) => {
     const res = await fetch(
-      `${API_BASE_URL}/api/turn/${gameId}/${playerId}`,
+      `${API_BASE_URL}/api/turn/${gameId}/${playerId}/throw`,
       { method: "POST" }
     );
-
     const body = await res.json();
     if (!res.ok) {
       throw new Error(body.error || "Throw dice failed");
     }
-    return body;  // { dice, newPosition, event }
+    // body should be your ThrowResultDto:
+    // { dice, newPosition, passedGo, squareType, data }
+    return body;
   },
 
-  /** Step 2: apply decision: POST /api/turn/:gameId/:playerId/action */
-  doAction: async (gameId, playerId, action, squareId = null) => {
-    const payload = { gameId, playerId, action, squareId };
+  /** STEP 2: apply buy/ok → POST /action */
+  doAction: async (gameId, playerId, yes) => {
+    const payload = { gameId, playerId, yes };
     const res = await fetch(
       `${API_BASE_URL}/api/turn/${gameId}/${playerId}/action`,
       {
@@ -35,6 +36,8 @@ export const TurnAPI = {
     if (!res.ok) {
       throw new Error(body.error || "Action failed");
     }
-    return body;  // { newBalance, acquiredProperties, nextPlayerId }
+    // body should be your ActionResultDto:
+    // { newBalance, acquiredProperties, nextPlayerId }
+    return body;
   },
 };

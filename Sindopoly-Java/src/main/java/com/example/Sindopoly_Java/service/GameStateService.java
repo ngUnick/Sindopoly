@@ -520,9 +520,22 @@ public class GameStateService {
     // This method is called when the game ends
     // It deletes the game and all players from Redis
     public void deleteGameAndPlayers(int gameId) {
-        String gameKey = "game:" + gameId;
+        String gameKey    = "game:" + gameId;
+        String playersKey = gameKey + ":players";
+
+        // 1) fetch the list of player IDs
+        Set<String> playerIds = redisTemplate.opsForSet().members(playersKey);
+
+        // 2) delete the game-level keys
         redisTemplate.delete(gameKey);
-        redisTemplate.delete(gameKey + ":players");
+        redisTemplate.delete(playersKey);
+
+        // 3) delete each player:<pid> hash
+        if (playerIds != null) {
+            for (String pid : playerIds) {
+                redisTemplate.delete("player:" + pid);
+            }
+        }
     }
     
 
@@ -536,23 +549,37 @@ public class GameStateService {
         String gameKey = "game:" + gameId;
         Set<String> playerIds = setOps.members(gameKey + ":players");
         if (playerIds == null || playerIds.isEmpty()) return;
-    
+
+        // 1) mark ended + winner
         hashOps.put(gameKey, "status", "ended");
-    
         String winner = determineGameWinner(gameId);
         hashOps.put(gameKey, "winner", winner);
-    
+
+        // 2) finalize per-player stats
         String startTimeStr = hashOps.get(gameKey, "startTime");
         Instant now = Instant.now();
-        Instant startTime = startTimeStr != null ? Instant.parse(startTimeStr) : now;
+        Instant startTime = startTimeStr != null
+            ? Instant.parse(startTimeStr)
+            : now;
         int sessionSeconds = (int) Duration.between(startTime, now).getSeconds();
-    
         for (String pid : playerIds) {
-            int money = Integer.parseInt((String) redisTemplate.opsForHash().get("player:" + pid, "money"));
-            finalizePlayerStats(Integer.parseInt(pid), pid.equals(winner), money, sessionSeconds);
+            int money = Integer.parseInt(
+                (String) redisTemplate.opsForHash().get("player:" + pid, "money")
+            );
+            finalizePlayerStats(
+                Integer.parseInt(pid),
+                pid.equals(winner),
+                money,
+                sessionSeconds
+            );
+
+            // 2a) expire the individual player hash after 30s
+            redisTemplate.expire("player:" + pid, 30, TimeUnit.SECONDS);
         }
-    
-        deleteGameAndPlayers(gameId);
+
+        // 3) instead of immediate delete, set a TTL so you have time to notify clients
+        redisTemplate.expire(gameKey,            30, TimeUnit.SECONDS);
+        redisTemplate.expire(gameKey + ":players", 30, TimeUnit.SECONDS);
     }
     
     /* ------------------------------------------------------------------

@@ -37,6 +37,12 @@ const Lobby = () => {
       const players = await resPlayers.json();
       const game = await resGame.json();
 
+       // 🚀 if someone (the owner) already started → go to board
+      if (game.status === "inProgress") {
+        navigate(`/Game?game=${gameId}&player=${playerId}`, { replace: true });
+        return;  // skip the rest
+      }
+
       setPlayers(players);
 
       // ✅ Store invite code if private
@@ -84,30 +90,27 @@ const Lobby = () => {
       <div className="fixed w-full h-full shadow-[0_0_80px_rgba(255,255,255,0.7)_inset] left-0 top-0" />
 
       <div className="bg-[rgba(255,236,195,0.8)] py-[30px] px-10 backdrop-blur-sm border-solid border-[rgba(255,255,255,0.6)] rounded-md w-[600px]">
-        <h1 className="text-center text-xl font-bold mb-6">Game Lobby</h1>
+        <h1 className="text-center text-xl font-bold mb-6" style={{ fontSize: '30px' }}>Game Lobby</h1>
 
-        <p className="text-center mb-4">
-          Waiting for players to join... <br />
-          Visibility: <strong>{visibility}</strong>
+        <p className="text-center mb-4" style={{ fontSize: '20px' }}>
+          Visibility: <strong style={{ color: visibility === 'private' ? 'orange' : 'green', textTransform: "capitalize" }}>{visibility}</strong>
         </p>
 
         {visibility === 'private' && inviteCode && (
-          <p className="text-center mb-4 text-sm text-gray-700">
-            Invite Code: <strong>{inviteCode}</strong>
+          <p className="text-center mb-4 text-sm text-gray-700" style={{ fontSize: '20px' }}>
+            Invite Code: <strong style={{ textDecoration: 'underline' }}>{inviteCode}</strong>
           </p>
         )}
 
-        <p className="text-center mb-6">
-          You are playing as <strong>{nickname}</strong> {isOwner && '(Owner)'}
-        </p>
+        
 
         <div className="mb-6">
-          <h2 className="text-center text-lg font-medium mb-2">Players:</h2>
-          <ul className="list-disc list-inside text-center">
+          <h2 className="text-center text-lg font-medium mb-2" style={{ fontSize: '20px' }}>Players:</h2>
+          <ul className="list-disc list-inside text-center" style={{ fontSize: '20px' }}>
             {players.map(p => (
               <div key={p.id} className="text-center font-medium flex items-center justify-center gap-2">
-                <span>
-                  {p.nickname ?? `Player #${p.id}`} {p.id == playerId && "(You)"} {p.id == gameId && "(Owner)"}
+                <span style={{ fontWeight: p.id == playerId ? '700' : '' }}>
+                  {p.nickname ?? `Player #${p.id}`} {p.id == playerId && "(You)"} {p.id == gameId && "(Owner 👑)"}
                 </span>
                 {isOwner && p.id != playerId && (
                   <button
@@ -122,6 +125,10 @@ const Lobby = () => {
             ))}
           </ul>
         </div>
+
+        <p className="text-center mb-4">
+          Waiting for players to join... <br />
+        </p>
 
         <div className="flex justify-center gap-3">
           <Button type="primary" disabled={!isOwner} onClick={handleStartGame}>Start Game</Button>
