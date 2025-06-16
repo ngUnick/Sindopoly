@@ -93,7 +93,7 @@ const Lobby = () => {
         <h1 className="text-center text-xl font-bold mb-6" style={{ fontSize: '30px' }}>Game Lobby</h1>
 
         <p className="text-center mb-4" style={{ fontSize: '20px' }}>
-          Visibility: <strong style={{ color: visibility === 'private' ? 'orange' : 'green', textTransform: "capitalize" }}>{visibility}</strong>
+          Visibility: <strong style={{ color: visibility === 'private' ? 'darkred' : 'darkgreen', textTransform: "capitalize" }}>{visibility}</strong>
         </p>
 
         {visibility === 'private' && inviteCode && (

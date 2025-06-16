@@ -13,11 +13,14 @@ public class DiceSourceConfig {
 
     @Bean
     public RandomIntGenerator randomIntGenerator(
-            @Qualifier("secureRng") RandomIntGenerator secureRng,
-            @Qualifier("randomOrgRng") RandomIntGenerator randomOrgRng,
-            @Value("${dice.source:secure}") String source
+        @Qualifier("secureRng") RandomIntGenerator secureRng,
+        @Qualifier("randomOrgRng") RandomIntGenerator randomOrgRng,
+        @Value("${dice.source:secure}") String source
     ) {
-        return source.equalsIgnoreCase("randomorg") ? randomOrgRng : secureRng;
+        // if user explicitly chose "secure", use secure; otherwise—even on missing property—use randomOrg
+        return source.equalsIgnoreCase("secure")
+            ? secureRng
+            : randomOrgRng;
     }
 }
 

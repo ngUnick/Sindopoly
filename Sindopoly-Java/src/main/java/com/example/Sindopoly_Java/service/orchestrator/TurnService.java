@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -59,8 +60,8 @@ public class TurnService {
         pstate.put("afk", "false");
         playerStateSvc.savePlayerState(playerId, pstate);
 
-        int money    = asInt(pstate.get("money"));
-        int pos      = asInt(pstate.get("position"));
+        int money      = asInt(pstate.get("money"));
+        int pos        = asInt(pstate.get("position"));
         boolean inJail = Boolean.parseBoolean(pstate.get("jail").toString());
         int jailTime   = asInt(pstate.get("jailTime"));
 
@@ -87,10 +88,11 @@ public class TurnService {
 
         // 3. Roll & compute move (in‐memory, not yet saved)
         var dm = performDiceMove(gameId, playerId, pos);
-        int dice = dm.dice();
-        MovementResult mv = dm.movement();
-        pos = mv.newPosition();
-        if (mv.passedGo()) {
+        int dice             = dm.dice();
+        MovementResult mv    = dm.movement();
+        pos                  = mv.newPosition();
+        boolean passedGo     = mv.passedGo();
+        if (passedGo) {
             money += 200;
         }
 
@@ -102,7 +104,6 @@ public class TurnService {
         try {
             optionalJson = mapper.writeValueAsString(ev);
         } catch (JsonProcessingException e) {
-            // Log and continue; we don't want to abort the entire turn
             System.err.printf(
                 "Warning: could not serialize optional event for game %d player %d: %s%n",
                 gameId, playerId, e.getMessage()
@@ -152,8 +153,11 @@ public class TurnService {
                 squareType = 9;
                 data       = -1;
             }
+            case "card" -> {
+                squareType  = 4;
+                data        = -1;
+            }
             default -> {
-                // includes “own” or any informational tile
                 squareType = 4;
                 data       = -1;
             }
@@ -163,7 +167,7 @@ public class TurnService {
         return new ThrowResultDto(
             dice,
             pos,
-            mv.passedGo(),
+            passedGo,
             squareType,
             data
         );

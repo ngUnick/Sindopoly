@@ -223,22 +223,22 @@ const Board = () => {
   const [gamePositions, setGamePositions] = useState([
     { position: 0, type: "start", player: null, name: null },
     { position: 1, type: "property", player: null, name: "ΓΥΜΝΑΣΤΗΡΙΟ" },
-    { position: 2, type: "card", player: null, name: null },
+    { position: 2, type: "card", player: null, name: "ΚΑΡΤΑ ΑΠΟΦΑΣΗΣ" },
     { position: 3, type: "property", player: null, name: "ΒΙΒΛΙΟΘΗΚΗ" },
-    { position: 4, type: "card", player: null, name: null },
+    { position: 4, type: "", player: null, name: "ΕΝΟΙΚΙΟ" },
     { position: 5, type: "property", player: null, name: "ΚΙΟΣΚΙ Σ.Ε.Υ.Π." },
     { position: 6, type: "property", player: null, name: "ΣΤΑΣΗ ΔΙΠΑΕ" },
-    { position: 7, type: "card", player: null, name: null },
+    { position: 7, type: "card", player: null, name: "ΚΑΡΤΑ ΕΝΤΟΛΗΣ" },
     { position: 8, type: "property", player: null, name: "ΣΤΑΣΗ ΙΘΑΚΗ" },
     { position: 9, type: "property", player: null, name: "ΣΤΑΣΗ ΤΕΡΜΑΤΙΚΟΥ" },
-    { position: 10, type: "jail", player: null, name: null },
+    { position: 10, type: "jail", player: null, name: "ΦΥΛΑΚΗ" },
     { position: 11, type: "property", player: null, name: "ΣΠΛΑΣ" },
     { position: 12, type: "card", player: null, name: "ΚΥΛΙΚΕΙΟ" },
     { position: 13, type: "property", player: null, name: "ΠΟΔΗΛΑΤΟ" },
     { position: 14, type: "property", player: null, name: "ΜΙΚΕΛ" },
     { position: 15, type: "property", player: null, name: "ΚΙΟΣΚΙ ΔΙΟΙΚΗΣΗΣ" },
     { position: 16, type: "property", player: null, name: "ΒΙΒΛΙΟΘΗΚΟΝΟΜΙΑΣ" },
-    { position: 17, type: "card", player: null, name: null },
+    { position: 17, type: "card", player: null, name: "ΚΑΡΤΑ ΑΠΟΦΑΣΗΣ" },
     { position: 18, type: "property", player: null, name: "ΠΡΟΣΧΟΛΙΚΩΝ" },
     {
       position: 19,
@@ -246,9 +246,9 @@ const Board = () => {
       player: null,
       name: "ΤΕΧΝΟΛΟΓΙΑΣ ΤΡΟΦΙΜΩΝ",
     },
-    { position: 20, type: "parking", player: null, name: null },
+    { position: 20, type: "parking", player: null, name: "ΝΑΥΤΙΛΟΣ" },
     { position: 21, type: "property", player: null, name: "ΠΕΡΙΒΑΛΛΟΝΤΟΣ" },
-    { position: 22, type: "card", player: null, name: null },
+    { position: 22, type: "card", player: null, name: "ΚΑΡΤΑ ΕΝΤΟΛΗΣ" },
     { position: 23, type: "property", player: null, name: "ΓΕΩΠΟΝΙΑΣ" },
     {
       position: 24,
@@ -261,10 +261,10 @@ const Board = () => {
     { position: 27, type: "property", player: null, name: "ΝΟΣΗΛΕΥΤΙΚΗΣ" },
     { position: 28, type: "property", player: null, name: "ΛΕΣΧΗ" },
     { position: 29, type: "property", player: null, name: "ΒΙΟΪΑΤΡΙΚΩΝ" },
-    { position: 30, type: "goToJail", player: null, name: null },
+    { position: 30, type: "goToJail", player: null, name: "ΠΑΝΕ ΣΤΗ ΦΥΛΑΚΗ" },
     { position: 31, type: "property", player: null, name: "ΤΟΥΡΙΣΜΟΥ" },
     { position: 32, type: "property", player: null, name: "ΔΙΟΙΚΗΣΗΣ" },
-    { position: 33, type: "card", player: null, name: null },
+    { position: 33, type: "card", player: null, name: "ΚΑΡΤΑ ΑΠΟΦΑΣΗΣ" },
     { position: 34, type: "property", player: null, name: "ΛΟΓΙΣΤΙΚΗΣ" },
     {
       position: 35,
@@ -272,9 +272,9 @@ const Board = () => {
       player: null,
       name: "ΚΙΟΣΚΙ ΠΛΗΡΟΦΟΡΙΚΗΣ",
     },
-    { position: 36, type: "card", player: null, name: null },
+    { position: 36, type: "card", player: null, name: "ΚΑΡΤΑ ΕΝΤΟΛΗΣ" },
     { position: 37, type: "property", player: null, name: "ΠΛΗΡΟΦΟΡΙΚΗΣ" },
-    { position: 38, type: "card", player: null, name: null },
+    { position: 38, type: "card", player: null, name: "ΕΞΟΔΑ ΓΙΑ ΨΩΝΙΑ" },
     { position: 39, type: "property", player: null, name: "ΗΛΕΚΤΡΟΝΙΚΗΣ" },
   ]);
 
@@ -992,7 +992,14 @@ const Board = () => {
     try {
       // 1️⃣ roll & move
       const tr = await TurnAPI.throwDice(gameId, playerId);
-      const { dice, newPosition, passedGo, squareType, data } = tr;
+      const {
+        dice,
+        newPosition,
+        passedGo,
+        squareType,
+        data,
+        cardMessage     // ← new field
+      } = tr;
 
       // disable UI & show dice
       setIsMyTurn(false);
@@ -1004,7 +1011,7 @@ const Board = () => {
       console.log("💥 raw throwDice()", tr);
 
       // 2️⃣ always show modal with the raw result
-      setTurnResult(tr);
+      setTurnResult({ ...tr, cardMessage }); // ensure we pass it through
       setModalVisible(true);
       // your modal will read squareType/data to show Yes/No or just OK
 
@@ -1046,9 +1053,11 @@ const Board = () => {
 
     switch (squareType) {
       case 1: // transport
+        if (cardMessage) return cardMessage
         return `Μεταφέρθηκες στο τετράγωνο #${sqName}.`;
 
       case 2: // money card
+        if (cardMessage) return cardMessage
         return data >= 0
           ? `Έλαβες €${data}!`
           : `Πλήρωσε €${-data}.`;
@@ -1147,7 +1156,7 @@ const Board = () => {
 
       {/* Modal Overlay & Card */}
       {modalVisible && turnResult && (
-        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50  max-w-25">
           <div className="bg-[rgba(255,236,195,0.8)] backdrop-blur-sm border border-white/60 rounded-md p-6 shadow-lg">
             <h2 className="text-xl font-semibold mb-4">
               {getModalMessage()}
