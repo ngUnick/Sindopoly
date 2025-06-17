@@ -2,6 +2,7 @@ import { Button, message } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useState, useMemo } from 'react';
 import { GameAPI } from '../../apis/GameAPI';
+import bgImg from "../../assets/images/monopoly_bg.png";
 
 const Lobby = () => {
   const navigate = useNavigate();
@@ -86,7 +87,7 @@ const Lobby = () => {
   }, []);
 
   return (
-    <div className="flex-grow flex justify-center items-center bg-pic bg-cover bg-no-repeat">
+    <div className="flex-grow flex justify-center items-center bg-cover bg-no-repeat" style={{ backgroundImage: `url(${bgImg})` }}>
       <div className="fixed w-full h-full shadow-[0_0_80px_rgba(255,255,255,0.7)_inset] left-0 top-0" />
 
       <div className="bg-[rgba(255,236,195,0.8)] py-[30px] px-10 backdrop-blur-sm border-solid border-[rgba(255,255,255,0.6)] rounded-md w-[600px]">

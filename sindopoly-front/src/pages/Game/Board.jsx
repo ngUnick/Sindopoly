@@ -13,6 +13,8 @@ import {
 import { useSearchParams, useNavigate } from "react-router-dom";
 import API_BASE_URL      from "../../apis/apiConfig";
 import honeyJam from "../../assets/audio/massobeats-honey_jam.mp3";
+import boardGLB from "../../assets/models/board.glb?url";  // ⬅ forces asset handling
+import moneyImg from "../../assets/images/monopoly_money.png";
 
 
 
@@ -749,7 +751,7 @@ const Board = () => {
 
     // Load the GLB file
     loader.load(
-      "src/assets/models/board.glb", // Replace 'path_to_your_board_model.glb' with the actual path
+      boardGLB,
       (gltf) => {
         const board = gltf.scene.clone();
 
@@ -1109,7 +1111,7 @@ const Board = () => {
               ${idx === turnIdx ? "animated-box" : ""}`}
           >
             <img
-              src="src/assets/images/monopoly_money.png"
+              src={moneyImg}
               alt={`${p.nickname}'s money`}
               style={{ width: "25px", height: "25px", marginRight: "10px" }}
             />

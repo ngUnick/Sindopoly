@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTrophy } from "@fortawesome/free-solid-svg-icons";
 import { Button } from "antd";
 import { GamePlayAPI } from "../../apis/GamePlayAPI";
+import bgImg from "../../assets/images/monopoly_bg.png";
 
 const EndGame = () => {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ const EndGame = () => {
   }, [gameId, playerId]);
 
   return (
-    <div className="flex-grow flex justify-center items-center bg-pic bg-cover bg-no-repeat">
+    <div className="flex-grow flex justify-center items-center bg-cover bg-no-repeat" style={{ backgroundImage: `url(${bgImg})` }}>
       {/* Vignette */}
       <div className="fixed w-full h-full shadow-[0_0_80px_rgba(255,255,255,0.7)_inset]" />
 
