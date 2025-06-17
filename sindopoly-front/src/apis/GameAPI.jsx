@@ -1,124 +1,108 @@
-import { GetEndpoint } from "./apiConfig";
-
+import API_BASE_URL from "./apiConfig";
 
 export const GameAPI = {
-    getAll : async () => {
-        var myHeaders = new Headers();
+  // ✅ Create Game
+  createGame: async (visibility) => {
+    const payload = {
+      ownerId: parseInt(localStorage.getItem("player_id")),
+      visibility
+    };
 
-        const requestOptions = {
-            method: 'GET',
-            redirect: 'follow',
-            headers: myHeaders
-        };
+    const response = await fetch(`${API_BASE_URL}/api/game-state/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-        let endPoint = `api/game.php`;
-        const apiUrl = GetEndpoint() + endPoint;
-        const apiUrlWithFilters = apiUrl;
-        
-        const response = await fetch(apiUrlWithFilters, requestOptions);
-        if(response.ok)
-            return await response.json();
-        throw new Error(response);
-        
-    },
-    createGame : async (maxTime, maxMoney, bot) => {
-        var myHeaders = new Headers();
-        myHeaders.append("Content-Type", "application/json");
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Create game failed: ${errText}`);
+    }
 
-        var raw = JSON.stringify({
-            "playerCreator": localStorage.getItem('player_id'),
-            "maxTime": maxTime,
-            "maxMoney": maxMoney,
-            "bot" : bot,
-        });
+    return await response.json();
+  },
 
-        const requestOptions = {
-            method: 'POST',
-            redirect: 'follow',
-            headers: myHeaders,
-            body: raw,
-        };
+  // ✅ Start Game
+  startGame: async (gameId, playerId) => {
+    const res = await fetch(
+      `${API_BASE_URL}/api/game-state/${gameId}/start?playerId=${playerId}`,
+      { method: "POST" }
+    );
 
-        let endPoint = `api/game.php`;
-        const apiUrl = GetEndpoint() + endPoint;
-        const apiUrlWithFilters = apiUrl;
-        
-        const response = await fetch(apiUrlWithFilters, requestOptions);
-        // console.log('response', response);
-        if(response.ok)
-            return await response.json();
-        throw new Error(response);
-        
-    },
-    getGameInfo : async (game_id) => {
-        var myHeaders = new Headers();
+    if (!res.ok) throw new Error(await res.text() || "Failed to start");
+    return await res.json();          // → { status:"inProgress", gameId: 9 }
+  },
 
-        const requestOptions = {
-            method: 'GET',
-            redirect: 'follow',
-            headers: myHeaders
-        };
 
-        let endPoint = `api/game.php/${game_id}`;
-        const apiUrl = GetEndpoint() + endPoint;
-        const apiUrlWithFilters = apiUrl;
-        
-        const response = await fetch(apiUrlWithFilters, requestOptions);
-        if(response.ok)
-            return await response.json();
-        throw new Error(response);
-        
-    },
-    startGame : async (game_id) => {
-        var myHeaders = new Headers();
-        myHeaders.append("Content-Type", "application/json");
 
-        var raw = JSON.stringify({
-            "player_id": localStorage.getItem('player_id'),
-        });
+  // ✅ Get Public Lobby Games
+  getPublicLobbyGames: async () => {
+    const res = await fetch("http://localhost:8080/api/game-state/public-lobby");
+    if (!res.ok) throw new Error("Failed to fetch public games");
+    return await res.json();
+  },
 
-        const requestOptions = {
-            method: 'POST',
-            redirect: 'follow',
-            headers: myHeaders,
-            body: raw,
-        };
+  // ✅ Join Public Game
+  joinGame: async (gameId) => {
+    const playerId = parseInt(localStorage.getItem("player_id"));
+    const response = await fetch(`${API_BASE_URL}/api/game-state/add/${gameId}/${playerId}`, {
+      method: "POST",
+    });
 
-        let endPoint = `api/game.php/start/${game_id}`;
-        const apiUrl = GetEndpoint() + endPoint;
-        const apiUrlWithFilters = apiUrl;
-        
-        const response = await fetch(apiUrlWithFilters, requestOptions);
-        // console.log('response', response);
-        if(response.ok)
-            return await response.json();
-        throw new Error(response);
-        
-    },
-    joinGame : async (game_id) => {
-        var myHeaders = new Headers();
-        myHeaders.append("Content-Type", "application/json");
+    if (!response.ok) throw new Error("Failed to join game");
+    return await response.text();
+  },
 
-        var raw = JSON.stringify({
-            "player_id": localStorage.getItem('player_id'),
-        });
+  // ✅ Join Private Game by Code
+  joinWithInvite: async (inviteCode) => {
+    const playerId = localStorage.getItem("player_id");
+    const res = await fetch(
+      `${API_BASE_URL}/api/game-state/join-with-invite?inviteCode=${inviteCode}&playerId=${playerId}`,
+      { method: "POST" }
+    );
+    if (!res.ok) throw new Error("Failed to join private game");
 
-        const requestOptions = {
-            method: 'POST',
-            redirect: 'follow',
-            headers: myHeaders,
-            body: raw,
-        };
+    const text = await res.text();        // could be "4"  or  {"gameId":"4"}
+    try {
+      return JSON.parse(text);            // → {gameId:"4"}
+    } catch {
+      return { gameId: text.trim() };     // → {gameId:"4"}
+    }
+  },
 
-        let endPoint = `api/game.php/join/${game_id}`;
-        const apiUrl = GetEndpoint() + endPoint;
-        const apiUrlWithFilters = apiUrl;
-        
-        const response = await fetch(apiUrlWithFilters, requestOptions);
-        // console.log('response', response);
-        if(response.ok)
-            return await response.json();
-        throw new Error(response);
-        
-    },
+
+
+  // ✅ Get Game Metadata
+  getGameInfo: async (gameId) => {
+    const response = await fetch(`${API_BASE_URL}/api/game-state/${gameId}`);
+    if (!response.ok) throw new Error("Failed to get game info");
+    return await response.json(); // Redis hash
+  },
+
+  // ✅ Get Lobby Player IDs
+  getGamePlayers: async (gameId) => {
+    const response = await fetch(`${API_BASE_URL}/api/game-state/${gameId}/players`);
+    if (!response.ok) throw new Error("Failed to get players");
+    return await response.json(); // Array of playerIds
+  },
+
+  // ✅ Remove Player From Game
+  removePlayer: async (gameId, playerId) => {
+    const response = await fetch(`${API_BASE_URL}/api/game-state/${gameId}/remove-player?playerId=${playerId}`, {
+      method: "POST",
+    });
+
+    if (!response.ok) throw new Error("Failed to remove player");
+    return await response.text();
+  },
+
+  // ✅ Delete Game
+  deleteGame: async (gameId) => {
+    const response = await fetch(`${API_BASE_URL}/api/game-state/${gameId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) throw new Error("Failed to delete game");
+    return await response.text();
+  }
 };

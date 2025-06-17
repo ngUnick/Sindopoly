@@ -1,125 +1,113 @@
-import { GetEndpoint } from "./apiConfig";
+import API_BASE_URL from "./apiConfig";
+import { TurnAPI }  from "./TurnAPI";
 
+/**
+ * Helper that builds the "board" blob Board.jsx expects.
+ * Uses your existing /players-detailed endpoint.
+ */
+async function assembleBoard(gameId) {
+  // 1) fetch game‐level fields
+  const gameRes = await fetch(`${API_BASE_URL}/api/game-state/${gameId}`);
+  if (!gameRes.ok) throw new Error("Game state fetch failed");
+  const gameHash = await gameRes.json();
+
+  // 2) fetch per‐player list
+  const playersRes = await fetch(
+    `${API_BASE_URL}/api/game-state/players-detailed/${gameId}`
+  );
+  if (!playersRes.ok) throw new Error("Players fetch failed");
+  const players = await playersRes.json();
+  if (!players.length) return [];
+
+  // 3) normalize
+  const normalized = players.map(p => ({
+    player_id: p.player_id ?? p.id,
+    nickname:  p.nickname,
+    position:  p.position,
+    money:     p.money,
+    properties: p.properties,
+  }));
+
+  // 4) merge game‐level into the first slot
+  return [
+    {
+      ...normalized[0],
+      gameStatus: gameHash.status,
+      playerTurn: gameHash.playerTurn,
+      winner:     gameHash.winner,
+    },
+    ...normalized.slice(1),
+  ];
+}
 
 export const GamePlayAPI = {
-    getBoard : async (player_id) => {
-        var myHeaders = new Headers();
+  /** snapshot of board + game */
+  getBoard: assembleBoard,
 
-        const requestOptions = {
-            method: 'GET',
-            redirect: 'follow',
-            headers: myHeaders
-        };
 
-        let endPoint = `api/gamePlay.php/${player_id}/board`;
-        const apiUrl = GetEndpoint() + endPoint;
-        const apiUrlWithFilters = apiUrl;
-        
-        const response = await fetch(apiUrlWithFilters, requestOptions);
-        // console.log('response', response);
-        if(response.ok)
-            return await response.json();
-        throw new Error(response);
-        
-    },
-    rollDice : async (player_id) => {
-        var myHeaders = new Headers();
+  /****** TWO-STEP TURN ******/
 
-        const requestOptions = {
-            method: 'POST',
-            redirect: 'follow',
-            headers: myHeaders
-        };
+  // /** Step 1: roll & peek */
+  // playTurn: async (gameId, playerId) => {
+  //   const r = await TurnAPI.throwDice(gameId, playerId);
+  //   if (!r) throw new Error("Roll failed");
+  //   return r;
+  // },
 
-        let endPoint = `api/playerAction.php/roll/${player_id}`;
-        const apiUrl = GetEndpoint() + endPoint;
-        const apiUrlWithFilters = apiUrl;
-        
-        const response = await fetch(apiUrlWithFilters, requestOptions);
-        // console.log('response', response);
-        if(response.ok)
-            return await response.json();
-        throw new Error(response);
-        
-    },
-    passTurn : async (player_id) => {
-        var myHeaders = new Headers();
+  // /** Step 2: apply the modal decision */
+  // playAction: async (gameId, playerId, action, squareId = null) => {
+  //   const r = await TurnAPI.doAction(gameId, playerId, action, squareId);
+  //   if (!r) throw new Error("Action failed");
+  //   return r;
+  // },
 
-        const requestOptions = {
-            method: 'POST',
-            redirect: 'follow',
-            headers: myHeaders
-        };
+  // /****** legacy, you can delete these once React is updated ******/
+  // playTurn: async (gameId, playerId) => {
+  //   const data = await TurnAPI.throwDice(gameId, playerId);
+  //   return data;
+  // },
+  // passOptional: async (gameId, playerId) => {
+  //   return await TurnAPI.doAction(gameId, playerId, "pass", null);
+  // },
 
-        let endPoint = `api/playerAction.php/pass_turn/${player_id}`;
-        const apiUrl = GetEndpoint() + endPoint;
-        const apiUrlWithFilters = apiUrl;
-        
-        const response = await fetch(apiUrlWithFilters, requestOptions);
-        // console.log('response', response);
-        if(response.ok)
-            return await response.json();
-        throw new Error(response);
-        
-    },
-    getActions : async (player_id) => {
-        var myHeaders = new Headers();
+  /****** other APIs unchanged ******/
+  getInGameStatus: async playerId => {
+    const r = await fetch(
+      `${API_BASE_URL}/api/game-state/in-game/${playerId}`
+    );
+    if (!r.ok) throw new Error("Failed to check game state");
+    return r.json();
+  },
 
-        const requestOptions = {
-            method: 'GET',
-            redirect: 'follow',
-            headers: myHeaders
-        };
+  buyProperty: async (gameId, playerId, propertyId) => {
+    const r = await fetch(
+      `${API_BASE_URL}/api/player-state/${gameId}/${playerId}/buy?propertyId=${propertyId}`,
+      { method: "POST" }
+    );
+    if (!r.ok) throw new Error("Purchase failed");
+    return r.json();
+  },
 
-        let endPoint = `api/playerAction.php/actions/${player_id}`;
-        const apiUrl = GetEndpoint() + endPoint;
-        const apiUrlWithFilters = apiUrl;
-        
-        const response = await fetch(apiUrlWithFilters, requestOptions);
-        // console.log('response eeee   ', (await response.text()));
-        if(response.ok)
-            return await response.json();
-        throw new Error(response);
-        
-    },
-    buyProperty : async (player_id) => {
-        var myHeaders = new Headers();
-
-        const requestOptions = {
-            method: 'POST',
-            redirect: 'follow',
-            headers: myHeaders
-        };
-
-        let endPoint = `api/playerAction.php/buyProperty/${player_id}`;
-        const apiUrl = GetEndpoint() + endPoint;
-        const apiUrlWithFilters = apiUrl;
-        
-        const response = await fetch(apiUrlWithFilters, requestOptions);
-        // console.log('response', response);
-        if(response.ok)
-            return await response.json();
-        throw new Error(response);
-        
-    },
-    endGame : async (player_id) => {
-        var myHeaders = new Headers();
-
-        const requestOptions = {
-            method: 'POST',
-            redirect: 'follow',
-            headers: myHeaders
-        };
-
-        let endPoint = `api/playerAction.php/deletePlayerGame/${player_id}`;
-        const apiUrl = GetEndpoint() + endPoint;
-        const apiUrlWithFilters = apiUrl;
-        
-        const response = await fetch(apiUrlWithFilters, requestOptions);
-        // console.log('response', response);
-        if(response.ok)
-            return await response.json();
-        throw new Error(response);
-        
-    },
+  payJailFine: async (gameId, playerId) => {
+    const r = await fetch(
+      `${API_BASE_URL}/api/player-state/${gameId}/${playerId}/pay-jail`,
+      { method: "POST" }
+    );
+    if (!r.ok) throw new Error("Jail payment failed");
+    return r.json();
+  },
 };
+
+export async function getGameState(gameId) {
+  const r = await fetch(`${API_BASE_URL}/api/game-state/${gameId}`);
+  if (!r.ok) throw new Error("Game state fetch failed");
+  return r.json();
+}
+
+export async function getPlayersDetailed(gameId) {
+  const r = await fetch(
+    `${API_BASE_URL}/api/game-state/players-detailed/${gameId}`
+  );
+  if (!r.ok) throw new Error("Players fetch failed");
+  return r.json();
+}

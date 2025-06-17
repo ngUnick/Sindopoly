@@ -2,17 +2,31 @@ import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { GamePlayAPI } from "../../apis/GamePlayAPI";
-import { useSearchParams } from "react-router-dom";
+import { TurnAPI }    from "../../apis/TurnAPI";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faHouseUser } from "@fortawesome/free-solid-svg-icons";
-import { faDice } from "@fortawesome/free-solid-svg-icons";
-import { faVolumeHigh } from "@fortawesome/free-solid-svg-icons";
-import { faVolumeXmark } from "@fortawesome/free-solid-svg-icons";
-import { useNavigate } from "react-router-dom";
+import {
+  faHouseUser,
+  faDice,
+  faVolumeHigh,
+  faVolumeXmark,
+} from "@fortawesome/free-solid-svg-icons";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import API_BASE_URL      from "../../apis/apiConfig";
+import honeyJam from "../../assets/audio/massobeats-honey_jam.mp3";
+import boardGLB from "../../assets/models/board.glb?url";  // ⬅ forces asset handling
+import moneyImg from "../../assets/images/monopoly_money.png";
+
+
 
 const Board = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  const gameParam   = searchParams.get("game");    // e.g. "3"
+  const playerParam = searchParams.get("player");  // e.g. "3"
+
+  const gameId   = gameParam   ? parseInt(gameParam, 10)   : null;
+  const playerId = playerParam ? parseInt(playerParam, 10) : null;
 
   // Declarations and Initializations ---------------------------------------------------------------------------------------------
   const canvasRef = useRef(null);
@@ -25,26 +39,101 @@ const Board = () => {
   const coneRef = useRef(null);
   // const ironRef = useRef(null);
 
+  const pawnRefs = [ cubeRef, sphereRef, torusRef, coneRef ];
+  
+
   const rWidth = window.innerWidth; // Percentage of screen that will be used by the canvas
   const rHeight = window.innerHeight * 0.99; // Percentage of screen that will be used by the canvas
 
   const [posInput, setposInput] = useState(0); // State to store the numeric value entered
-  const [isMyTurn, setIsMyTurn] = useState(true);
+  const [isMyTurn, setIsMyTurn] = useState(false);
   const [playersAmount, setPlayersAmount] = useState(0);
-  const [player1Info, setPlayer1Info] = useState({ money: '-' });
-  const [player2Info, setPlayer2Info] = useState({ money: '-' });
-  const [player3Info, setPlayer3Info] = useState({ money: '-' });
-  const [player4Info, setPlayer4Info] = useState({ money: '-' });
+  // const [player1Info, setPlayer1Info] = useState({ money: '-' });
+  // const [player2Info, setPlayer2Info] = useState({ money: '-' });
+  // const [player3Info, setPlayer3Info] = useState({ money: '-' });
+  // const [player4Info, setPlayer4Info] = useState({ money: '-' });
 
-  const [dice_var1, setDice1] = useState(0);
-  const [dice_var2, setDice2] = useState(0);
+  // [{ nickname: 'Alice', money: 1500 }, …]
+  const [playersData, setPlayersData] = useState([]);
+
+  // const moneySetters = [
+  //   setPlayer1Info,
+  //   setPlayer2Info,
+  //   setPlayer3Info,
+  //   setPlayer4Info,
+  // ];
+
+  const [diceTotal , setDice ] = useState(0);
 
 
   const [my_sira, setSira] = useState(1);
 
+  const [selfIdx, setSelfIdx] = useState(null);
+  const [turnIdx, setTurnIdx] = useState(null);
+
+
+
+  // ── properties-modal state & handler ──────────────────────────────────
+  const [propModalVisible, setPropModalVisible] = useState(false);
+  const [propList, setPropList] = useState([]);  // array of strings like "Alice: 1,5,9"
+
+  const showProperties = async () => {
+    if (!gameId) return;
+    try {
+      const board = await GamePlayAPI.getBoard(gameId);
+
+      // build lookup: position (0–39) -> name
+      const nameByPos = new Map(
+        gamePositions.map(({ position, name }) => [position, name])
+      );
+
+      const lines = board.map(p => {
+        // safely JSON.parse the stored properties list
+        let arr = [];
+        if (p.properties) {
+          try {
+            arr = JSON.parse(p.properties);
+          } catch {}
+        }
+        // now arr is e.g. [1,6] (or whatever zero-based IDs you're using)
+        const labels = arr.map(id =>
+          nameByPos.get(id) ?? `#${id}`
+        );
+        const props = labels.length ? labels.join(", ") : "none";
+        return `${p.nickname}: ${props}`;
+      });
+
+      setPropList(lines);
+      setPropModalVisible(true);
+    } catch (e) {
+      console.error("Failed to load properties:", e);
+    }
+  };
+
+
+  const updateProperties = (board__) => {
+      var copyGamepositions = [];
+      board__.forEach((item) => {
+        let currentProperties = item["properties"];
+        if(currentProperties)
+        {
+          copyGamepositions = [...gamePositions];
+          currentProperties = currentProperties.split(",").map(function(item) {return parseInt(item, 10);});
+          for (let index = 0; index < copyGamepositions.length; index++) {
+            const element = copyGamepositions[index];
+            if(currentProperties.includes(element["position"]))
+            {
+              copyGamepositions[index]["player"] = item["name"];
+            }
+          }
+        }
+      });
+      setGamePositions(copyGamepositions);
+    };
+
   // Audio Management --------------------------------------------------------------------------------------------------
   const [isVolumeVisible, setIsVolumeVisible] = useState(true);
-  const [audio] = useState(new Audio('src/assets/audio/massobeats-honey_jam.mp3'));
+  const [audio] = useState(() => new Audio(honeyJam));
 
 
   useEffect(() => {
@@ -63,13 +152,7 @@ const Board = () => {
 
 
   // Card Functionalities --------------------------------------------------------------------------------------------------
-  document.addEventListener("click", function (event) {
-    // Event listener for closing the card when clicked outside of it
-    const overlay = document.querySelector("#overlay");
-    if (overlay.contains(event.target)) {
-      closeCard();
-    }
-  });
+
 
   function updateCard(
     newTitle,
@@ -142,22 +225,22 @@ const Board = () => {
   const [gamePositions, setGamePositions] = useState([
     { position: 0, type: "start", player: null, name: null },
     { position: 1, type: "property", player: null, name: "ΓΥΜΝΑΣΤΗΡΙΟ" },
-    { position: 2, type: "card", player: null, name: null },
+    { position: 2, type: "card", player: null, name: "ΚΑΡΤΑ ΑΠΟΦΑΣΗΣ" },
     { position: 3, type: "property", player: null, name: "ΒΙΒΛΙΟΘΗΚΗ" },
-    { position: 4, type: "card", player: null, name: null },
+    { position: 4, type: "", player: null, name: "ΕΝΟΙΚΙΟ" },
     { position: 5, type: "property", player: null, name: "ΚΙΟΣΚΙ Σ.Ε.Υ.Π." },
     { position: 6, type: "property", player: null, name: "ΣΤΑΣΗ ΔΙΠΑΕ" },
-    { position: 7, type: "card", player: null, name: null },
+    { position: 7, type: "card", player: null, name: "ΚΑΡΤΑ ΕΝΤΟΛΗΣ" },
     { position: 8, type: "property", player: null, name: "ΣΤΑΣΗ ΙΘΑΚΗ" },
     { position: 9, type: "property", player: null, name: "ΣΤΑΣΗ ΤΕΡΜΑΤΙΚΟΥ" },
-    { position: 10, type: "jail", player: null, name: null },
+    { position: 10, type: "jail", player: null, name: "ΦΥΛΑΚΗ" },
     { position: 11, type: "property", player: null, name: "ΣΠΛΑΣ" },
     { position: 12, type: "card", player: null, name: "ΚΥΛΙΚΕΙΟ" },
     { position: 13, type: "property", player: null, name: "ΠΟΔΗΛΑΤΟ" },
     { position: 14, type: "property", player: null, name: "ΜΙΚΕΛ" },
     { position: 15, type: "property", player: null, name: "ΚΙΟΣΚΙ ΔΙΟΙΚΗΣΗΣ" },
     { position: 16, type: "property", player: null, name: "ΒΙΒΛΙΟΘΗΚΟΝΟΜΙΑΣ" },
-    { position: 17, type: "card", player: null, name: null },
+    { position: 17, type: "card", player: null, name: "ΚΑΡΤΑ ΑΠΟΦΑΣΗΣ" },
     { position: 18, type: "property", player: null, name: "ΠΡΟΣΧΟΛΙΚΩΝ" },
     {
       position: 19,
@@ -165,9 +248,9 @@ const Board = () => {
       player: null,
       name: "ΤΕΧΝΟΛΟΓΙΑΣ ΤΡΟΦΙΜΩΝ",
     },
-    { position: 20, type: "parking", player: null, name: null },
+    { position: 20, type: "parking", player: null, name: "ΝΑΥΤΙΛΟΣ" },
     { position: 21, type: "property", player: null, name: "ΠΕΡΙΒΑΛΛΟΝΤΟΣ" },
-    { position: 22, type: "card", player: null, name: null },
+    { position: 22, type: "card", player: null, name: "ΚΑΡΤΑ ΕΝΤΟΛΗΣ" },
     { position: 23, type: "property", player: null, name: "ΓΕΩΠΟΝΙΑΣ" },
     {
       position: 24,
@@ -180,10 +263,10 @@ const Board = () => {
     { position: 27, type: "property", player: null, name: "ΝΟΣΗΛΕΥΤΙΚΗΣ" },
     { position: 28, type: "property", player: null, name: "ΛΕΣΧΗ" },
     { position: 29, type: "property", player: null, name: "ΒΙΟΪΑΤΡΙΚΩΝ" },
-    { position: 30, type: "goToJail", player: null, name: null },
+    { position: 30, type: "goToJail", player: null, name: "ΠΑΝΕ ΣΤΗ ΦΥΛΑΚΗ" },
     { position: 31, type: "property", player: null, name: "ΤΟΥΡΙΣΜΟΥ" },
     { position: 32, type: "property", player: null, name: "ΔΙΟΙΚΗΣΗΣ" },
-    { position: 33, type: "card", player: null, name: null },
+    { position: 33, type: "card", player: null, name: "ΚΑΡΤΑ ΑΠΟΦΑΣΗΣ" },
     { position: 34, type: "property", player: null, name: "ΛΟΓΙΣΤΙΚΗΣ" },
     {
       position: 35,
@@ -191,14 +274,22 @@ const Board = () => {
       player: null,
       name: "ΚΙΟΣΚΙ ΠΛΗΡΟΦΟΡΙΚΗΣ",
     },
-    { position: 36, type: "card", player: null, name: null },
+    { position: 36, type: "card", player: null, name: "ΚΑΡΤΑ ΕΝΤΟΛΗΣ" },
     { position: 37, type: "property", player: null, name: "ΠΛΗΡΟΦΟΡΙΚΗΣ" },
-    { position: 38, type: "card", player: null, name: null },
+    { position: 38, type: "card", player: null, name: "ΕΞΟΔΑ ΓΙΑ ΨΩΝΙΑ" },
     { position: 39, type: "property", player: null, name: "ΗΛΕΚΤΡΟΝΙΚΗΣ" },
   ]);
 
   // Example: Accessing a specific game position
   // console.log(gamePositions[0]); // debug
+
+
+  // ─── new state for our two-step turn modal ─────────────────────────
+  // holds the event data (buyOffer, rentDue, card, jailOffer…)
+  // holds the raw ThrowResultDto: { dice,newPosition,passedGo,squareType,data }
+  const [turnResult,  setTurnResult]   = useState(null);
+  // whether to show the modal overlay
+  const [modalVisible, setModalVisible] = useState(false);
 
   function filterAndDisplayNames() {
     console.log(gamePositions);
@@ -452,7 +543,179 @@ const Board = () => {
   }
 
 
+
+
+
+
+  // Handle Game Tick --------------------------------------------------------------------------------------------------
+  const handleTick = async () => {
+    if (!gameId) return;
+
+      // pull the entire board+game blob in one shot
+      const board = await GamePlayAPI.getBoard(gameId);
+
+      // 0) mark which properties each player owns
+      updateProperties(board);
+
+      // who am I in that array?
+      const myIndex   = board.findIndex(p => String(p.player_id) === String(playerId));
+      // whose turn is it in that array?
+      const turnIndex = board.findIndex(p => String(p.player_id) === String(board[0].playerTurn));
+
+      
+      setSelfIdx(  myIndex);
+      setTurnIdx( turnIndex);
+
+      // console.log("🏷️ getBoard returned:", all);
+      
+      if (!board.length) return;
+
+      const { gameStatus: status, playerTurn, winner, ...me } = board[0];
+
+
+
+      // ── 0. re-orient camera to the side YOU are on ──────────────────
+      if (myIndex >= 0) {
+        const myPos = board[myIndex].position;  // 0–39
+        const cam   = cameraRef.current;
+        if (myPos <= 10) {
+          cam.position.set(40, 25, 0);
+        } else if (myPos <= 20) {
+          cam.position.set(0, 25, 40);
+        } else if (myPos <= 30) {
+          cam.position.set(-40, 25, 0);
+        } else {
+          cam.position.set(0, 25, -40);
+     }
+     cam.lookAt(0, 0, 0);
+   }
+
+
+
+      // build array of { nickname, money } in Redis order
+      setPlayersData(board.map(p => ({
+        nickname: p.nickname,
+        money:     p.money != null ? p.money : 0
+      })));
+      
+      // update turn + UI
+      setPlayersAmount(board.length);
+      setIsMyTurn(playerTurn == playerId);
+      playerTurn === playerId ? enableDice() : disableDice();
+
+      // completed?
+      if (status === "ended") {
+        // winner might be a string, p.player_id might be a number (or vice-versa)
+        const winRow = board.find(p => String(p.player_id) === String(winner));
+        if (!winRow) {
+          console.error("Could not locate winner in board array:", winner, board);
+          return;
+        }
+
+        // safely grab their cash (default to 0 if missing)
+        const cash = winRow.money != null ? winRow.money : 0;
+
+        // parse his properties (assumes properties is a JSON string of an array of ids)
+        let props = []
+        try { props = JSON.parse(winRow.properties) } catch(e){}
+
+        // static price map: fill in your real prices here
+        const priceMap = {
+          1: 100,   3: 120,   5: 150,   /* … etc … */  
+          // for every position→purchase‐price
+        }
+
+        // sum up property values
+        const propValue = props.reduce((sum,id) => sum + (priceMap[id]||0), 0)
+
+        const totalCapital = cash + propValue
+
+        navigate(
+          `/endgame?winner=${encodeURIComponent(winRow.nickname)}&capital=${totalCapital}`,
+          { replace: true }
+        )
+        return
+      }
+
+
+      // hide all pawns, then show+move exactly as many as players
+      pawnRefs.forEach(ref => {
+        if (ref.current) ref.current.visible = false;
+      });
+
+      board.forEach((p, idx) => {
+        const pawn = pawnRefs[idx].current;
+        if (pawn) {
+          pawn.visible = true;
+          findSteps(pawn, p.position);
+        }
+
+        // // update money for player #idx+1
+        // moneySetters[idx]?.({ money: p.money });
+
+        // track “my” pawn index for the animated box
+        if (p.player_id === playerId) {
+          setSelfIdx(idx);
+        }
+      });
+  };
+
+
+  // subscribe to turn-by-turn AND end-of-game events
+  // useEffect(() => {
+  //   if (!gameId) return;
+
+  //   // create SockJS-backed STOMP client
+  //   const socket = new SockJS('/ws');
+  //   const stompClient = Stomp.over(socket);
+
+  //   // optional: disable console.debug spam
+  //   stompClient.debug = () => {};
+
+  //   stompClient.connect(
+  //     {}, // headers
+  //     () => {
+  //       stompClient.subscribe(
+  //         `/topic/game/${gameId}`,
+  //         (msg) => {
+  //           const body = JSON.parse(msg.body);
+  //           if (body.event === 'gameEnded') {
+  //             navigate(`/endgame?winner=${body.winner}`, { replace: true });
+  //           }
+  //         }
+  //       );
+  //     },
+  //     (err) => {
+  //       console.error('STOMP error', err);
+  //     }
+  //   );
+
+  //   return () => {
+  //     stompClient.disconnect();
+  //   };
+  // }, [gameId, navigate]);
+
+
+
+
+
+
+
   useEffect(() => {
+
+    
+
+
+      // document.addEventListener("click", function (event) {
+      //   // Event listener for closing the card when clicked outside of it
+      //   const overlay = document.querySelector("#overlay");
+      //   if (overlay.contains(event.target)) {
+      //     closeCard();
+      //   }
+      // });
+
+
+
     // Board Creation --------------------------------------------------------------------------------------------------------
     const scene = new THREE.Scene(); // Create a Three.js scene
     sceneRef.current = scene;
@@ -488,7 +751,7 @@ const Board = () => {
 
     // Load the GLB file
     loader.load(
-      "src/assets/models/board.glb", // Replace 'path_to_your_board_model.glb' with the actual path
+      boardGLB,
       (gltf) => {
         const board = gltf.scene.clone();
 
@@ -674,107 +937,28 @@ const Board = () => {
         }    
     }
 
-    const updateProperties = (board__) => {
-      var copyGamepositions = [];
-      board__.forEach((item) => {
-        let currentProperties = item["properties"];
-        if(currentProperties)
-        {
-          copyGamepositions = [...gamePositions];
-          currentProperties = currentProperties.split(",").map(function(item) {return parseInt(item, 10);});
-          for (let index = 0; index < copyGamepositions.length; index++) {
-            const element = copyGamepositions[index];
-            if(currentProperties.includes(element["position"]))
-            {
-              copyGamepositions[index]["player"] = item["name"];
-            }
-          }
-        }
-      });
-      setGamePositions(copyGamepositions);
-    };
+    
 
 
-    setInterval(async () => {
-        // console.log('hellooo');
-        const player_id = searchParams.get('player');
-        const playersPosition = await GamePlayAPI.getBoard(player_id);
-        setPlayersAmount(playersPosition.length);
-        updateProperties(playersPosition);
-        const gameStatus = playersPosition[0]["gameStatus"];
 
-        if(gameStatus == "completed")
-        {
-          const winner_id = playersPosition[0]["winner"];
-          let winner_name = "no_winner_just_for_debug";
-          for (let index = 0; index < playersPosition.length; index++) {
-            const element = playersPosition[index]["player_id"];
-            if(element == winner_id)
-              winner_name = playersPosition[index]["name"];
-          }
-          navigate(`/endgame?winner=${winner_name}`);
-        }
 
-        const currentTurn = playersPosition[0]["playerTurn"];
-        // console.log('currentTurn',currentTurn);
-        // console.log('player_id',player_id);
-        if(currentTurn == player_id)
-        {
-          setIsMyTurn(true);
-          enableDice();
-        }
-        else
-        {
-          setIsMyTurn(false);
-          disableDice();
-        }
-          HideUnnecessaryPlayers(playersPosition.length);
+    // don’t even try to call the API if gameId is missing
+    if (gameId == null) {
+      console.error("Board.jsx: missing or invalid gameId");
+      return;
+    }
 
-        for (let index = 0; index < playersPosition.length; index++) {
-          if(index == 0)
-            {
-              findSteps(cubeRef.current,playersPosition[index]["position"]);
-              setPlayer1Info({money : playersPosition[index]["money"]});
-              if(playersPosition[index]["player_id"] == player_id)
-              {
-                setSira(index);
-              }
-            }
-          else if(index == 1)
-            {
-              findSteps(sphereRef.current,playersPosition[index]["position"]);
-              setPlayer2Info({money : playersPosition[index]["money"]});
-              if(playersPosition[index]["player_id"] == player_id)
-              {
-                setSira(index);
-              }
-            }
-          else if(index == 2)
-            {
-              findSteps(torusRef.current,playersPosition[index]["position"]);
-              setPlayer3Info({money : playersPosition[index]["money"]});
-              if(playersPosition[index]["player_id"] == player_id)
-              {
-                setSira(index);
-              }
-            }
-          else if(index == 3)
-            {
-              findSteps(coneRef.current,playersPosition[index]["position"]);
-              setPlayer4Info({money : playersPosition[index]["money"]});
-              if(playersPosition[index]["player_id"] == player_id)
-              {
-                setSira(index);
-              }
-            }
-        }
-      // console.log(playersPosition);
-    }, 1000);
-
-    return () => {
-      // Clean up or dispose Three.js elements (if needed)
-    };
-  }, [isMyTurn]);
+    
+    if (gameId == null) {
+      console.error("Board.jsx: missing or invalid gameId");
+      return;
+    }
+    handleTick();
+    
+    
+    const id = setInterval(handleTick, 2000);
+    return () => clearInterval(id);
+  }, [gameId, playerId, navigate]);
 
   // Add Responsiveness ------------------------------------------------------------------------------------------------
   window.addEventListener("resize", () => {
@@ -803,101 +987,115 @@ const Board = () => {
     }
   });
 
+  /** STEP 1: click dice → throw & move */
   const throwDiceAction = async () => {
-    if(isMyTurn)
-    {
-      const player_id = searchParams.get("player");
-      const dices = await GamePlayAPI.rollDice(player_id);
-      setDice1(dices["dice1"]);
-      setDice2(dices["dice2"]);
-      randomDiceThrow(dice1, dices["dice1"]);
-      setTimeout(async () => {
-        randomDiceThrow(dice2, dices["dice2"]);
-        const actions = await GamePlayAPI.getActions(player_id);
-        console.log("celanideee", actions);
-  
-        if(actions["mandatory"].length > 0)
-        {
-          const mandatory_action = actions["mandatory"][0][0];
-          if(mandatory_action["actionName"] == "drawCard")
-          {
-            updateCard(
-              mandatory_action["title"],
-              mandatory_action["description"],
-              null,
-              null
-            );
-          }
-          else if(mandatory_action["actionName"] == "rent")
-          {
-            updateCard(
-              "Prostimo",
-              `Pay ${mandatory_action["amount"]}`,
-              null,
-              null
-            );
-          }
-          else if(mandatory_action["actionName"] == "jail")
-          {
-            updateCard(
-              "Go to jail",
-              `Police troubles`,
-              null,
-              null
-            );
-          }
-        }
-        if(actions["optional"].length > 0)
-        {
-          const optional_action = actions["optional"][0]["actionName"];
-          if(optional_action == "BuyProperty")
-          {
-            updateCard(
-              "Buy property",
-              `Do you want to buy this property that costs ${actions["optional"][0]["price"]}?`,
-              {
-                "text" : "Buy property",
-                "function" : async () => {
-                  await GamePlayAPI.buyProperty(player_id);
-                  closeCard();
-                  updateCard(
-                    "Success",
-                    "The property now is yours!! WOWOWOWOWOWOWO",
-                    null,
-                    null
-                  );
-                }
-              },
-              null
-            );
-          }
-        }
-        await GamePlayAPI.passTurn(player_id);
+    if (!isMyTurn) return;
 
-        if(searchParams.get('bot') == 'true')
-        {
-          // alert("bot");
-          await GamePlayAPI.rollDice(5);
-          const actions = await GamePlayAPI.getActions(player_id);
-          if(actions["optional"].length > 0)
-          {
-            try {
-              const optional_action = actions["optional"][0]["actionName"];
-              if(optional_action == "BuyProperty")
-              {
-                await GamePlayAPI.buyProperty(5);
-              }
-            } catch (error) {
-              console.error('bot doesnt buy property')
-            }
-            
-          }
-          await GamePlayAPI.passTurn(5);
-        }
-      }, 1000);
+    try {
+      // 1️⃣ roll & move
+      const tr = await TurnAPI.throwDice(gameId, playerId);
+      const {
+        dice,
+        newPosition,
+        passedGo,
+        squareType,
+        data,
+        cardMessage     // ← new field
+      } = tr;
+
+      // disable UI & show dice
+      setIsMyTurn(false);
+      setDice(dice);
+      // randomDiceThrow(dice1, dice);
+      await new Promise(r => setTimeout(r, 1000));
+      findSteps(sphereRef.current, newPosition);
+
+      console.log("💥 raw throwDice()", tr);
+
+      // 2️⃣ always show modal with the raw result
+      setTurnResult({ ...tr, cardMessage }); // ensure we pass it through
+      setModalVisible(true);
+      // your modal will read squareType/data to show Yes/No or just OK
+
+      } catch (e) {
+        console.error("Turn failed:", e);
+        // optionally re-sync
+        await handleTick();
+        setIsMyTurn(true);
+      }
+  };
+
+  /** STEP 2: modal button handler */
+  const handleModalChoice = async (choice) => {
+    if (!turnResult) return;
+    try {
+      const { type, squareId } = turnResult;
+
+      // 1️⃣ call /action with yes=true|false
+      await TurnAPI.doAction(gameId, playerId, choice);
+
+      setModalVisible(false);
+      setTurnResult(null);
+
+      // 3️⃣ refresh & re-enable
+       await handleTick();
+       setIsMyTurn(true);
+     } catch (e) {
+       console.error("Action failed:", e);
+     }
+  };
+
+
+  const getModalMessage = () => {
+    const { squareType, data, newPosition } = turnResult;
+    // look up the square object from state
+    const sq = gamePositions.find(s => s.position === newPosition) || {};
+    const sqName  = sq.name  || `#${newPosition}`;
+    const owner   = sq.player || null;
+
+    switch (squareType) {
+      case 1: // transport
+        if (cardMessage) return cardMessage
+        return `Μεταφέρθηκες στο τετράγωνο #${sqName}.`;
+
+      case 2: // money card
+        if (cardMessage) return cardMessage
+        return data >= 0
+          ? `Έλαβες €${data}!`
+          : `Πλήρωσε €${-data}.`;
+
+      case 3: // rent
+        return `Έπεσες πάνω στο ${sqName} που ανήκει στον ${owner}. Πλήρωσε €${data}.`;
+
+      case 4: // passed Go
+        return `Πέρασες από την ΑΦΕΤΗΡΙΑ. Πάρε €200!`;
+
+      case 5: // buy offer
+        return `Έπεσες πάνω στο ${sqName} που δεν ανήκει σε κανέναν. Θες να το αγοράσεις για €${data};`;
+
+      case 6: // tax
+        return `Πλήρωσε €${data} για το ${sqName}.`;
+
+      case 7: // go to jail
+        return `Πάνε στη ΦΥΛΑΚΗ!`;
+
+      case 8: // just visiting
+        return `Έπεσες στη ΦΥΛΑΚΗ, αλλά είσαι μόνο για επίσκεψη.`;
+
+      case 9: // free parking
+        return `Έπεσες στη ΝΑΥΤΙΛΟ. Χαλάρωσε και περίμενε ξανά τον γύρο σου.`;
+
+      default:
+        return `OK`;
     }
+  };
 
-  }
+
+  const isYesNo = () => {
+    // we want Yes/No for buyOffer (5) and jailOffer (8)
+    return turnResult.squareType === 5 || turnResult.squareType === 8;
+  };
+
 
   // UI Elements ----------------------------------------------------------------------------------------------------
   return (
@@ -905,22 +1103,24 @@ const Board = () => {
       <canvas ref={canvasRef} />
 
       <div className="first-nav">
-        <span className={`px-5  ${my_sira == 0 ? "animated-box" : ""}`} id="money1">
-          <img src="src/assets/images/monopoly_money.png" alt="Player 1's money" />
-          <p>{player1Info["money"]}</p>
-        </span>
-        <span className={`px-5  ${my_sira == 1 ? "animated-box" : ""}`} id="money2">
-          <img src="src/assets/images/monopoly_money.png" alt="Player 2's money" />
-          <p>{player2Info["money"]}</p>
-        </span>
-        <span className={`px-5 ${(playersAmount < 3) ? 'hidden' : ''} ${my_sira == 2 ? "animated-box" : ""}`} id="money3">
-          <img src="src/assets/images/monopoly_money.png" alt="Player 3's money" />
-          <p>{player3Info["money"]}</p>
-        </span>
-        <span className={`px-5 ${(playersAmount < 4) ? 'hidden' : ''} ${my_sira == 3 ? "animated-box" : ""}`} id="money4">
-          <img src="src/assets/images/monopoly_money.png" alt="Player 4's money" />
-          <p>{player4Info["money"]}</p>
-        </span>
+        {playersData.map((p, idx) => (
+          <span
+            key={idx}
+            className={`
+              px-5 
+              ${idx === turnIdx ? "animated-box" : ""}`}
+          >
+            <img
+              src={moneyImg}
+              alt={`${p.nickname}'s money`}
+              style={{ width: "25px", height: "25px", marginRight: "10px" }}
+            />
+            <div className="flex flex-col items-start">
+              <small className="text-xs font-medium" style={{ position: "absolute", transform: "translateX(-50%) translateY(-250%)", fontWeight: idx === selfIdx ? "700" : "500", color: "black" , fontSize: idx === selfIdx ? "1.2rem" : "1rem" }}>{p.nickname}</small>
+              <p className="text-lg font-semibold">€{p.money}</p>
+            </div>
+          </span>
+        ))}
       </div>
 
       
@@ -935,14 +1135,14 @@ const Board = () => {
         <button
           className="property-btn"
           onClick={() => {
-            filterAndDisplayNames();
+            showProperties();
           }}
         >
           <FontAwesomeIcon icon={faHouseUser} id="property" />
         </button>
         <button
           disabled={!isMyTurn}
-          className={`property-btn ${!isMyTurn ? "hidden" : ""}`}
+          className={`property-btn`}
           onClick={throwDiceAction}
           
         >
@@ -950,76 +1150,70 @@ const Board = () => {
         </button>
       </div>
 
-      <div className="third-nav">
-        <span>
-          <p>{dice_var1}</p>
-        </span>
-        <span>
-          <p>{dice_var2}</p>
-        </span>
+      <div className="third-nav max-w-[100px]">
+        <span><p>{diceTotal}</p></span>
       </div>
 
-      <div
-        className="absolute w-full h-full bg-transparent left-0 top-0 z-2 hidden"
-        id="overlay"
-      ></div>
 
-      <div
-        className="absolute -translate-x-2/4 -translate-y-2/4 left-2/4 top-2/4 z-3 hidden"
-        id="card"
-      >
-        <div
-          className="relative shadow flex flex-col justify-around items-stretch min-h-[150px] min-w-[300px]
-        bg-[rgba(255,236,195,0.8)] pt-[20px] pb-[20px] px-5 backdrop-blur-sm border-solid border-[rgba(255,255,255,0.6)] rounded-md"
-        >
-          <span
-            className="text-yellow-700 font-semibold text-xl hidden"
-            id="title"
-          >
-            Title
-          </span>
-          <p className="text-base text-gray-600 hidden" id="desc">
-            Description{" "}
-          </p>
-          <div className="flex flex-col gap-2">
-            <button
-              className="border-2 border-yellow-600 bg-yellow-600 py-1 rounded text-gray-50 hover:bg-[rgba(240,169,16,0.95)] hover:cursor-pointer hidden"
-              id="act1"
-            >
-              Action 1
-            </button>
-            <button
-              className="border-2 border-yellow-600 py-1 rounded hover:bg-gray-100 hover:cursor-pointer hidden"
-              id="act2"
-            >
-              Action 2
-            </button>
-          </div>
-          <div
-            className="absolute top-3 right-2  text-red-300 hover:text-red-500 hover:cursor-pointer"
-            id="close"
-          >
-            <svg
-              y="0"
-              xmlns="http://www.w3.org/2000/svg"
-              x="0"
-              width="100"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="xMidYMid meet"
-              height="100"
-              className="w-12 h-12 fill-current"
-              onClick={() => {
-                closeCard();
-              }}
-            >
-              <path
-                fillRule="evenodd"
-                d="M50,87.4A37.4,37.4,0,1,0,12.6,50,37.3,37.3,0,0,0,50,87.4ZM44,37.3A4.7,4.7,0,0,0,37.3,44l6.1,6-6.1,6A4.7,4.7,0,0,0,44,62.7l6-6.1,6,6.1A4.7,4.7,0,0,0,62.7,56l-6.1-6,6.1-6A4.7,4.7,0,0,0,56,37.3l-6,6.1Z"
-              ></path>
-            </svg>
+
+      {/* Modal Overlay & Card */}
+      {modalVisible && turnResult && (
+        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50  max-w-25">
+          <div className="bg-[rgba(255,236,195,0.8)] backdrop-blur-sm border border-white/60 rounded-md p-6 shadow-lg">
+            <h2 className="text-xl font-semibold mb-4">
+              {getModalMessage()}
+            </h2>
+
+            {isYesNo() ? (
+              <div className="flex space-x-4">
+                <button
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                  onClick={() => handleModalChoice(true)}
+                >
+                  Ναι
+                </button>
+                <button
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                  onClick={() => handleModalChoice(false)}
+                >
+                  Όχι
+                </button>
+              </div>
+            ) : (
+              <button
+                className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                onClick={() => handleModalChoice(true)}
+              >
+                OK
+              </button>
+            )}
           </div>
         </div>
-      </div>
+      )}
+
+
+      {/* ── Properties Modal ─────────────────────────────────────────────────── */}
+      {propModalVisible && (
+        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[rgba(255,236,195,0.8)] backdrop-blur-sm border border-white/60 rounded-md p-6 shadow-lg max-w-sm">
+            <h2 className="text-xl font-semibold mb-4">Player Properties</h2>
+            <ul className="mb-4 list-disc list-inside space-y-1">
+              {propList.map((line, i) => (
+                <li key={i} className="text-sm">{line}</li>
+              ))}
+            </ul>
+            <button
+              className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              onClick={() => setPropModalVisible(false)}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+
+
     </div>
   ); // Return canvas element for rendering
 };

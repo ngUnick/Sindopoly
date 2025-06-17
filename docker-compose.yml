@@ -1,0 +1,73 @@
+services:
+
+  mariadb:
+    image: mariadb:10.11
+    container_name: sindopoly-mariadb
+    restart: always
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    environment:
+      MARIADB_ROOT_PASSWORD: nick123root
+      MARIADB_DATABASE:    sindopoly
+      MARIADB_USER:        nick
+      MARIADB_PASSWORD:    nick123
+    volumes:
+      - ./MariaDB/init.sql:/docker-entrypoint-initdb.d/1_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u nick -pnick123"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+      start_period: 30s
+    ports:
+      - "3306:3306"
+
+  redis:
+    image: redis:7.0-alpine
+    container_name: sindopoly-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+  backend:
+    build:
+      context: ./Sindopoly-Java
+      dockerfile: Dockerfile
+    image: sindopoly-backend:latest
+    container_name: sindopoly-backend
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+
+      # MariaDB
+      - SPRING_DATASOURCE_URL=jdbc:mariadb://mariadb:3306/sindopoly
+      - SPRING_DATASOURCE_USERNAME=nick
+      - SPRING_DATASOURCE_PASSWORD=nick123
+
+      # Redis
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./sindopoly-front
+      dockerfile: Dockerfile
+    image: sindopoly-frontend:latest
+    container_name: sindopoly-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend

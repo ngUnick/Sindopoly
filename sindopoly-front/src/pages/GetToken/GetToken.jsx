@@ -1,7 +1,7 @@
 import { useEffect, useState, useContext } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useNavigate } from "react-router-dom";
-import { AuthAPI } from '../../apis/Auth';
+import { AuthAPI } from '../../apis/AuthAPI';
 import AuthContext from "../../AuthContext/AuthContext.jsx";
 
 const GetToken = () => {
