@@ -4,6 +4,7 @@ import monopoly_logo from "../../assets/images/monopoly_logo.png";
 import { useNavigate } from "react-router-dom";
 import { Filter } from "glin-profanity";
 import { sanitizeText } from "../../utils/sanitize";
+import bgImg from "../../assets/images/monopoly_bg.png";
 
 const filter = new Filter({
   languages: ["english"],
@@ -93,7 +94,7 @@ const Login = () => {
   };
 
   return (
-    <div className="flex-grow flex justify-center items-center bg-pic bg-cover bg-no-repeat">
+    <div className="flex-grow flex justify-center items-center bg-cover bg-no-repeat" style={{ backgroundImage: `url(${bgImg})` }}>
       <div className="fixed w-full h-full shadow-[0_0_80px_rgba(255,255,255,0.7)_inset] left-0 top-0"></div>
       <div className="bg-[rgba(255,236,195,0.8)] pt-[50px] pb-[20px] px-5 backdrop-blur-sm border-solid border-[rgba(255,255,255,0.6)] rounded-md">
         <div className="w-[800px] flex flex-col gap-5 items-center pb-5">

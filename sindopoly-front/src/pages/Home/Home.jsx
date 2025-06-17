@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GamePlayAPI } from "../../apis/GamePlayAPI";
 import { GameAPI } from "../../apis/GameAPI";
+import bgImg from "../../assets/images/monopoly_bg.png";
 
 function Home() {
   const navigate = useNavigate();
@@ -59,7 +60,7 @@ function Home() {
 
   /* ------------------------ UI ------------------------------- */
   return (
-    <div className="flex-grow flex justify-center items-center bg-pic bg-cover bg-no-repeat">
+    <div className="flex-grow flex justify-center items-center bg-cover bg-no-repeat" style={{ backgroundImage: `url(${bgImg})` }}>
       {/* vignette */}
       <div className="fixed w-full h-full shadow-[0_0_80px_rgba(255,255,255,0.7)_inset] left-0 top-0" />
 
