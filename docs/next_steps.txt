@@ -1,0 +1,30 @@
+0. Reuse the existing Codex exploration as initial context  
+1. Create revamp branch, baseline tag, repository instructions and working rules  
+2. Preserve and normalize the completed audit documentation  
+3. Preserve and normalize the completed engineering, commenting and security standards  
+4. Triage and freeze the revamp backlog  
+5. Establish Windows/Docker reproducibility  
+6. Add repeatable local verification  
+7. Add CI verification  
+8. Add characterization tests for current behavior  
+9. Add Redis, MariaDB, REST and turn-flow integration tests  
+10. Add WebSocket integration tests  
+11. Add critical end-to-end game-flow tests  
+12. Define target architectural boundaries  
+13. Write required ADRs  
+14. Document the canonical game state machine  
+15. Establish one authoritative game-state transition path  
+16. Add authentication and server-side player identity foundation  
+17. Add authorization for membership, host actions, active player and turn phase  
+18. Quarantine or remove unsafe direct state-mutation endpoints  
+19. Fix dice and turn flow  
+20. Fix timers, reconnect, cleanup and multi-instance races  
+21. Fix WebSocket/event synchronization  
+22. Refactor toward separation of concerns  
+23. Consolidate duplicate infrastructure and models  
+24. Remove confirmed dead or obsolete code  
+25. Apply remaining security hardening  
+26. Apply evidence-based performance improvements  
+27. Complete developer, architecture and API documentation  
+28. Run full regression verification  
+29. Verify the project from a clean Windows/Docker Desktop checkout
