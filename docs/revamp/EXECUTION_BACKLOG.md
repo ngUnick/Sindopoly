@@ -173,7 +173,7 @@ Two choices are especially important:
 
 ### REVAMP-009 — Add characterization coverage for current lobby and turn behavior
 
-- Status: `READY`; Priority: `P1`; Category: `TESTING`.
+- Status: `DONE`; Priority: `P1`; Category: `TESTING`.
 - Rationale / evidence: no backend test sources exist; lobby, throw/action/pass, and end behavior are implicit and high risk.
 - Desired outcome: executable characterization of current externally observable behavior, explicitly marking suspected defects rather than codifying them as intended rules.
 - Dependencies: REVAMP-006, REVAMP-007. Blocks: REVAMP-014 through REVAMP-023.
@@ -188,7 +188,7 @@ Two choices are especially important:
 
 ### REVAMP-010 — Add deterministic domain-rule tests and test seams
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `TESTING`.
+- Status: `READY`; Priority: `P1`; Category: `TESTING`.
 - Rationale / evidence: movement is pure, but dice, square actions, time, and randomness are entangled with infrastructure.
 - Desired outcome: injectable seams for randomness/time where materially useful and focused tests for movement, dice interpretation, rent/tax/card/jail outcomes.
 - Dependencies: REVAMP-009. Blocks: REVAMP-019 and REVAMP-020.
@@ -204,7 +204,7 @@ Two choices are especially important:
 
 ### REVAMP-011 — Establish Redis, MariaDB, and REST integration-test infrastructure
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `TESTING`.
+- Status: `READY`; Priority: `P1`; Category: `TESTING`.
 - Rationale / evidence: Testcontainers dependencies exist but no tests use them; active state spans Redis and MariaDB without cross-resource coverage.
 - Desired outcome: repeatable integration fixtures for Redis, MariaDB, and REST commands with isolation and cleanup rules.
 - Dependencies: REVAMP-006, REVAMP-007, REVAMP-009. Blocks: REVAMP-015 through REVAMP-023 and REVAMP-030.
@@ -219,7 +219,7 @@ Two choices are especially important:
 
 ### REVAMP-012 — Define target command boundaries and state ownership
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `ARCHITECTURE`.
+- Status: `READY`; Priority: `P1`; Category: `ARCHITECTURE`.
 - Rationale / evidence: controllers, orchestration, Redis mutation, rule logic, timers, and events currently cross boundaries.
 - Desired outcome: a pragmatic target map for transport, application commands, domain rules, state store, scheduler, and event publication ownership.
 - Dependencies: REVAMP-009. Blocks: REVAMP-013 through REVAMP-021.
