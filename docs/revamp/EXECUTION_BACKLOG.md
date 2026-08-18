@@ -128,7 +128,7 @@ Two choices are especially important:
 
 ### REVAMP-006 — Document supported Windows and Docker development workflows
 
-- Status: `READY`; Priority: `P0`; Category: `ENVIRONMENT`.
+- Status: `DONE`; Priority: `P0`; Category: `ENVIRONMENT`.
 - Rationale / evidence: `BUILD_AND_RUN_BASELINE.md` and `WINDOWS_DOCKER_READINESS.md` show PowerShell `npm.cmd`, Maven-wrapper cache, Docker config, hostname, and Redis-property caveats.
 - Desired outcome: reproducible native PowerShell and Docker Desktop startup, teardown, and smoke-check instructions with known limitations stated.
 - Dependencies: REVAMP-005. Blocks: REVAMP-007, REVAMP-009, REVAMP-011, REVAMP-030.
@@ -143,7 +143,7 @@ Two choices are especially important:
 
 ### REVAMP-007 — Define repeatable local verification contract
 
-- Status: `BLOCKED`; Priority: `P0`; Category: `VERIFICATION`.
+- Status: `READY`; Priority: `P0`; Category: `VERIFICATION`.
 - Rationale / evidence: backend verify currently passes without tests; frontend lint fails and frontend has no test script.
 - Desired outcome: one documented local verification matrix with expected pass/fail baseline, command ownership, and exit criteria for later changes.
 - Dependencies: REVAMP-006. Blocks: REVAMP-008 through REVAMP-011 and REVAMP-030.
