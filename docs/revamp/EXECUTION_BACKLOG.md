@@ -143,7 +143,7 @@ Two choices are especially important:
 
 ### REVAMP-007 — Define repeatable local verification contract
 
-- Status: `READY`; Priority: `P0`; Category: `VERIFICATION`.
+- Status: `DONE`; Priority: `P0`; Category: `VERIFICATION`.
 - Rationale / evidence: backend verify currently passes without tests; frontend lint fails and frontend has no test script.
 - Desired outcome: one documented local verification matrix with expected pass/fail baseline, command ownership, and exit criteria for later changes.
 - Dependencies: REVAMP-006. Blocks: REVAMP-008 through REVAMP-011 and REVAMP-030.
@@ -158,7 +158,7 @@ Two choices are especially important:
 
 ### REVAMP-008 — Add CI verification baseline
 
-- Status: `BLOCKED`; Priority: `P3`; Category: `VERIFICATION`.
+- Status: `READY`; Priority: `P3`; Category: `VERIFICATION`.
 - Rationale / evidence: no `.github` workflow exists; CI must mirror a proven local contract.
 - Desired outcome: CI runs stable build, lint, and available test tiers without masking known failures.
 - Dependencies: REVAMP-007. Blocks: release confidence and REVAMP-030.
@@ -173,7 +173,7 @@ Two choices are especially important:
 
 ### REVAMP-009 — Add characterization coverage for current lobby and turn behavior
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `TESTING`.
+- Status: `READY`; Priority: `P1`; Category: `TESTING`.
 - Rationale / evidence: no backend test sources exist; lobby, throw/action/pass, and end behavior are implicit and high risk.
 - Desired outcome: executable characterization of current externally observable behavior, explicitly marking suspected defects rather than codifying them as intended rules.
 - Dependencies: REVAMP-006, REVAMP-007. Blocks: REVAMP-014 through REVAMP-023.
