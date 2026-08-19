@@ -234,7 +234,7 @@ Two choices are especially important:
 
 ### REVAMP-013 — Record required architecture decisions (ADRs)
 
-- Status: `READY`; Priority: `P1`; Category: `ARCHITECTURE`.
+- Status: `DONE`; Priority: `P1`; Category: `ARCHITECTURE`.
 - Rationale / evidence: auth/session model, command concurrency strategy, Redis schema evolution, and realtime transport target are undecided.
 - Desired outcome: concise ADRs for identity/session approach, per-game transition atomicity/idempotency, state versioning, and WebSocket/polling/recovery direction.
 - Dependencies: REVAMP-012, REVAMP-009. Blocks: REVAMP-015, REVAMP-018, REVAMP-020, REVAMP-021.

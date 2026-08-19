@@ -6,6 +6,13 @@ This is Sindopoly's canonical target-boundary model. It is an incremental destin
 
 The target is one server-authoritative command path for each game transition. No CQRS framework, event sourcing, microservices, interface-per-class rule, or message bus is required.
 
+The decisions that refine this model are:
+
+- [ADR 0001: Authenticated player identity and session](adr/0001-authenticated-player-identity-and-session.md)
+- [ADR 0002: Per-game transition atomicity and idempotency](adr/0002-per-game-transition-atomicity-and-idempotency.md)
+- [ADR 0003: Active game state versioning and Redis lifecycle](adr/0003-active-game-state-versioning-and-redis-lifecycle.md)
+- [ADR 0004: Realtime delivery and recovery](adr/0004-realtime-delivery-and-recovery.md)
+
 ## Target responsibilities
 
 | Layer | Owns | Does not own |
@@ -91,9 +98,9 @@ Authentication resolves the actor at REST and future STOMP entry. The command bo
 
 Invariants: server-derived identity; membership before access; host authority for lobby operations; active-player/phase authority for turns; server-generated dice; no client-authoritative balances/positions/ownership/state; replay protection below transport parsing.
 
-Transport may accept or assign a command ID. The application service deduplicates; the store may retain short-lived markers with explicit TTL. Domain rules do not implement HTTP retry semantics. Format, marker storage, and client contract are deferred to REVAMP-013.
+Transport accepts a stable command ID for retryable intents. The application service deduplicates and the store retains bounded markers/results with explicit lifecycle. Domain rules do not implement HTTP retry semantics; ADR 0002 defines the contract and leaves encoding/TTL configuration to implementation.
 
-Controllers do not solve concurrency and rules only express valid transitions. The application/store boundary ensures one valid per-game transition commits. A later per-game lock, optimistic version, CAS, Redis transaction, or Lua script may implement it, but not a global lock. It must reject duplicate rolls, duplicate turn advance, and timer races.
+Controllers do not solve concurrency and rules only express valid transitions. Per ADRs 0002 and 0003, the application/store boundary uses an expected state version and a centralized atomic Redis compare-and-commit, initially directed toward Lua on the current topology. Exact scripts/key shapes remain implementation details; global locking is excluded.
 
 ## Event ownership and transport convergence
 
@@ -121,16 +128,16 @@ Redis Pub/Sub is not assumed; current delivery is Spring's in-memory STOMP simpl
 
 Future code should comment non-obvious concurrency/idempotency, persist-before-event ordering, server-derived identity, timer reuse, and Redis atomicity/lifecycle invariants.
 
-## Explicit non-decisions
+## Configurable and implementation-level non-decisions
 
 | Deferred decision | Later owner |
 | --- | --- |
-| Authentication/session and precise authorization | REVAMP-013 ADRs; REVAMP-015/016 |
-| Per-game atomicity, versions, command-ID format/storage | REVAMP-013; REVAMP-018–020 |
-| Redis key/schema migration and TTL changes | REVAMP-013; REVAMP-021/024 |
-| Event envelope, ordering/recovery, broker topology | REVAMP-013; REVAMP-021/022 |
-| REST versus WebSocket command preference | Realtime ADR in REVAMP-013 |
-| Redis Pub/Sub/Streams/broker relay/simple broker choice | Realtime ADR in REVAMP-013 |
+| Exact session store, cookie tuning, and authorization implementation | ADR 0001; REVAMP-015/016 |
+| Exact Lua operation, command encoding, and configured marker TTL | ADR 0002; REVAMP-018–020 |
+| Final Redis key shapes and migration schedule | ADR 0003; REVAMP-021/024 |
+| Exact event field encoding and any later multi-instance broker | ADR 0004; REVAMP-021/022 |
+| REST versus WebSocket command preference | ADR 0004 leaves both as adapters |
+| Redis Pub/Sub/Streams/broker relay | ADR 0004 defers until demonstrated need |
 | Doubles, rent, jail, turn order, optional-action rules | REVAMP-010 and REVAMP-014 |
 | Deployment topology/multi-instance strategy | Later ADR/release work |
 
