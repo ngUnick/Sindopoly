@@ -219,7 +219,7 @@ Two choices are especially important:
 
 ### REVAMP-012 — Define target command boundaries and state ownership
 
-- Status: `READY`; Priority: `P1`; Category: `ARCHITECTURE`.
+- Status: `DONE`; Priority: `P1`; Category: `ARCHITECTURE`.
 - Rationale / evidence: controllers, orchestration, Redis mutation, rule logic, timers, and events currently cross boundaries.
 - Desired outcome: a pragmatic target map for transport, application commands, domain rules, state store, scheduler, and event publication ownership.
 - Dependencies: REVAMP-009. Blocks: REVAMP-013 through REVAMP-021.
@@ -234,7 +234,7 @@ Two choices are especially important:
 
 ### REVAMP-013 — Record required architecture decisions (ADRs)
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `ARCHITECTURE`.
+- Status: `READY`; Priority: `P1`; Category: `ARCHITECTURE`.
 - Rationale / evidence: auth/session model, command concurrency strategy, Redis schema evolution, and realtime transport target are undecided.
 - Desired outcome: concise ADRs for identity/session approach, per-game transition atomicity/idempotency, state versioning, and WebSocket/polling/recovery direction.
 - Dependencies: REVAMP-012, REVAMP-009. Blocks: REVAMP-015, REVAMP-018, REVAMP-020, REVAMP-021.
