@@ -188,7 +188,7 @@ Two choices are especially important:
 
 ### REVAMP-010 — Add deterministic domain-rule tests and test seams
 
-- Status: `READY`; Priority: `P1`; Category: `TESTING`.
+- Status: `DONE`; Priority: `P1`; Category: `TESTING`.
 - Rationale / evidence: movement is pure, but dice, square actions, time, and randomness are entangled with infrastructure.
 - Desired outcome: injectable seams for randomness/time where materially useful and focused tests for movement, dice interpretation, rent/tax/card/jail outcomes.
 - Dependencies: REVAMP-009. Blocks: REVAMP-019 and REVAMP-020.
@@ -249,7 +249,7 @@ Two choices are especially important:
 
 ### REVAMP-014 — Document canonical game state machine and rule decisions
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `GAME_FLOW`.
+- Status: `READY`; Priority: `P1`; Category: `GAME_FLOW`.
 - Rationale / evidence: turn phase is implicit in Redis fields; optional-action formats and jail/rent semantics conflict; doubles are unverified.
 - Desired outcome: canonical states, commands, guards, transitions, terminal/cleanup behavior, and explicitly approved rule decisions.
 - Dependencies: REVAMP-009, REVAMP-010, REVAMP-012. Blocks: REVAMP-018 through REVAMP-023.
