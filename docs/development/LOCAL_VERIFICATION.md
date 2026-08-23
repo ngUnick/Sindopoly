@@ -23,9 +23,9 @@ fixes.
 | V-02 Backend wrapper / backend | `Sindopoly-Java`; `.\mvnw.cmd clean verify` | Writable Maven wrapper cache | `ENVIRONMENT_BLOCKED` in the audit environment: cannot create `C:\Users\USER\.m2\wrapper\dists`. | Wrapper or documented system-Maven fallback works on a clean Windows checkout. | REVAMP-006, REVAMP-030 |
 | V-03 Backend fast tests / backend | `Sindopoly-Java`; `mvn test` | Unit and characterization test sources; no Docker requirement | `PASS`: fast unit/characterization tests execute. | Required fast tests execute and pass without the container tier. | REVAMP-009, REVAMP-010, REVAMP-011 |
 | V-18 Backend integration tests / backend | `Sindopoly-Java`; `mvn verify -Pintegration-tests` (or verified compatibility form `mvn -Dapi.version=1.44 verify -Pintegration-tests`) | Docker Desktop daemon/image access; isolated Testcontainers Redis and MariaDB | `PASS` by external Windows/Docker verification: 27 fast tests and 3 integration tests passed with zero failures, errors, or skips. Docker Engine 29.4.3 required `-Dapi.version=1.44` for Testcontainers discovery on that machine; the Codex session remains unable to reproduce Docker startup. | Failsafe executes `*IT` tests against disposable Redis/MariaDB; no local services are used. | REVAMP-011, REVAMP-030 |
-| V-04 Frontend install / frontend | `sindopoly-front`; `npm.cmd ci` | Node/npm, writable npm cache and install tree | `ENVIRONMENT_BLOCKED` in this run by EPERM access to npm cache/node_modules cleanup. Earlier audit run installed 456 packages. | Clean lockfile install succeeds without changing the lockfile. | REVAMP-007, REVAMP-030 |
+| V-04 Frontend install / frontend | `sindopoly-front`; `npm.cmd ci` | Node/npm, writable npm cache and install tree | `ENVIRONMENT_BLOCKED` in Codex: npm reports the lockfile package but does not leave a usable `node_modules/.bin/vite` shim. This is not evidence that a clean GitHub runner cannot install. | Clean lockfile install succeeds without changing the lockfile. | REVAMP-007, REVAMP-030 |
 | V-05 Frontend dev server / frontend | `sindopoly-front`; `npm.cmd run dev` | Successful dependency install | `UNVERIFIED`; script exists but was not started. | Dev server starts on the documented local address and reaches the selected backend configuration. | REVAMP-007, REVAMP-030 |
-| V-06 Frontend build / frontend | `sindopoly-front`; `npm.cmd run build` | Successful dependency install | `ENVIRONMENT_BLOCKED` in this run because Vite was unavailable after the install failure. Earlier audit run passed outside the sandbox with warnings. | Build exits successfully from a clean checkout with warnings reviewed. | REVAMP-007, REVAMP-030 |
+| V-06 Frontend build / frontend | `sindopoly-front`; `npm.cmd run build` | Successful dependency install | `ENVIRONMENT_BLOCKED` in Codex: after `npm.cmd ci`, `vite` was not recognized because the local executable shim was absent. Earlier audit run passed outside the sandbox with warnings. | Build exits successfully from a clean checkout with warnings reviewed. | REVAMP-007, REVAMP-030 |
 | V-07 Frontend lint / frontend | `sindopoly-front`; `npm.cmd run lint` | Successful dependency install | `KNOWN_FAIL` baseline: earlier audit found 40 problems (34 errors, 6 warnings), including undefined `cardMessage`; this run could not invoke ESLint after install failure. | Lint exits zero with no unreviewed errors/warnings. | REVAMP-007 and later focused fixes |
 | V-08 Frontend tests / frontend | `sindopoly-front`; `npm.cmd test` | A test script/framework | `NOT_AVAILABLE`: `package.json` has no `test` script and no frontend test suite was found. | An approved frontend test command exists and required tests pass. | REVAMP-007, REVAMP-009, REVAMP-022 |
 | V-09 Compose validation / infrastructure | Repository root; `docker compose config` | Docker CLI/Compose, no daemon required | `PASS`; configuration normalized. Docker config access warning was emitted. | Configuration validation passes on a clean Windows checkout without unexplained warnings. | REVAMP-006, REVAMP-007 |
@@ -40,10 +40,11 @@ fixes.
 
 ## Current baseline interpretation
 
-“Backend build passes” currently means compilation, packaging, and a successful
-Maven lifecycle. It does **not** mean meaningful automated tests pass: zero
-backend test sources currently execute. Likewise, a historical frontend build
-pass does not erase the current install/lint/test limitations.
+“Backend build passes” currently means compilation, packaging, and the 27-test
+fast backend tier. The separate container-backed integration tier has three
+tests and is documented in `INTEGRATION_TESTING.md`; it remains distinct from
+ordinary fast verification. Likewise, a historical frontend build pass does not
+erase the current install/lint/test limitations.
 
 The Docker, Redis, MariaDB, REST, and WebSocket checks are intentionally
 separate. A Compose configuration pass does not prove that the daemon, services,
