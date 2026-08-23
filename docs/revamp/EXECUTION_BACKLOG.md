@@ -264,7 +264,7 @@ Two choices are especially important:
 
 ### REVAMP-015 — Add authentication and server-side player identity foundation
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `SECURITY`.
+- Status: `READY`; Priority: `P1`; Category: `SECURITY`.
 - Rationale / evidence: all requests are permitted and browser-supplied `playerId` is treated as identity.
 - Desired outcome: trusted authenticated actor context mapped to a server-side player identity at REST and planned WebSocket entry points.
 - Dependencies: REVAMP-011, REVAMP-012, REVAMP-013, REVAMP-014. Blocks: REVAMP-016 through REVAMP-022.
