@@ -264,7 +264,7 @@ Two choices are especially important:
 
 ### REVAMP-015 — Add authentication and server-side player identity foundation
 
-- Status: `READY`; Priority: `P1`; Category: `SECURITY`.
+- Status: `DONE`; Priority: `P1`; Category: `SECURITY`.
 - Rationale / evidence: all requests are permitted and browser-supplied `playerId` is treated as identity.
 - Desired outcome: trusted authenticated actor context mapped to a server-side player identity at REST and planned WebSocket entry points.
 - Dependencies: REVAMP-011, REVAMP-012, REVAMP-013, REVAMP-014. Blocks: REVAMP-016 through REVAMP-022.
@@ -279,7 +279,7 @@ Two choices are especially important:
 
 ### REVAMP-016 — Enforce membership, host, active-player, and phase authorization
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `SECURITY`.
+- Status: `READY`; Priority: `P1`; Category: `SECURITY`.
 - Rationale / evidence: host checks are partial, membership is inconsistent, and UI-only controls can be bypassed.
 - Desired outcome: centralized application-command authorization for reads/mutations, including host-only lifecycle actions and active-turn commands.
 - Dependencies: REVAMP-015, REVAMP-011, REVAMP-014. Blocks: REVAMP-017 through REVAMP-022.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-015 — Add authentication and server-side
-player identity foundation**. Later work remains blocked by the required
-identity, authorization, and command-path prerequisites.
+The immediate `READY` item is **REVAMP-016 — Enforce membership, host,
+active-player, and phase authorization**. Later work remains blocked by the
+required authorization and command-path prerequisites.
 
 ## Planning review
 

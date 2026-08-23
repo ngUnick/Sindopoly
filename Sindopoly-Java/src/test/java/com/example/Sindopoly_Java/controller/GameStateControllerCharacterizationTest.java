@@ -3,6 +3,7 @@ package com.example.Sindopoly_Java.controller;
 import com.example.Sindopoly_Java.dto.GameCreationRequest;
 import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.PlayerStateService;
+import com.example.Sindopoly_Java.security.AuthenticatedPlayerResolver;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -32,6 +34,12 @@ class GameStateControllerCharacterizationTest {
     @Mock
     private PlayerStateService playerStateService;
 
+    @Mock
+    private AuthenticatedPlayerResolver authenticatedPlayerResolver;
+
+    @Mock
+    private Authentication authentication;
+
     @InjectMocks
     private GameStateController controller;
 
@@ -42,13 +50,15 @@ class GameStateControllerCharacterizationTest {
         request.setOwnerId(17);
         request.setVisibility("public");
         Map<String, String> state = new HashMap<>(Map.of("status", "lobby"));
+        when(authenticatedPlayerResolver.requireMatchingPlayerId(17, authentication)).thenReturn(17);
         when(gameStateService.createGame(17, "public")).thenReturn(state);
 
-        Map<String, String> response = controller.createGame(request);
+        Map<String, String> response = controller.createGame(request, authentication);
 
         assertEquals("lobby", response.get("status"));
         assertEquals("17", response.get("gameId"));
         verify(gameStateService).createGame(17, "public");
+        verify(authenticatedPlayerResolver).requireMatchingPlayerId(17, authentication);
     }
 
     @Test
@@ -57,7 +67,7 @@ class GameStateControllerCharacterizationTest {
         when(gameStateService.isPlayerInAnyGame(2)).thenReturn(false);
         when(gameStateService.getPlayersInGame(1)).thenReturn(Set.of("1"));
 
-        ResponseEntity<String> response = controller.addPlayer(1, 2);
+        ResponseEntity<String> response = controller.addPlayer(1, 2, authentication);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("Player added to game.", response.getBody());
@@ -69,7 +79,7 @@ class GameStateControllerCharacterizationTest {
     void currentBehavior_duplicateJoinReturnsBadRequest() {
         when(gameStateService.isPlayerInAnyGame(2)).thenReturn(true);
 
-        ResponseEntity<String> response = controller.addPlayer(1, 2);
+        ResponseEntity<String> response = controller.addPlayer(1, 2, authentication);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals("Player is already in another game.", response.getBody());
@@ -81,7 +91,7 @@ class GameStateControllerCharacterizationTest {
     void currentBehavior_startWithTwoPlayersReturnsInProgressSnapshot() {
         when(gameStateService.getPlayersInGame(1)).thenReturn(Set.of("1", "2"));
 
-        ResponseEntity<?> response = controller.startGame(1, 1);
+        ResponseEntity<?> response = controller.startGame(1, 1, authentication);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         Map<?, ?> body = assertInstanceOf(Map.class, response.getBody());
@@ -91,13 +101,12 @@ class GameStateControllerCharacterizationTest {
     }
 
     @Test
-    @DisplayName("[CHARACTERIZATION][KNOWN SECURITY DEFECT] remove accepts playerId without an authenticated actor")
-    void currentBehavior_removePlayerHasNoAuthenticatedActorAtControllerBoundary() {
-        // REVAMP-016/017 must replace this current public-controller behavior;
-        // this test records it rather than approving it as the target contract.
-        String response = controller.removePlayer(1, 2);
+    @DisplayName("remove verifies the requested player against the authenticated actor")
+    void removePlayerRequiresMatchingAuthenticatedActor() {
+        String response = controller.removePlayer(1, 2, authentication);
 
         assertEquals("Player removed from game.", response);
+        verify(authenticatedPlayerResolver).requireMatchingPlayerId(2, authentication);
         verify(gameStateService).removePlayerFromGame(1, 2);
     }
 

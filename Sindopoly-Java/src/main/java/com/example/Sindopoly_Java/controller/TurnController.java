@@ -6,11 +6,14 @@ import com.example.Sindopoly_Java.model.dto.SquareEventDto;
 import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.orchestrator.TurnService;
+import com.example.Sindopoly_Java.security.AuthenticatedPlayerResolver;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -24,13 +27,16 @@ import org.springframework.web.bind.annotation.*;
 public class TurnController {
     private final TurnService      turnSvc;
     private final GameStateService gameStateSvc;
+    private final AuthenticatedPlayerResolver authenticatedPlayerResolver;
 
     /** STEP 1: roll & peek */
     @PostMapping("/{gameId}/{playerId}/throw")
     public ThrowResultDto throwDice(
         @PathVariable int gameId,
-        @PathVariable int playerId
+        @PathVariable int playerId,
+        Authentication authentication
     ) {
+        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
         return turnSvc.throwDice(gameId, playerId);
     }
 
@@ -39,8 +45,13 @@ public class TurnController {
     public ActionResultDto doAction(
         @PathVariable int gameId,
         @PathVariable int playerId,
-        @RequestBody ActionRequestDto req
+        @RequestBody ActionRequestDto req,
+        Authentication authentication
     ) {
+        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
+        if (req.getGameId() != gameId || req.getPlayerId() != playerId) {
+            throw new AccessDeniedException("Action identity does not match its request path");
+        }
         return turnSvc.applyAction(req);
     }
 
@@ -57,7 +68,9 @@ public class TurnController {
     @PostMapping("/{gameId}/{playerId}/pass")
     public ResponseEntity<?> passOptional(
             @PathVariable int gameId,
-            @PathVariable int playerId) {
+            @PathVariable int playerId,
+            Authentication authentication) {
+        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
         gameStateSvc.assertOptionalAction(gameId, playerId);
         gameStateSvc.clearOptionalAction(gameId);
         turnSvc.finishTurn(gameId);

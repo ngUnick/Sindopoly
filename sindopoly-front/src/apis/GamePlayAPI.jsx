@@ -1,5 +1,6 @@
 import API_BASE_URL from "./apiConfig";
 import { TurnAPI }  from "./TurnAPI";
+import { apiFetch } from "./apiClient";
 
 /**
  * Helper that builds the "board" blob Board.jsx expects.
@@ -7,12 +8,12 @@ import { TurnAPI }  from "./TurnAPI";
  */
 async function assembleBoard(gameId) {
   // 1) fetch game‐level fields
-  const gameRes = await fetch(`${API_BASE_URL}/api/game-state/${gameId}`);
+  const gameRes = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}`);
   if (!gameRes.ok) throw new Error("Game state fetch failed");
   const gameHash = await gameRes.json();
 
   // 2) fetch per‐player list
-  const playersRes = await fetch(
+  const playersRes = await apiFetch(
     `${API_BASE_URL}/api/game-state/players-detailed/${gameId}`
   );
   if (!playersRes.ok) throw new Error("Players fetch failed");
@@ -72,7 +73,7 @@ export const GamePlayAPI = {
 
   /****** other APIs unchanged ******/
   getInGameStatus: async playerId => {
-    const r = await fetch(
+    const r = await apiFetch(
       `${API_BASE_URL}/api/game-state/in-game/${playerId}`
     );
     if (!r.ok) throw new Error("Failed to check game state");
@@ -80,7 +81,7 @@ export const GamePlayAPI = {
   },
 
   buyProperty: async (gameId, playerId, propertyId) => {
-    const r = await fetch(
+    const r = await apiFetch(
       `${API_BASE_URL}/api/player-state/${gameId}/${playerId}/buy?propertyId=${propertyId}`,
       { method: "POST" }
     );
@@ -89,7 +90,7 @@ export const GamePlayAPI = {
   },
 
   payJailFine: async (gameId, playerId) => {
-    const r = await fetch(
+    const r = await apiFetch(
       `${API_BASE_URL}/api/player-state/${gameId}/${playerId}/pay-jail`,
       { method: "POST" }
     );
@@ -99,13 +100,13 @@ export const GamePlayAPI = {
 };
 
 export async function getGameState(gameId) {
-  const r = await fetch(`${API_BASE_URL}/api/game-state/${gameId}`);
+  const r = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}`);
   if (!r.ok) throw new Error("Game state fetch failed");
   return r.json();
 }
 
 export async function getPlayersDetailed(gameId) {
-  const r = await fetch(
+  const r = await apiFetch(
     `${API_BASE_URL}/api/game-state/players-detailed/${gameId}`
   );
   if (!r.ok) throw new Error("Players fetch failed");

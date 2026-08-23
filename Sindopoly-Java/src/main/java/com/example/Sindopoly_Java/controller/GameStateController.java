@@ -7,10 +7,12 @@ import com.example.Sindopoly_Java.dto.GameCreationRequest;
 import com.example.Sindopoly_Java.model.Player;
 import com.example.Sindopoly_Java.model.dto.PlayerDetailedDto;
 import com.example.Sindopoly_Java.repository.PlayerRepository;
+import com.example.Sindopoly_Java.security.AuthenticatedPlayerResolver;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
 
@@ -29,14 +31,17 @@ public class GameStateController {
 
     private final GameStateService gameStateService;
     private final PlayerStateService playerStateService;
+    private final AuthenticatedPlayerResolver authenticatedPlayerResolver;
 
     @Autowired
     private ValidationUtils validationUtils;
 
     public GameStateController(GameStateService gameStateService, 
-                               PlayerStateService playerStateService) {
+                               PlayerStateService playerStateService,
+                               AuthenticatedPlayerResolver authenticatedPlayerResolver) {
         this.playerStateService = playerStateService;
         this.gameStateService = gameStateService;
+        this.authenticatedPlayerResolver = authenticatedPlayerResolver;
     }
 
 
@@ -109,8 +114,11 @@ public class GameStateController {
      * Body: { "ownerId": 1, "visibility": "private" }
      */
     @PostMapping("/create")
-    public Map<String, String> createGame(@RequestBody GameCreationRequest request) {
-        int ownerId = request.getOwnerId();
+    public Map<String, String> createGame(
+            @RequestBody GameCreationRequest request,
+            Authentication authentication) {
+        int ownerId = authenticatedPlayerResolver.requireMatchingPlayerId(
+                request.getOwnerId(), authentication);
         Map<String, String> response = gameStateService.createGame(ownerId, request.getVisibility());
         response.put("gameId", String.valueOf(ownerId));
         return response;
@@ -123,7 +131,8 @@ public class GameStateController {
      * GET /api/game-state/in-game/{playerId}
      */
     @GetMapping("/in-game/{playerId}")
-    public boolean isPlayerInGame(@PathVariable int playerId) {
+    public boolean isPlayerInGame(@PathVariable int playerId, Authentication authentication) {
+        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
         return gameStateService.isPlayerInAnyGame(playerId);
     }
 
@@ -138,7 +147,9 @@ public class GameStateController {
     @PostMapping("/{gameId}/start")
     public ResponseEntity<?> startGame(
             @PathVariable int gameId,
-            @RequestParam int playerId) {
+            @RequestParam int playerId,
+            Authentication authentication) {
+        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
         try {
             Set<String> currentPlayers = gameStateService.getPlayersInGame(gameId);
 
@@ -174,7 +185,11 @@ public class GameStateController {
      * POST /api/game-state/add/{gameId}/{playerId}
      */
     @PostMapping("/add/{gameId}/{playerId}")
-    public ResponseEntity<String> addPlayer(@PathVariable int gameId, @PathVariable int playerId) {
+    public ResponseEntity<String> addPlayer(
+            @PathVariable int gameId,
+            @PathVariable int playerId,
+            Authentication authentication) {
+        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
         // ❌ Prevent player from joining multiple games
         if (gameStateService.isPlayerInAnyGame(playerId)) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Player is already in another game.");
@@ -210,7 +225,9 @@ public class GameStateController {
      */
     @PostMapping("/join-with-invite")
     public Map<String, String> joinWithInvite(@RequestParam String inviteCode,
-                                            @RequestParam int playerId) {
+                                            @RequestParam int playerId,
+                                            Authentication authentication) {
+        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
 
         String id = gameStateService.addPlayerToGameWithInviteCode(inviteCode, playerId);
 
@@ -228,7 +245,11 @@ public class GameStateController {
      * POST /api/game-state/{gameId}/remove-player?playerId=2
      */
     @PostMapping("/{gameId}/remove-player")
-    public String removePlayer(@PathVariable int gameId, @RequestParam int playerId) {
+    public String removePlayer(
+            @PathVariable int gameId,
+            @RequestParam int playerId,
+            Authentication authentication) {
+        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
         gameStateService.removePlayerFromGame(gameId, playerId);
         return "Player removed from game.";
     }

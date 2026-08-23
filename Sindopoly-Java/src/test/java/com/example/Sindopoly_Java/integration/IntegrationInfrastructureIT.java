@@ -12,10 +12,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -29,6 +31,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 
 /**
  * Container-backed infrastructure baseline. The MariaDB container receives the
@@ -112,26 +115,56 @@ class IntegrationInfrastructureIT {
     }
 
     @Test
-    void preAuthCurrentContractCreatesJoinsStartsAndReadsGameStateThroughRealStores() throws Exception {
-        // This proves today's REST-to-store wiring only. It deliberately does
-        // not treat the body-supplied player ID as the future auth model.
-        mockMvc.perform(post("/api/game-state/create")
+    void authenticatedSessionsCreateJoinStartAndReadThroughRealStores() throws Exception {
+        MvcResult ownerCreation = mockMvc.perform(post("/api/player-state/create")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"ownerId\":1,\"visibility\":\"public\"}"))
+                        .content("{\"nickname\":\"OwnerIT\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.gameId").value("1"))
+                .andReturn();
+        int ownerId = Integer.parseInt(ownerCreation.getResponse().getContentAsString());
+        MockHttpSession ownerSession = (MockHttpSession) ownerCreation.getRequest().getSession(false);
+
+        MvcResult memberCreation = mockMvc.perform(post("/api/player-state/create")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"MemberIT\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        int memberId = Integer.parseInt(memberCreation.getResponse().getContentAsString());
+        MockHttpSession memberSession = (MockHttpSession) memberCreation.getRequest().getSession(false);
+
+        mockMvc.perform(post("/api/game-state/create")
+                        .session(ownerSession)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ownerId\":" + ownerId + ",\"visibility\":\"public\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gameId").value(String.valueOf(ownerId)))
                 .andExpect(jsonPath("$.status").value("lobby"));
 
-        mockMvc.perform(post("/api/game-state/add/1/2"))
+        mockMvc.perform(post("/api/game-state/add/" + ownerId + "/" + memberId)
+                        .session(memberSession)
+                        .with(csrf()))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/game-state/1/start").param("playerId", "1"))
+        mockMvc.perform(post("/api/game-state/" + ownerId + "/start")
+                        .session(ownerSession)
+                        .with(csrf())
+                        .param("playerId", String.valueOf(ownerId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("inProgress"));
 
-        mockMvc.perform(get("/api/game-state/1"))
+        mockMvc.perform(get("/api/session/me").session(ownerSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(ownerId));
+
+        mockMvc.perform(get("/api/game-state/" + ownerId).session(ownerSession))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("inProgress"))
-                .andExpect(jsonPath("$.playerTurn").value("1"));
+                .andExpect(jsonPath("$.playerTurn").value(String.valueOf(ownerId)));
+
+        mockMvc.perform(post("/api/turn/" + ownerId + "/" + memberId + "/throw")
+                        .session(ownerSession)
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
     }
 }

@@ -13,13 +13,16 @@ import {
   LogoutOutlined,      // ⬅️ icon
 } from "@ant-design/icons";
 import { useEffect, useState } from "react";
+import { useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { GamePlayAPI } from "../../apis/GamePlayAPI";
 import { GameAPI } from "../../apis/GameAPI";
 import bgImg from "../../assets/images/monopoly_bg.png";
+import AuthContext from "../../AuthContext/AuthContext";
 
 function Home() {
   const navigate = useNavigate();
+  const { logout } = useContext(AuthContext);
 
   /* -------------------------- state -------------------------- */
   const [isOnGame, setIsOnGame]   = useState(false);
@@ -52,10 +55,8 @@ function Home() {
   };
 
   /* leave / change nickname */
-  const handleLeave = () => {
-    sessionStorage.removeItem("nickname");
-    localStorage.removeItem("player_id");
-    navigate("/login");          // adjust if your login route differs
+  const handleLeave = async () => {
+    await logout();
   };
 
   /* ------------------------ UI ------------------------------- */

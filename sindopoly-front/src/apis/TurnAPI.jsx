@@ -1,4 +1,5 @@
 import API_BASE_URL from "./apiConfig";
+import { apiFetch } from "./apiClient";
 
 /**
  * Low-level wrappers around your two turn endpoints:
@@ -8,7 +9,7 @@ import API_BASE_URL from "./apiConfig";
 export const TurnAPI = {
   /** STEP 1: roll dice & peek → POST /throw */
   throwDice: async (gameId, playerId) => {
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE_URL}/api/turn/${gameId}/${playerId}/throw`,
       { method: "POST" }
     );
@@ -24,7 +25,7 @@ export const TurnAPI = {
   /** STEP 2: apply buy/ok → POST /action */
   doAction: async (gameId, playerId, yes) => {
     const payload = { gameId, playerId, yes };
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE_URL}/api/turn/${gameId}/${playerId}/action`,
       {
         method: "POST",

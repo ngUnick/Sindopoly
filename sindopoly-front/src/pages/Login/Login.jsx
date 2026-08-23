@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useContext } from "react";
 import { Button, Modal, Input, message } from "antd";
 import monopoly_logo from "../../assets/images/monopoly_logo.png";
 import { useNavigate } from "react-router-dom";
 import { Filter } from "glin-profanity";
 import { sanitizeText } from "../../utils/sanitize";
 import bgImg from "../../assets/images/monopoly_bg.png";
+import AuthContext from "../../AuthContext/AuthContext";
+import { AuthAPI } from "../../apis/AuthAPI";
+import { apiFetch, clearCsrfToken } from "../../apis/apiClient";
 
 const filter = new Filter({
   languages: ["english"],
@@ -19,12 +22,19 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const inputRef = useRef(null);
   const navigate = useNavigate();
+  const { login, currentPlayer, loading: sessionLoading } = useContext(AuthContext);
 
   useEffect(() => {
     if (isModalOpen && inputRef.current) {
       setTimeout(() => inputRef.current.focus(), 50);
     }
   }, [isModalOpen]);
+
+  useEffect(() => {
+    if (!sessionLoading && currentPlayer) {
+      navigate("/", { replace: true });
+    }
+  }, [currentPlayer, navigate, sessionLoading]);
 
   const handleStartClick = () => {
     setIsModalOpen(true);
@@ -66,16 +76,20 @@ const Login = () => {
     const hide = message.loading("Creating player...", 0);
 
     try {
-      const res = await fetch("http://localhost:8080/api/player-state/create", {
+      const res = await apiFetch("http://localhost:8080/api/player-state/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nickname: cleanName }),
+        csrf: false,
       });
 
       if (!res.ok) throw new Error("Failed to create player");
 
       const playerId = await res.json();
-      localStorage.setItem("player_id", playerId);
+      clearCsrfToken();
+      const currentPlayer = await AuthAPI.getCurrentPlayer();
+      if (currentPlayer.id !== playerId) throw new Error("Session identity mismatch");
+      login(currentPlayer);
       hide(); // hide loading
       setLoading(false);
       navigate("/");

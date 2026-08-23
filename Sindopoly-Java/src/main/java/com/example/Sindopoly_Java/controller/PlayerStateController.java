@@ -8,12 +8,17 @@ import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.PlayerStateService;
 import com.example.Sindopoly_Java.service.core.SquareActionService;
 import com.example.Sindopoly_Java.service.orchestrator.TurnService;
+import com.example.Sindopoly_Java.security.AuthenticatedPlayerResolver;
+import com.example.Sindopoly_Java.security.PlayerSessionService;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.val;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -28,6 +33,8 @@ public class PlayerStateController {
     private final GameStateService gameStateSvc;
     private final TurnService turnSvc;
     private final ValidationUtils validationUtils;
+    private final AuthenticatedPlayerResolver authenticatedPlayerResolver;
+    private final PlayerSessionService playerSessionService;
 
     @Autowired
     public PlayerStateController(PlayerStateService playerStateService,
@@ -35,13 +42,17 @@ public class PlayerStateController {
                                  PlayerRepository playerRepository,
                                  GameStateService gameStateSvc,
                                  TurnService turnSvc,
-                                 ValidationUtils v) {
+                                 ValidationUtils v,
+                                 AuthenticatedPlayerResolver authenticatedPlayerResolver,
+                                 PlayerSessionService playerSessionService) {
         this.playerStateService = playerStateService;
         this.squareActionSvc= squareActionSvc;
         this.playerRepository     = playerRepository;
         this.gameStateSvc   = gameStateSvc;
         this.turnSvc        = turnSvc;
         this.validationUtils= v;
+        this.authenticatedPlayerResolver = authenticatedPlayerResolver;
+        this.playerSessionService = playerSessionService;
     }
 
     /**
@@ -50,7 +61,10 @@ public class PlayerStateController {
      * Body: JSON like { "nickname": "Player1" }
      */
     @PostMapping("/create")
-    public ResponseEntity<Integer> createPlayer(@RequestBody Map<String, String> body) {
+    public ResponseEntity<Integer> createPlayer(
+            @RequestBody Map<String, String> body,
+            HttpServletRequest request,
+            HttpServletResponse response) {
         String nickname = body.get("nickname");
 
         validationUtils.validateNickname(nickname);
@@ -59,11 +73,14 @@ public class PlayerStateController {
             throw new IllegalArgumentException("Nickname is required");
         }
 
+        // Reject identity switching before a durable Player row can be created.
+        playerSessionService.assertCanEstablish();
+
         Player player = new Player();
         player.setName(nickname.trim());
 
         player = playerRepository.save(player);
-        System.out.println("Saving player: " + nickname);
+        playerSessionService.establish(player, request, response);
         return ResponseEntity.ok(player.getId()); // return player ID
     }
 
@@ -73,7 +90,11 @@ public class PlayerStateController {
      * Body: JSON like { "position": 10, "money": 500, ... }
      */
     @PostMapping("/{playerId}")
-    public String savePlayer(@PathVariable int playerId, @RequestBody Map<String, Object> playerData) {
+    public String savePlayer(
+            @PathVariable int playerId,
+            @RequestBody Map<String, Object> playerData,
+            Authentication authentication) {
+        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
         playerStateService.savePlayerState(playerId, playerData);
         return "Player state saved successfully.";
     }
@@ -83,7 +104,8 @@ public class PlayerStateController {
      * GET /api/player-state/{playerId}
      */
     @GetMapping("/{playerId}")
-    public Map<String, Object> getPlayer(@PathVariable int playerId) {
+    public Map<String, Object> getPlayer(@PathVariable int playerId, Authentication authentication) {
+        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
         return playerStateService.getPlayerState(playerId);
     }
 
@@ -92,7 +114,8 @@ public class PlayerStateController {
      * DELETE /api/player-state/{playerId}
      */
     @DeleteMapping("/{playerId}")
-    public String deletePlayer(@PathVariable int playerId) {
+    public String deletePlayer(@PathVariable int playerId, Authentication authentication) {
+        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
         playerStateService.deletePlayer(playerId);
         return "Player state deleted successfully.";
     }
@@ -103,7 +126,11 @@ public class PlayerStateController {
      * Body: JSON like { "nickname": "Player1" }
      */
     @PostMapping("/grant-money/{playerId}/{amount}")
-    public ResponseEntity<Integer> grantPlayerMoney(@PathVariable int playerId, @PathVariable int  amount) {
+    public ResponseEntity<Integer> grantPlayerMoney(
+            @PathVariable int playerId,
+            @PathVariable int amount,
+            Authentication authentication) {
+        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
         validationUtils.validatePlayerExists(playerId);
         playerStateService.grantMoney(playerId, amount);
         return ResponseEntity.ok(playerId); // return player ID

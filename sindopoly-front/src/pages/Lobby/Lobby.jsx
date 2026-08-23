@@ -1,5 +1,6 @@
 import { Button, message } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { apiFetch } from '../../apis/apiClient';
 import { useEffect, useState, useMemo } from 'react';
 import { GameAPI } from '../../apis/GameAPI';
 import bgImg from "../../assets/images/monopoly_bg.png";
@@ -31,8 +32,8 @@ const Lobby = () => {
 
   const fetchPlayers = async () => {
     try {
-      const resPlayers = await fetch(`http://localhost:8080/api/game-state/players-detailed-lobby/${gameId}`);
-      const resGame = await fetch(`http://localhost:8080/api/game-state/${gameId}`);
+      const resPlayers = await apiFetch(`http://localhost:8080/api/game-state/players-detailed-lobby/${gameId}`);
+      const resGame = await apiFetch(`http://localhost:8080/api/game-state/${gameId}`);
       if (!resPlayers.ok || !resGame.ok) throw new Error("Failed to fetch");
 
       const players = await resPlayers.json();
@@ -57,7 +58,7 @@ const Lobby = () => {
 
   const handleLeaveGame = async () => {
     try {
-      const response = await fetch(`http://localhost:8080/api/game-state/${gameId}/remove-player?playerId=${playerId}`, {
+      const response = await apiFetch(`http://localhost:8080/api/game-state/${gameId}/remove-player?playerId=${playerId}`, {
         method: 'POST'
       });
       if (!response.ok) throw new Error("Failed to leave game");
@@ -69,7 +70,7 @@ const Lobby = () => {
 
   const handleKick = async (targetId) => {
     try {
-      const response = await fetch(`http://localhost:8080/api/game-state/${gameId}/remove-player?playerId=${targetId}`, {
+      const response = await apiFetch(`http://localhost:8080/api/game-state/${gameId}/remove-player?playerId=${targetId}`, {
         method: 'POST'
       });
       if (!response.ok) throw new Error("Failed to remove player");

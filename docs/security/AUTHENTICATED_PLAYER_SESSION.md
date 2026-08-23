@@ -1,0 +1,134 @@
+# Authenticated player session
+
+## Scope and trust boundary
+
+Sindopoly authenticates its anonymous game participants with a server-managed,
+opaque HTTP session. `Player` remains the durable logical identity; it is not a
+password account. The browser receives the standard `JSESSIONID` cookie and
+never receives a bearer token or session identifier in a response body.
+
+The session contains Spring Security's serialized `PlayerPrincipal`, which
+holds only the durable player ID. `AuthenticatedPlayerResolver` verifies that
+the referenced MariaDB player still exists once at each actor-owned controller
+entry. Domain and application services do not depend on servlet APIs.
+
+## REST contract
+
+| Method | Path | Authentication | Behavior |
+| --- | --- | --- | --- |
+| `POST` | `/api/player-state/create` | Unauthenticated only | Validates and creates the anonymous `Player`, rotates/establishes the server session, and preserves the legacy numeric-ID response. An existing authenticated session must log out before creating another identity. |
+| `GET` | `/api/session/me` | Required | Returns only `{id, nickname}` derived from the authenticated session and MariaDB record. Missing, expired, invalidated, or stale-player sessions return `401`. |
+| `GET` | `/api/session/csrf` | Required | Returns Spring Security's CSRF header name and token for the current browser session. The client keeps it in memory. |
+| `POST` | `/api/session/logout` | Required, with CSRF | Invalidates server-side session state, clears authentication, deletes the session/CSRF cookies, and returns `204`. It does not delete the durable `Player` or active game state. |
+
+`POST /api/player-state/create`, public-lobby discovery, and API documentation
+are the only anonymous API routes. Other `/api/**` routes and the `/ws/**`
+handshake require an authenticated player session. Membership, host,
+active-player, phase, private-read, and STOMP subscription policies remain the
+responsibility of REVAMP-016 and REVAMP-021.
+
+## Legacy player IDs and compatibility
+
+The frontend still sends `playerId`/`ownerId` in existing paths, queries, and
+bodies to avoid a flag-day DTO migration. At actor-owned boundaries these IDs
+are consistency checks against the authenticated principal:
+
+- game creation, in-game lookup, join, invite join, start, and self-removal;
+- player-state read/write/delete and the legacy money mutation route;
+- roll, optional action, and pass; action path/body game and player IDs must
+  also agree.
+
+A mismatch returns `403` and never substitutes or impersonates the supplied
+player. IDs used only as resource selectors remain selectors pending the
+authorization matrix. The current host-kick UI cannot use self-removal to
+remove another player until REVAMP-016 supplies an explicit host-authorized
+command.
+
+The browser includes credentials on REST calls, recovers the current player
+from `/api/session/me` after reload, and treats local `player_id` only as cached
+display/compatibility data. Authentication secrets are not stored in
+`localStorage`, `sessionStorage`, Redux, or React state.
+
+## CSRF, CORS, and cookie policy
+
+Cookie authentication enables CSRF protection for unsafe methods. Player
+creation is narrowly exempt because no authenticated session or token exists
+yet; it cannot mutate an existing identity. The React client fetches a token
+from `/api/session/csrf`, stores it only in module memory, and sends the named
+header on subsequent unsafe requests. Logout is CSRF-protected.
+
+CORS has one configuration owner and permits credentials only for the origins
+listed by `SINDOPOLY_ALLOWED_ORIGINS`. The local default is
+`http://localhost:5173,http://127.0.0.1:5173`; deployments must supply their
+actual frontend origins rather than widening the list.
+
+Session defaults:
+
+- `HttpOnly=true`;
+- `SameSite=Lax`;
+- two-hour inactivity timeout, configurable with `SINDOPOLY_SESSION_TIMEOUT`;
+- `Secure=false` only for the documented HTTP localhost workflow;
+- production HTTPS must set `SINDOPOLY_SESSION_COOKIE_SECURE=true`.
+
+Spring Security rotates the session ID during identity establishment and
+standard logout invalidates it. Expired or invalidated sessions become
+unauthenticated and cannot silently attach to another player. Session IDs,
+cookie values, and CSRF tokens must never be logged.
+
+## Persistence and lifecycle
+
+MariaDB continues to store the existing `Player` row. There is no entity,
+table, seed-data, or schema migration. Logout does not delete that durable row.
+
+Sessions use the servlet container's in-memory Spring Security session store.
+There is **no Redis schema or key change**, and authentication data does not
+enter any active-game key namespace. This store is suitable for the current
+single-instance deployment. A multi-instance deployment must deliberately
+select a shared Spring Session store and document its namespace, serializer,
+TTL, ownership, and cleanup before use.
+
+## Security review and deferred controls
+
+Fixed in REVAMP-015:
+
+- unauthenticated access to protected REST routes and the WebSocket handshake;
+- browser-supplied IDs acting as identity at the migrated controller entries;
+- action body/path identity disagreement;
+- cross-session actor confusion;
+- session fixation at establishment, stale-player failure, logout invalidation,
+  cookie/CSRF baseline, and generated development-password fallback;
+- duplicate conflicting CORS configuration.
+
+Deferred to REVAMP-016/017:
+
+- membership, host, active-player, phase, private-read, and lifecycle policy;
+- containment/removal of arbitrary player-state, money-grant, delete-game, and
+  check-end endpoints. Authentication limits these to a known player but does
+  not make their current semantics safe.
+
+Deferred to REVAMP-021:
+
+- STOMP CONNECT identity mapping details, game-topic subscription membership,
+  inbound command policy, reconnect recovery, and WebSocket origin hardening.
+  The HTTP handshake already shares the same Spring Security session identity.
+
+## Performance
+
+The session principal is resolved in memory. Actor-owned controller entries
+perform one bounded MariaDB existence check per request so deleted/stale player
+references fail closed; the current-player response adds one row lookup. No
+Redis round trips, global locks, custom cryptography, or repeated service-layer
+session lookups are introduced.
+
+## Acceptance verification
+
+The deterministic local gates passed: `mvn clean verify` completed with 36
+fast/security tests, and `npm run build` completed successfully. External
+Windows/Docker verification completed the same 36-test fast/security tier plus
+three Redis/MariaDB/REST integration tests with
+`mvn -Dapi.version=1.44 verify -Pintegration-tests` using real
+`redis:7.0-alpine` and `mariadb:10.11` containers. Browser smoke verification
+confirmed creation, the HttpOnly `JSESSIONID`, refresh recovery through `/me`,
+an authenticated CSRF-protected mutation, logout invalidation, and an
+unauthenticated post-logout refresh. No session IDs or cookie values are
+recorded here.

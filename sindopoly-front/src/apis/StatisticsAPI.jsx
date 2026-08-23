@@ -1,5 +1,6 @@
 // src/apis/StatisticsAPI.js
 import API_BASE_URL from "./apiConfig";
+import { apiFetch } from "./apiClient";
 
 export const StatisticsAPI = {
   /* -----------------------------------------------------------
@@ -7,7 +8,7 @@ export const StatisticsAPI = {
    *  → [{ nickname:"Bob", totalWins:3, … }, …]
    * ----------------------------------------------------------- */
   getLeaderboard: async () => {
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE_URL}/api/statistics/leaderboard`,
       { method: "GET" }
     );
@@ -20,7 +21,7 @@ export const StatisticsAPI = {
    *  → { nickname:"Bob", totalWins:3, … }
    * ----------------------------------------------------------- */
   getUserStats: async (playerId) => {
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE_URL}/api/statistics/user/${playerId}`,
       { method: "GET" }
     );

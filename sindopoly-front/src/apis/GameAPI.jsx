@@ -1,4 +1,5 @@
 import API_BASE_URL from "./apiConfig";
+import { apiFetch } from "./apiClient";
 
 export const GameAPI = {
   // ✅ Create Game
@@ -8,7 +9,7 @@ export const GameAPI = {
       visibility
     };
 
-    const response = await fetch(`${API_BASE_URL}/api/game-state/create`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/game-state/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -24,7 +25,7 @@ export const GameAPI = {
 
   // ✅ Start Game
   startGame: async (gameId, playerId) => {
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE_URL}/api/game-state/${gameId}/start?playerId=${playerId}`,
       { method: "POST" }
     );
@@ -37,7 +38,7 @@ export const GameAPI = {
 
   // ✅ Get Public Lobby Games
   getPublicLobbyGames: async () => {
-    const res = await fetch("http://localhost:8080/api/game-state/public-lobby");
+    const res = await apiFetch("http://localhost:8080/api/game-state/public-lobby");
     if (!res.ok) throw new Error("Failed to fetch public games");
     return await res.json();
   },
@@ -45,7 +46,7 @@ export const GameAPI = {
   // ✅ Join Public Game
   joinGame: async (gameId) => {
     const playerId = parseInt(localStorage.getItem("player_id"));
-    const response = await fetch(`${API_BASE_URL}/api/game-state/add/${gameId}/${playerId}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/game-state/add/${gameId}/${playerId}`, {
       method: "POST",
     });
 
@@ -56,7 +57,7 @@ export const GameAPI = {
   // ✅ Join Private Game by Code
   joinWithInvite: async (inviteCode) => {
     const playerId = localStorage.getItem("player_id");
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE_URL}/api/game-state/join-with-invite?inviteCode=${inviteCode}&playerId=${playerId}`,
       { method: "POST" }
     );
@@ -74,21 +75,21 @@ export const GameAPI = {
 
   // ✅ Get Game Metadata
   getGameInfo: async (gameId) => {
-    const response = await fetch(`${API_BASE_URL}/api/game-state/${gameId}`);
+    const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}`);
     if (!response.ok) throw new Error("Failed to get game info");
     return await response.json(); // Redis hash
   },
 
   // ✅ Get Lobby Player IDs
   getGamePlayers: async (gameId) => {
-    const response = await fetch(`${API_BASE_URL}/api/game-state/${gameId}/players`);
+    const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}/players`);
     if (!response.ok) throw new Error("Failed to get players");
     return await response.json(); // Array of playerIds
   },
 
   // ✅ Remove Player From Game
   removePlayer: async (gameId, playerId) => {
-    const response = await fetch(`${API_BASE_URL}/api/game-state/${gameId}/remove-player?playerId=${playerId}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}/remove-player?playerId=${playerId}`, {
       method: "POST",
     });
 
@@ -98,7 +99,7 @@ export const GameAPI = {
 
   // ✅ Delete Game
   deleteGame: async (gameId) => {
-    const response = await fetch(`${API_BASE_URL}/api/game-state/${gameId}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}`, {
       method: "DELETE",
     });
 
