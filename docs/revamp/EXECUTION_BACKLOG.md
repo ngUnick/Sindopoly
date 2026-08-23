@@ -249,7 +249,7 @@ Two choices are especially important:
 
 ### REVAMP-014 — Document canonical game state machine and rule decisions
 
-- Status: `READY`; Priority: `P1`; Category: `GAME_FLOW`.
+- Status: `DONE`; Priority: `P1`; Category: `GAME_FLOW`.
 - Rationale / evidence: turn phase is implicit in Redis fields; optional-action formats and jail/rent semantics conflict; doubles are unverified.
 - Desired outcome: canonical states, commands, guards, transitions, terminal/cleanup behavior, and explicitly approved rule decisions.
 - Dependencies: REVAMP-009, REVAMP-010, REVAMP-012. Blocks: REVAMP-018 through REVAMP-023.
@@ -571,11 +571,11 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The sole immediate `READY` item is **REVAMP-006 — Document supported Windows
-and Docker development workflows**. On completion, reassess and normally make
-REVAMP-007 ready. Do not open later game-flow/security implementation merely
-because it is visible or urgent; it remains blocked by the safety net and
-architecture/identity prerequisites above.
+The immediate `READY` items are **REVAMP-008 — Add CI verification baseline**
+and **REVAMP-011 — Establish Redis, MariaDB, and REST integration-test
+infrastructure**. All later game-flow/security implementation remains blocked
+by the required verification, identity, authorization, and command-path
+prerequisites.
 
 ## Planning review
 
