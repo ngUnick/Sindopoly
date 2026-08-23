@@ -1,0 +1,137 @@
+package com.example.Sindopoly_Java.integration;
+
+import com.example.Sindopoly_Java.repository.CardRepository;
+import com.example.Sindopoly_Java.repository.PlayerRepository;
+import com.example.Sindopoly_Java.repository.SquareRepository;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.MariaDBContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.MountableFile;
+
+import java.nio.file.Path;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Container-backed infrastructure baseline. The MariaDB container receives the
+ * repository's existing initialization SQL, while Redis is emptied only through
+ * its container connection before and after each test.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+@ActiveProfiles("integration")
+@Testcontainers
+class IntegrationInfrastructureIT {
+
+    private static final int REDIS_PORT = 6379;
+
+    @Container
+    static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7.0-alpine")
+            .withExposedPorts(REDIS_PORT);
+
+    @Container
+    static final MariaDBContainer<?> MARIADB = new MariaDBContainer<>("mariadb:10.11")
+            .withDatabaseName("sindopoly_test")
+            .withUsername("sindopoly_test")
+            .withPassword("sindopoly_test")
+            .withCopyFileToContainer(
+                    MountableFile.forHostPath(
+                            Path.of("..", "MariaDB", "init.sql").toAbsolutePath()),
+                    "/docker-entrypoint-initdb.d/init.sql");
+
+    @DynamicPropertySource
+    static void containerProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", MARIADB::getJdbcUrl);
+        registry.add("spring.datasource.username", MARIADB::getUsername);
+        registry.add("spring.datasource.password", MARIADB::getPassword);
+        registry.add("spring.datasource.driver-class-name", MARIADB::getDriverClassName);
+        registry.add("spring.data.redis.host", REDIS::getHost);
+        registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(REDIS_PORT));
+        // Existing application properties use SPRING_REDIS_* placeholders.
+        registry.add("spring.redis.host", REDIS::getHost);
+        registry.add("spring.redis.port", () -> REDIS.getMappedPort(REDIS_PORT));
+    }
+
+    @Autowired
+    private StringRedisTemplate redis;
+
+    @Autowired
+    private PlayerRepository playerRepository;
+
+    @Autowired
+    private SquareRepository squareRepository;
+
+    @Autowired
+    private CardRepository cardRepository;
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @BeforeEach
+    @AfterEach
+    void clearDedicatedRedisContainer() {
+        // Dynamic properties above make this safe: this never targets localhost
+        // or a developer/shared Redis instance.
+        try (RedisConnection connection = redis.getConnectionFactory().getConnection()) {
+            connection.serverCommands().flushDb();
+        }
+    }
+
+    @Test
+    void redisContainerIsWiredAndStartsEachTestWithNoPriorState() {
+        assertThat(redis.opsForValue().get("integration:probe")).isNull();
+
+        redis.opsForValue().set("integration:probe", "isolated");
+
+        assertThat(redis.opsForValue().get("integration:probe")).isEqualTo("isolated");
+    }
+
+    @Test
+    void mariaDbContainerUsesCurrentSchemaAndSeedData() {
+        assertThat(playerRepository.count()).isGreaterThanOrEqualTo(2);
+        assertThat(squareRepository.count()).isEqualTo(40);
+        assertThat(cardRepository.count()).isGreaterThan(0);
+    }
+
+    @Test
+    void preAuthCurrentContractCreatesJoinsStartsAndReadsGameStateThroughRealStores() throws Exception {
+        // This proves today's REST-to-store wiring only. It deliberately does
+        // not treat the body-supplied player ID as the future auth model.
+        mockMvc.perform(post("/api/game-state/create")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ownerId\":1,\"visibility\":\"public\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gameId").value("1"))
+                .andExpect(jsonPath("$.status").value("lobby"));
+
+        mockMvc.perform(post("/api/game-state/add/1/2"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/game-state/1/start").param("playerId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("inProgress"));
+
+        mockMvc.perform(get("/api/game-state/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("inProgress"))
+                .andExpect(jsonPath("$.playerTurn").value("1"));
+    }
+}

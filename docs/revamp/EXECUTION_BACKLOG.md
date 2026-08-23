@@ -204,7 +204,7 @@ Two choices are especially important:
 
 ### REVAMP-011 — Establish Redis, MariaDB, and REST integration-test infrastructure
 
-- Status: `READY`; Priority: `P1`; Category: `TESTING`.
+- Status: `DONE`; Priority: `P1`; Category: `TESTING`.
 - Rationale / evidence: Testcontainers dependencies exist but no tests use them; active state spans Redis and MariaDB without cross-resource coverage.
 - Desired outcome: repeatable integration fixtures for Redis, MariaDB, and REST commands with isolation and cleanup rules.
 - Dependencies: REVAMP-006, REVAMP-007, REVAMP-009. Blocks: REVAMP-015 through REVAMP-023 and REVAMP-030.
@@ -572,10 +572,10 @@ Two choices are especially important:
 ## Execution frontier
 
 The immediate `READY` items are **REVAMP-008 — Add CI verification baseline**
-and **REVAMP-011 — Establish Redis, MariaDB, and REST integration-test
-infrastructure**. All later game-flow/security implementation remains blocked
-by the required verification, identity, authorization, and command-path
-prerequisites.
+and **REVAMP-015 — Add authentication and server-side player identity
+foundation**. REVAMP-015 is now unblocked by completion of REVAMP-011 and all
+of its other dependencies; later work remains blocked by the required identity,
+authorization, and command-path prerequisites.
 
 ## Planning review
 
