@@ -33,3 +33,7 @@ WebSocket coverage remains REVAMP-022.
 The Windows Docker Desktop 29.4.3 `-Dapi.version=1.44` Testcontainers discovery
 workaround is local troubleshooting evidence only. Linux GitHub runners use the
 normal integration command unless a workflow run establishes the same need.
+
+The first GitHub-hosted run for the original workflow commit passed all three
+required jobs: backend fast, backend integration, and frontend build. It used
+the normal Linux integration command without the Windows Docker API override.
