@@ -158,7 +158,7 @@ Two choices are especially important:
 
 ### REVAMP-008 — Add CI verification baseline
 
-- Status: `READY`; Priority: `P3`; Category: `VERIFICATION`.
+- Status: `DONE`; Priority: `P3`; Category: `VERIFICATION`.
 - Rationale / evidence: no `.github` workflow exists; CI must mirror a proven local contract.
 - Desired outcome: CI runs stable build, lint, and available test tiers without masking known failures.
 - Dependencies: REVAMP-007. Blocks: release confidence and REVAMP-030.
@@ -571,11 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` items are **REVAMP-008 — Add CI verification baseline**
-and **REVAMP-015 — Add authentication and server-side player identity
-foundation**. REVAMP-015 is now unblocked by completion of REVAMP-011 and all
-of its other dependencies; later work remains blocked by the required identity,
-authorization, and command-path prerequisites.
+The immediate `READY` item is **REVAMP-015 — Add authentication and server-side
+player identity foundation**. Later work remains blocked by the required
+identity, authorization, and command-path prerequisites.
 
 ## Planning review
 
