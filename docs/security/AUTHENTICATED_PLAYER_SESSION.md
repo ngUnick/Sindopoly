@@ -23,9 +23,10 @@ entry. Domain and application services do not depend on servlet APIs.
 
 `POST /api/player-state/create`, public-lobby discovery, and API documentation
 are the only anonymous API routes. Other `/api/**` routes and the `/ws/**`
-handshake require an authenticated player session. Membership, host,
-active-player, phase, private-read, and STOMP subscription policies remain the
-responsibility of REVAMP-016 and REVAMP-021.
+handshake require an authenticated player session. REST membership, host,
+active-player, phase, and private-read policy is defined in
+`GAME_COMMAND_AUTHORIZATION.md`; STOMP subscription policy remains the
+responsibility of REVAMP-021.
 
 ## Legacy player IDs and compatibility
 
@@ -40,9 +41,9 @@ are consistency checks against the authenticated principal:
 
 A mismatch returns `403` and never substitutes or impersonates the supplied
 player. IDs used only as resource selectors remain selectors pending the
-authorization matrix. The current host-kick UI cannot use self-removal to
-remove another player until REVAMP-016 supplies an explicit host-authorized
-command.
+authorization matrix. The host-kick UI uses an explicit lobby-host command
+whose target player ID is only a resource selector; the authenticated host
+remains the actor.
 
 The browser includes credentials on REST calls, recovers the current player
 from `/api/session/me` after reload, and treats local `player_id` only as cached
@@ -99,12 +100,19 @@ Fixed in REVAMP-015:
   cookie/CSRF baseline, and generated development-password fallback;
 - duplicate conflicting CORS configuration.
 
-Deferred to REVAMP-016/017:
+Fixed in REVAMP-016:
 
-- membership, host, active-player, phase, private-read, and lifecycle policy;
+- REST game membership and private-read authorization;
+- lobby-host authorization for start, delete, and explicit host kick;
+- active-player plus lifecycle/implicit-turn-phase authorization for roll,
+  optional action, and pass;
+- deterministic missing-game and lifecycle/phase conflict responses.
+
+Deferred to REVAMP-017:
+
 - containment/removal of arbitrary player-state, money-grant, delete-game, and
-  check-end endpoints. Authentication limits these to a known player but does
-  not make their current semantics safe.
+  check-end adapters. REVAMP-016 restricts the game lifecycle routes to the
+  current host policy but does not claim those direct adapters are canonical.
 
 Deferred to REVAMP-021:
 

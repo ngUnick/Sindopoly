@@ -28,6 +28,20 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", "Request is not allowed"));
     }
 
+    @ExceptionHandler(GameNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleNotFound(GameNotFoundException ex) {
+        return ResponseEntity
+                .status(404)
+                .body(Map.of("error", "Game not found"));
+    }
+
+    @ExceptionHandler(GameStateConflictException.class)
+    public ResponseEntity<Map<String, String>> handleConflict(GameStateConflictException ex) {
+        return ResponseEntity
+                .status(409)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
     @ExceptionHandler({
         IllegalArgumentException.class,
         IllegalStateException.class

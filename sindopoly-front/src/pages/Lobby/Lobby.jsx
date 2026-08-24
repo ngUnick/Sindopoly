@@ -70,15 +70,12 @@ const Lobby = () => {
 
   const handleKick = async (targetId) => {
     try {
-      const response = await apiFetch(`http://localhost:8080/api/game-state/${gameId}/remove-player?playerId=${targetId}`, {
-        method: 'POST'
-      });
-      if (!response.ok) throw new Error("Failed to remove player");
+      await GameAPI.kickPlayer(gameId, targetId);
       message.success("Player removed.");
       fetchPlayers();
     } catch (err) {
       console.error(err);
-      message.error("Failed to remove player.");
+      message.error(err.message ?? "Failed to remove player.");
     }
   };
 

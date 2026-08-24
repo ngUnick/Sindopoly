@@ -4,6 +4,7 @@ import com.example.Sindopoly_Java.dto.GameCreationRequest;
 import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.PlayerStateService;
 import com.example.Sindopoly_Java.security.AuthenticatedPlayerResolver;
+import com.example.Sindopoly_Java.security.GameAuthorizationService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +37,9 @@ class GameStateControllerCharacterizationTest {
 
     @Mock
     private AuthenticatedPlayerResolver authenticatedPlayerResolver;
+
+    @Mock
+    private GameAuthorizationService gameAuthorizationService;
 
     @Mock
     private Authentication authentication;
@@ -89,7 +93,8 @@ class GameStateControllerCharacterizationTest {
     @Test
     @DisplayName("[CHARACTERIZATION] start with two players delegates the supplied playerId as current owner check input")
     void currentBehavior_startWithTwoPlayersReturnsInProgressSnapshot() {
-        when(gameStateService.getPlayersInGame(1)).thenReturn(Set.of("1", "2"));
+        when(gameAuthorizationService.requireHostInLobby(1, 1)).thenReturn(access(
+                1, 1, Map.of("status", "lobby"), Set.of("1", "2")));
 
         ResponseEntity<?> response = controller.startGame(1, 1, authentication);
 
@@ -103,6 +108,8 @@ class GameStateControllerCharacterizationTest {
     @Test
     @DisplayName("remove verifies the requested player against the authenticated actor")
     void removePlayerRequiresMatchingAuthenticatedActor() {
+        when(gameAuthorizationService.requireMember(1, 2)).thenReturn(access(
+                1, 2, Map.of("status", "lobby"), Set.of("1", "2")));
         String response = controller.removePlayer(1, 2, authentication);
 
         assertEquals("Player removed from game.", response);
@@ -111,13 +118,38 @@ class GameStateControllerCharacterizationTest {
     }
 
     @Test
-    @DisplayName("[CHARACTERIZATION][KNOWN SECURITY DEFECT] check-end directly exposes mutation-capable service call")
-    void currentBehavior_checkEndDirectlyInvokesStateChangingService() {
+    @DisplayName("check-end requires the authenticated host while pending REVAMP-017 removal")
+    void checkEndRequiresHostAuthorization() {
+        when(authenticatedPlayerResolver.requirePlayerId(authentication)).thenReturn(1);
+        when(gameAuthorizationService.requireHostInProgress(1, 1)).thenReturn(access(
+                1, 1, Map.of("status", "inProgress"), Set.of("1", "2")));
         when(gameStateService.checkEndCondition(1)).thenReturn(true);
 
-        String response = controller.checkGameEnd(1);
+        String response = controller.checkGameEnd(1, authentication);
 
         assertEquals("Game ended due to condition.", response);
         verify(gameStateService).checkEndCondition(1);
+    }
+
+    @Test
+    @DisplayName("host kick keeps the session actor distinct from the target player")
+    void hostKickUsesTargetOnlyAsResourceSelector() {
+        var access = access(1, 1, Map.of("status", "lobby"), Set.of("1", "2"));
+        when(authenticatedPlayerResolver.requirePlayerId(authentication)).thenReturn(1);
+        when(gameAuthorizationService.requireHostInLobby(1, 1)).thenReturn(access);
+
+        String response = controller.kickPlayer(1, 2, authentication);
+
+        assertEquals("Player removed from game.", response);
+        verify(gameAuthorizationService).requireTargetMember(access, 2);
+        verify(gameStateService).removePlayerFromGame(1, 2);
+    }
+
+    private GameAuthorizationService.GameAccess access(
+            int gameId,
+            int actorId,
+            Map<String, String> game,
+            Set<String> members) {
+        return new GameAuthorizationService.GameAccess(gameId, actorId, game, members);
     }
 }

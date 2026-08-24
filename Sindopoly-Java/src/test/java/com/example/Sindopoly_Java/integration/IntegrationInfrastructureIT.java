@@ -1,5 +1,6 @@
 package com.example.Sindopoly_Java.integration;
 
+import com.jayway.jsonpath.JsonPath;
 import com.example.Sindopoly_Java.repository.CardRepository;
 import com.example.Sindopoly_Java.repository.PlayerRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
@@ -132,6 +133,14 @@ class IntegrationInfrastructureIT {
         int memberId = Integer.parseInt(memberCreation.getResponse().getContentAsString());
         MockHttpSession memberSession = (MockHttpSession) memberCreation.getRequest().getSession(false);
 
+        MvcResult outsiderCreation = mockMvc.perform(post("/api/player-state/create")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"OutsiderIT\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        MockHttpSession outsiderSession =
+                (MockHttpSession) outsiderCreation.getRequest().getSession(false);
+
         mockMvc.perform(post("/api/game-state/create")
                         .session(ownerSession)
                         .with(csrf())
@@ -140,6 +149,36 @@ class IntegrationInfrastructureIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.gameId").value(String.valueOf(ownerId)))
                 .andExpect(jsonPath("$.status").value("lobby"));
+
+        mockMvc.perform(get("/api/game-state/" + ownerId).session(outsiderSession))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/game-state/999999").session(ownerSession))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(post("/api/turn/" + ownerId + "/" + ownerId + "/throw")
+                        .session(ownerSession)
+                        .with(csrf()))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(post("/api/game-state/add/" + ownerId + "/" + memberId)
+                        .session(memberSession)
+                        .with(csrf()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/game-state/" + ownerId + "/start")
+                        .session(memberSession)
+                        .with(csrf())
+                        .param("playerId", String.valueOf(memberId)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/game-state/" + ownerId + "/players/" + memberId + "/kick")
+                        .session(ownerSession)
+                        .with(csrf()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/game-state/" + ownerId).session(memberSession))
+                .andExpect(status().isForbidden());
 
         mockMvc.perform(post("/api/game-state/add/" + ownerId + "/" + memberId)
                         .session(memberSession)
@@ -163,8 +202,51 @@ class IntegrationInfrastructureIT {
                 .andExpect(jsonPath("$.playerTurn").value(String.valueOf(ownerId)));
 
         mockMvc.perform(post("/api/turn/" + ownerId + "/" + memberId + "/throw")
-                        .session(ownerSession)
+                        .session(memberSession)
                         .with(csrf()))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void privateInviteCannotAddAPlayerWhoAlreadyOwnsAnotherGame() throws Exception {
+        MvcResult hostCreation = mockMvc.perform(post("/api/player-state/create")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"InviteHostIT\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        int hostId = Integer.parseInt(hostCreation.getResponse().getContentAsString());
+        MockHttpSession hostSession = (MockHttpSession) hostCreation.getRequest().getSession(false);
+
+        MvcResult otherCreation = mockMvc.perform(post("/api/player-state/create")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"OtherHostIT\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        int otherId = Integer.parseInt(otherCreation.getResponse().getContentAsString());
+        MockHttpSession otherSession = (MockHttpSession) otherCreation.getRequest().getSession(false);
+
+        MvcResult privateGame = mockMvc.perform(post("/api/game-state/create")
+                        .session(hostSession)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ownerId\":" + hostId + ",\"visibility\":\"private\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String inviteCode = JsonPath.read(
+                privateGame.getResponse().getContentAsString(), "$.inviteCode");
+
+        mockMvc.perform(post("/api/game-state/create")
+                        .session(otherSession)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ownerId\":" + otherId + ",\"visibility\":\"public\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/game-state/join-with-invite")
+                        .session(otherSession)
+                        .with(csrf())
+                        .param("inviteCode", inviteCode)
+                        .param("playerId", String.valueOf(otherId)))
+                .andExpect(status().isConflict());
     }
 }

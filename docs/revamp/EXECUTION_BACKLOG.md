@@ -279,7 +279,7 @@ Two choices are especially important:
 
 ### REVAMP-016 — Enforce membership, host, active-player, and phase authorization
 
-- Status: `READY`; Priority: `P1`; Category: `SECURITY`.
+- Status: `DONE`; Priority: `P1`; Category: `SECURITY`.
 - Rationale / evidence: host checks are partial, membership is inconsistent, and UI-only controls can be bypassed.
 - Desired outcome: centralized application-command authorization for reads/mutations, including host-only lifecycle actions and active-turn commands.
 - Dependencies: REVAMP-015, REVAMP-011, REVAMP-014. Blocks: REVAMP-017 through REVAMP-022.
@@ -294,7 +294,7 @@ Two choices are especially important:
 
 ### REVAMP-017 — Contain unsafe direct state-mutation and identity-mismatch endpoints
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `SECURITY`.
+- Status: `READY`; Priority: `P1`; Category: `SECURITY`.
 - Rationale / evidence: arbitrary player-state writes, money grant, public lifecycle mutations, and `/action` path/body mismatch permit tampering.
 - Desired outcome: each endpoint is explicitly routed through the command path, restricted to an authorized dev/admin context, deprecated, or removed with usage evidence.
 - Dependencies: REVAMP-015, REVAMP-016, REVAMP-011. Blocks: REVAMP-018 and release verification.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-016 — Enforce membership, host,
-active-player, and phase authorization**. Later work remains blocked by the
-required authorization and command-path prerequisites.
+The immediate `READY` item is **REVAMP-017 — Contain unsafe direct
+state-mutation and identity-mismatch endpoints**. Later work remains blocked by
+the required endpoint-containment and command-path prerequisites.
 
 ## Planning review
 

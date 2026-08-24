@@ -1,16 +1,13 @@
 package com.example.Sindopoly_Java.service.orchestrator;
 
-import com.example.Sindopoly_Java.model.dto.ActionRequestDto;
 import com.example.Sindopoly_Java.model.dto.ActionResultDto;
-import com.example.Sindopoly_Java.model.dto.ApplyResultDto;
 import com.example.Sindopoly_Java.model.dto.SquareEventDto;
 import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.PlayerStateService;
 import com.example.Sindopoly_Java.service.core.*;
+import com.example.Sindopoly_Java.security.GameAuthorizationService;
 import com.example.Sindopoly_Java.service.core.MovementService.MovementResult;
-import com.example.Sindopoly_Java.model.dto.SquareEventDto;
-import com.example.Sindopoly_Java.utils.ValidationUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +15,6 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,12 +25,12 @@ public class TurnService {
 
     private final GameStateService      gameStateSvc;
     private final PlayerStateService    playerStateSvc;
-    private final ValidationUtils       validationUtils;
     private final DiceService           diceSvc;
     private final MovementService       moveSvc      = new MovementService();
     private final BankruptcyService     bankSvc;
     private final SquareActionService   squareActionSvc;
     private final SimpMessagingTemplate broker;
+    private final GameAuthorizationService gameAuthorizationService;
     private final ObjectMapper          mapper       = new ObjectMapper();
 
     private static final String K_OPTIONAL = "optionalAction";
@@ -45,15 +41,9 @@ public class TurnService {
      */
     public ThrowResultDto throwDice(int gameId, int playerId) {
         // 0. Guard rails
-        validationUtils.validatePlayerExists(playerId);
-        Map<String,String> game = gameStateSvc.getGame(gameId);
-        if (!"inProgress".equalsIgnoreCase(game.get("status"))) {
-            throw new IllegalStateException("Game not in progress.");
-        }
-        validationUtils.ensurePlayerTurn(gameId, playerId, game);
-        if (game.containsKey(K_OPTIONAL)) {
-            throw new IllegalStateException("Finish your pending action first.");
-        }
+        Map<String,String> game = gameAuthorizationService
+                .requireActivePlayerForRoll(gameId, playerId)
+                .game();
 
         // Clear AFK
         var pstate = playerStateSvc.getPlayerState(playerId);
@@ -179,17 +169,13 @@ public class TurnService {
 
 
     /** STEP 2: consume the event stored by throwDice and finish turn */
-    public ActionResultDto applyAction(ActionRequestDto req) {
-        int gameId   = req.getGameId();
-        int playerId = req.getPlayerId();
-        boolean yes  = req.getYes();
+    public ActionResultDto applyAction(int gameId, int playerId, boolean yes) {
+        Map<String, String> authorizedGame = gameAuthorizationService
+                .requireActivePlayerForOptionalAction(gameId, playerId)
+                .game();
 
         // 1) fetch & deserialize the full SquareEventDto
-        String raw = gameStateSvc.getGame(gameId).get(K_OPTIONAL);
-        if (raw == null) throw new IllegalStateException("No pending action");
-
-        // **DEBUG**: dump it out so we can inspect
-        System.out.println("🔔 Pending event JSON: " + raw);
+        String raw = authorizedGame.get(K_OPTIONAL);
 
         SquareEventDto ev;
         try {
@@ -300,7 +286,14 @@ public class TurnService {
             "winner", winnerId
             )
         );
+        }
     }
+
+    /** Player-command adapter for declining the currently authorized option. */
+    public void passOptional(int gameId, int playerId) {
+        gameAuthorizationService.requireActivePlayerForOptionalAction(gameId, playerId);
+        gameStateSvc.clearOptionalAction(gameId);
+        finishTurn(gameId);
     }
 
     /**

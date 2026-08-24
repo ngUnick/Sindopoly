@@ -97,6 +97,20 @@ export const GameAPI = {
     return await response.text();
   },
 
+  // Host remains the authenticated actor; targetPlayerId selects the member to remove.
+  kickPlayer: async (gameId, targetPlayerId) => {
+    const response = await apiFetch(
+      `${API_BASE_URL}/api/game-state/${gameId}/players/${targetPlayerId}/kick`,
+      { method: "POST" }
+    );
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || "Failed to remove player");
+    }
+    return await response.text();
+  },
+
   // ✅ Delete Game
   deleteGame: async (gameId) => {
     const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}`, {

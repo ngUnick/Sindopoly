@@ -1,16 +1,14 @@
 package com.example.Sindopoly_Java.service.orchestrator;
 
-import com.example.Sindopoly_Java.model.dto.ActionRequestDto;
 import com.example.Sindopoly_Java.model.dto.ActionResultDto;
 import com.example.Sindopoly_Java.model.dto.SquareEventDto;
 import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
-import com.example.Sindopoly_Java.repository.PlayerRepository;
 import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.PlayerStateService;
 import com.example.Sindopoly_Java.service.core.BankruptcyService;
 import com.example.Sindopoly_Java.service.core.DiceService;
 import com.example.Sindopoly_Java.service.core.SquareActionService;
-import com.example.Sindopoly_Java.utils.ValidationUtils;
+import com.example.Sindopoly_Java.security.GameAuthorizationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -42,11 +41,11 @@ class TurnServiceCharacterizationTest {
 
     @Mock private GameStateService gameStateService;
     @Mock private PlayerStateService playerStateService;
-    @Mock private PlayerRepository playerRepository;
     @Mock private DiceService diceService;
     @Mock private BankruptcyService bankruptcyService;
     @Mock private SquareActionService squareActionService;
     @Mock private SimpMessagingTemplate broker;
+    @Mock private GameAuthorizationService gameAuthorizationService;
 
     private TurnService turnService;
 
@@ -55,11 +54,11 @@ class TurnServiceCharacterizationTest {
         turnService = new TurnService(
             gameStateService,
             playerStateService,
-            new ValidationUtils(playerRepository),
             diceService,
             bankruptcyService,
             squareActionService,
-            broker
+            broker,
+            gameAuthorizationService
         );
     }
 
@@ -69,8 +68,8 @@ class TurnServiceCharacterizationTest {
         Map<String, String> game = new HashMap<>(Map.of("status", "inProgress", "playerTurn", "1"));
         Map<String, Object> player = new HashMap<>(Map.of(
             "position", "0", "money", "1500", "jail", "false", "jailTime", "0"));
-        when(playerRepository.existsById(1)).thenReturn(true);
-        when(gameStateService.getGame(7)).thenReturn(game);
+        when(gameAuthorizationService.requireActivePlayerForRoll(7, 1))
+                .thenReturn(access(7, 1, game, Set.of("1", "2")));
         when(playerStateService.getPlayerState(1)).thenReturn(player);
         when(bankruptcyService.isBankrupt(1500)).thenReturn(false);
         when(diceService.roll()).thenReturn(4);
@@ -92,18 +91,17 @@ class TurnServiceCharacterizationTest {
     }
 
     @Test
-    @DisplayName("[CHARACTERIZATION] wrong-player throw is rejected before player state is read")
-    void currentBehavior_wrongPlayerThrowRejectsWithCurrentMessage() {
-        Map<String, String> game = Map.of("status", "inProgress", "playerTurn", "1");
-        when(playerRepository.existsById(2)).thenReturn(true);
-        when(gameStateService.getGame(7)).thenReturn(game);
+    @DisplayName("wrong-player throw is rejected by application authorization before state mutation")
+    void wrongPlayerThrowRejectsBeforePlayerStateRead() {
+        when(gameAuthorizationService.requireActivePlayerForRoll(7, 2))
+                .thenThrow(new AccessDeniedException("Only the active player may perform this command"));
 
-        IllegalStateException exception = assertThrows(
-            IllegalStateException.class,
+        AccessDeniedException exception = assertThrows(
+            AccessDeniedException.class,
             () -> turnService.throwDice(7, 2)
         );
 
-        assertEquals("Not your turn.", exception.getMessage());
+        assertEquals("Only the active player may perform this command", exception.getMessage());
         verify(playerStateService, never()).getPlayerState(2);
     }
 
@@ -115,6 +113,8 @@ class TurnServiceCharacterizationTest {
             "playerTurn", "1"));
         Map<String, Object> player = new HashMap<>(Map.of("money", "1500"));
         when(gameStateService.getGame(7)).thenReturn(game);
+        when(gameAuthorizationService.requireActivePlayerForOptionalAction(7, 1))
+                .thenReturn(access(7, 1, game, Set.of("1", "2")));
         when(gameStateService.getPlayersInGame(7)).thenReturn(Set.of("1", "2"));
         when(playerStateService.getPlayerState(1)).thenReturn(player);
         doAnswer(invocation -> {
@@ -124,12 +124,20 @@ class TurnServiceCharacterizationTest {
             return null;
         }).when(gameStateService).setGameField(eq(7), any(), any());
 
-        ActionResultDto result = turnService.applyAction(new ActionRequestDto(7, 1, 5, true));
+        ActionResultDto result = turnService.applyAction(7, 1, true);
 
         assertEquals(new ActionResultDto(1500, List.of(), 2), result);
         verify(squareActionService).completeOptionalBuy(7, 1, 8);
         verify(gameStateService).clearOptionalAction(7);
         verify(gameStateService).setGameField(7, "playerTurn", "2");
         verify(broker).convertAndSend(eq("/topic/game/7"), any(Map.class));
+    }
+
+    private GameAuthorizationService.GameAccess access(
+            int gameId,
+            int actorId,
+            Map<String, String> game,
+            Set<String> members) {
+        return new GameAuthorizationService.GameAccess(gameId, actorId, game, members);
     }
 }

@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import com.example.Sindopoly_Java.model.Square;
 import com.example.Sindopoly_Java.model.Stats;
+import com.example.Sindopoly_Java.exception.GameStateConflictException;
 import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.repository.StatsRepository;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
@@ -308,6 +309,12 @@ public class GameStateService {
                     return "Game is already in progress or ended.";
 
                 String playerSetKey = gameKey + PLAYERS_KEY_SUFFIX;
+                if (Boolean.TRUE.equals(setOps.isMember(playerSetKey, String.valueOf(playerId)))) {
+                    return gameKey.replace("game:", "");
+                }
+                if (isPlayerInAnyGame(playerId)) {
+                    throw new GameStateConflictException("Player is already in another game");
+                }
                 Long count = Optional.ofNullable(setOps.size(playerSetKey)).orElse(0L);
                 if (count >= MAX_PLAYERS) return "Game is full.";
 

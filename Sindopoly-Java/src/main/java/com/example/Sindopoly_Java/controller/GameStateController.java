@@ -2,26 +2,25 @@ package com.example.Sindopoly_Java.controller;
 
 import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.PlayerStateService;
-import com.example.Sindopoly_Java.service.orchestrator.TurnService;
 import com.example.Sindopoly_Java.dto.GameCreationRequest;
 import com.example.Sindopoly_Java.model.Player;
 import com.example.Sindopoly_Java.model.dto.PlayerDetailedDto;
 import com.example.Sindopoly_Java.repository.PlayerRepository;
 import com.example.Sindopoly_Java.security.AuthenticatedPlayerResolver;
+import com.example.Sindopoly_Java.security.GameAuthorizationService;
+import com.example.Sindopoly_Java.exception.GameStateConflictException;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import com.example.Sindopoly_Java.utils.ValidationUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 
 
@@ -32,16 +31,16 @@ public class GameStateController {
     private final GameStateService gameStateService;
     private final PlayerStateService playerStateService;
     private final AuthenticatedPlayerResolver authenticatedPlayerResolver;
-
-    @Autowired
-    private ValidationUtils validationUtils;
+    private final GameAuthorizationService gameAuthorizationService;
 
     public GameStateController(GameStateService gameStateService, 
                                PlayerStateService playerStateService,
-                               AuthenticatedPlayerResolver authenticatedPlayerResolver) {
+                               AuthenticatedPlayerResolver authenticatedPlayerResolver,
+                               GameAuthorizationService gameAuthorizationService) {
         this.playerStateService = playerStateService;
         this.gameStateService = gameStateService;
         this.authenticatedPlayerResolver = authenticatedPlayerResolver;
+        this.gameAuthorizationService = gameAuthorizationService;
     }
 
 
@@ -53,8 +52,11 @@ public class GameStateController {
      * GET /api/game-state/players-detailed/{gameId}
      */
     @GetMapping("/players-detailed-lobby/{gameId}")
-    public List<Map<String, Object>> getPlayerDetailsInGame(@PathVariable int gameId) {
-        Set<String> playerIds = gameStateService.getPlayersInGame(gameId);
+    public List<Map<String, Object>> getPlayerDetailsInGame(
+            @PathVariable int gameId,
+            Authentication authentication) {
+        int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
+        Set<String> playerIds = gameAuthorizationService.requireMember(gameId, actorId).memberIds();
 
         return playerIds.stream()
             .map(id -> {
@@ -76,10 +78,11 @@ public class GameStateController {
      */
     @GetMapping("/players-detailed/{gameId}")
     public ResponseEntity<List<PlayerDetailedDto>> getPlayersDetailed(
-        @PathVariable int gameId
+        @PathVariable int gameId,
+        Authentication authentication
     ) {
-        // 1) getPlayersInGame now returns a LinkedHashSet in join-order
-        Set<String> ids = gameStateService.getPlayersInGame(gameId);
+        int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
+        Set<String> ids = gameAuthorizationService.requireMember(gameId, actorId).memberIds();
 
         List<PlayerDetailedDto> dtos = new ArrayList<>();
         for (String pidStr : ids) {
@@ -150,22 +153,15 @@ public class GameStateController {
             @RequestParam int playerId,
             Authentication authentication) {
         authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
-        try {
-            Set<String> currentPlayers = gameStateService.getPlayersInGame(gameId);
+        var access = gameAuthorizationService.requireHostInLobby(gameId, playerId);
+        Set<String> currentPlayers = access.memberIds();
 
-            // Reject if fewer than 2 players
-            if (currentPlayers.size() < 2) {
-                return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", "At least 2 players are required to start the game."));
-            }
-
-            gameStateService.startGame(gameId, playerId);
-            return ResponseEntity.ok(Map.of("status", "inProgress", "gameId", gameId));
-        } catch (IllegalStateException ex) {
-            // Owner check / other state‐related errors
-            return ResponseEntity.status(403).body(Map.of("error", ex.getMessage()));
+        if (currentPlayers.size() < 2) {
+            throw new GameStateConflictException("At least 2 players are required to start the game");
         }
+
+        gameStateService.startGame(gameId, playerId);
+        return ResponseEntity.ok(Map.of("status", "inProgress", "gameId", gameId));
     }
 
 
@@ -215,8 +211,9 @@ public class GameStateController {
      * GET /api/game-state/players/{gameId}
      */
     @GetMapping("/players/{gameId}")
-    public Set<String> getPlayersInGame(@PathVariable int gameId) {
-        return gameStateService.getPlayersInGame(gameId);
+    public Set<String> getPlayersInGame(@PathVariable int gameId, Authentication authentication) {
+        int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
+        return gameAuthorizationService.requireMember(gameId, actorId).memberIds();
     }
 
     /**
@@ -250,7 +247,26 @@ public class GameStateController {
             @RequestParam int playerId,
             Authentication authentication) {
         authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
+        gameAuthorizationService.requireMember(gameId, playerId);
         gameStateService.removePlayerFromGame(gameId, playerId);
+        return "Player removed from game.";
+    }
+
+    /**
+     * Host removal keeps the authenticated host as actor; the path player is only the target.
+     */
+    @PostMapping("/{gameId}/players/{targetPlayerId}/kick")
+    public String kickPlayer(
+            @PathVariable int gameId,
+            @PathVariable int targetPlayerId,
+            Authentication authentication) {
+        int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
+        var access = gameAuthorizationService.requireHostInLobby(gameId, actorId);
+        if (actorId == targetPlayerId) {
+            throw new IllegalArgumentException("Host must use the leave command for self-removal");
+        }
+        gameAuthorizationService.requireTargetMember(access, targetPlayerId);
+        gameStateService.removePlayerFromGame(gameId, targetPlayerId);
         return "Player removed from game.";
     }
 
@@ -259,8 +275,9 @@ public class GameStateController {
      * GET /api/game-state/{gameId}
      */
     @GetMapping("/{gameId}")
-    public Map<String, String> getGameState(@PathVariable int gameId) {
-        return gameStateService.getGame(gameId);
+    public Map<String, String> getGameState(@PathVariable int gameId, Authentication authentication) {
+        int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
+        return gameAuthorizationService.requireMember(gameId, actorId).game();
     }
 
     /**
@@ -268,8 +285,9 @@ public class GameStateController {
      * GET /api/game-state/{gameId}/players
      */
     @GetMapping("/{gameId}/players")
-    public Set<String> getPlayers(@PathVariable int gameId) {
-        return gameStateService.getPlayersInGame(gameId);
+    public Set<String> getPlayers(@PathVariable int gameId, Authentication authentication) {
+        int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
+        return gameAuthorizationService.requireMember(gameId, actorId).memberIds();
     }
 
     /**
@@ -277,7 +295,9 @@ public class GameStateController {
      * DELETE /api/game-state/{gameId}
      */
     @DeleteMapping("/{gameId}")
-    public String deleteGame(@PathVariable int gameId) {
+    public String deleteGame(@PathVariable int gameId, Authentication authentication) {
+        int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
+        gameAuthorizationService.requireHostInLobby(gameId, actorId);
         gameStateService.deleteGame(gameId);
         return "Game state deleted.";
     }
@@ -287,7 +307,9 @@ public class GameStateController {
      * GET /api/game-state/{gameId}/check-end
      */
     @PostMapping("/{gameId}/check-end")
-    public String checkGameEnd(@PathVariable int gameId) {
+    public String checkGameEnd(@PathVariable int gameId, Authentication authentication) {
+        int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
+        gameAuthorizationService.requireHostInProgress(gameId, actorId);
         boolean ended = gameStateService.checkEndCondition(gameId);
         return ended ? "Game ended due to condition." : "Game continues.";
     }

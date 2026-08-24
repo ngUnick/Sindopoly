@@ -2,7 +2,6 @@ package com.example.Sindopoly_Java.controller;
 
 import com.example.Sindopoly_Java.model.dto.ActionRequestDto;
 import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
-import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.service.orchestrator.TurnService;
 import com.example.Sindopoly_Java.security.AuthenticatedPlayerResolver;
 import org.junit.jupiter.api.DisplayName;
@@ -29,9 +28,6 @@ class TurnControllerCharacterizationTest {
 
     @Mock
     private TurnService turnService;
-
-    @Mock
-    private GameStateService gameStateService;
 
     @Mock
     private AuthenticatedPlayerResolver authenticatedPlayerResolver;
@@ -64,7 +60,7 @@ class TurnControllerCharacterizationTest {
                 () -> controller.doAction(1, 2, body, authentication));
 
         verify(authenticatedPlayerResolver).requireMatchingPlayerId(2, authentication);
-        verify(turnService, never()).applyAction(body);
+        verify(turnService, never()).applyAction(1, 2, true);
     }
 
     @Test
@@ -74,8 +70,6 @@ class TurnControllerCharacterizationTest {
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(Map.of("status", "passed"), response.getBody());
-        verify(gameStateService).assertOptionalAction(3, 4);
-        verify(gameStateService).clearOptionalAction(3);
-        verify(turnService).finishTurn(3);
+        verify(turnService).passOptional(3, 4);
     }
 }
