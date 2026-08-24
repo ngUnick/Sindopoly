@@ -193,13 +193,6 @@ public class GameStateService {
         return hashOps.entries(gameKey);
     }
 
-    /** Delete Game */
-    public void deleteGame(int gameId) {
-        String gameKey = GAME_PREFIX + gameId;
-        redisTemplate.delete(gameKey);
-        redisTemplate.delete(gameKey + PLAYERS_KEY_SUFFIX);
-    }
-
     /** Get All Public Lobby Games */
     public List<Map<String, String>> getAllPublicLobbyGames() {
         Set<String> keys = redisTemplate.keys("game:*");
@@ -523,10 +516,11 @@ public class GameStateService {
         statsRepo.save(stats);
     }
     
-    /** Delete Game and Players */
-    // This method is called when the game ends
-    // It deletes the game and all players from Redis
-    public void deleteGameAndPlayers(int gameId) {
+    /**
+     * Deletes a game and its active player state for trusted lifecycle cleanup.
+     * This package-private primitive is used only by server-owned leave and scheduler flows.
+     */
+    void deleteGameAndPlayers(int gameId) {
         String gameKey    = "game:" + gameId;
         String playersKey = gameKey + ":players";
 

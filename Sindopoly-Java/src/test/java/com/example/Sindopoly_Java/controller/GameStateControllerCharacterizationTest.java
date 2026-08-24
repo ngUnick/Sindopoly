@@ -118,20 +118,6 @@ class GameStateControllerCharacterizationTest {
     }
 
     @Test
-    @DisplayName("check-end requires the authenticated host while pending REVAMP-017 removal")
-    void checkEndRequiresHostAuthorization() {
-        when(authenticatedPlayerResolver.requirePlayerId(authentication)).thenReturn(1);
-        when(gameAuthorizationService.requireHostInProgress(1, 1)).thenReturn(access(
-                1, 1, Map.of("status", "inProgress"), Set.of("1", "2")));
-        when(gameStateService.checkEndCondition(1)).thenReturn(true);
-
-        String response = controller.checkGameEnd(1, authentication);
-
-        assertEquals("Game ended due to condition.", response);
-        verify(gameStateService).checkEndCondition(1);
-    }
-
-    @Test
     @DisplayName("host kick keeps the session actor distinct from the target player")
     void hostKickUsesTargetOnlyAsResourceSelector() {
         var access = access(1, 1, Map.of("status", "lobby"), Set.of("1", "2"));

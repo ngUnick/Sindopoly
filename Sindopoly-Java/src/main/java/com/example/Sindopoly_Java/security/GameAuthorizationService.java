@@ -41,13 +41,6 @@ public class GameAuthorizationService {
         return access;
     }
 
-    public GameAccess requireHostInProgress(int gameId, int actorPlayerId) {
-        GameAccess access = requireMember(gameId, actorPlayerId);
-        requireHost(access);
-        requireStatus(access, STATUS_IN_PROGRESS, "Game is not in progress");
-        return access;
-    }
-
     public GameAccess requireActivePlayerForRoll(int gameId, int actorPlayerId) {
         GameAccess access = requireActivePlayer(gameId, actorPlayerId);
         if (access.game().containsKey(OPTIONAL_ACTION)) {

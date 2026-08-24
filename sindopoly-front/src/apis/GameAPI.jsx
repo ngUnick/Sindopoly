@@ -109,15 +109,5 @@ export const GameAPI = {
       throw new Error(error.error || "Failed to remove player");
     }
     return await response.text();
-  },
-
-  // ✅ Delete Game
-  deleteGame: async (gameId) => {
-    const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}`, {
-      method: "DELETE",
-    });
-
-    if (!response.ok) throw new Error("Failed to delete game");
-    return await response.text();
   }
 };

@@ -77,11 +77,14 @@ Failure risks:
 - Denial of service through repeated lobby creation, joins, deletes, or invalid commands.
 - Elevation of privilege through host/admin-like operations exposed as public endpoints.
 
-Current evidence:
+Current evidence after REVAMP-017:
 
-- `PlayerStateController#savePlayer` writes arbitrary request body state to `player:{playerId}`.
-- `PlayerStateController#grantPlayerMoney` exposes `/api/player-state/grant-money/{playerId}/{amount}`.
-- `GameStateController#removePlayer`, `deleteGame`, and `checkGameEnd` mutate game lifecycle state.
+- Arbitrary player-state overwrite/deletion and direct money-grant routes are
+  removed; `PlayerStateService#savePlayerState` remains an internal persistence
+  primitive for server-owned transitions.
+- Client-triggered game deletion and `check-end` completion evaluation are
+  removed. Authenticated self-leave and explicit lobby-host kick remain bounded
+  membership commands.
 
 ### Browser/client ↔ WebSocket endpoint
 
@@ -278,4 +281,3 @@ Every future feature review should preserve or explicitly address these invarian
 - A player may subscribe only to games they are authorized to view.
 - Redis Pub/Sub, if introduced, is not durable authoritative state.
 - Development credentials and permissive origins must not become production defaults.
-

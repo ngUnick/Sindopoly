@@ -78,8 +78,10 @@ public class PlayerStateService {
     }
 
     /**
-     * Save arbitrary updates to a player state hash.
+     * Persists server-computed updates to a player state hash.
      * All values are converted to String to satisfy Redis’s StringRedisSerializer.
+     * This low-level primitive must remain behind authenticated game commands;
+     * transport adapters must never pass client-authored state maps to it.
      */
     public void savePlayerState(int playerId, Map<String, Object> playerData) {
         validationUtils.validatePlayerExists(playerId);
@@ -107,14 +109,6 @@ public class PlayerStateService {
     }
 
     /**
-     * Remove a player's state from Redis entirely.
-     */
-    public void deletePlayer(int playerId) {
-        String playerKey = PLAYER_PREFIX + playerId;
-        redisTemplate.delete(playerKey);
-    }
-
-    /**
      * Pay to get out of jail: deduct fee, clear jail flags.
      */
     public void payToExitJail(int playerId, int fee) {
@@ -129,13 +123,4 @@ public class PlayerStateService {
         savePlayerState(playerId, p);
     }
 
-    /**
-     * Adds the given amount to the player's balance.
-     */
-    public void grantMoney(int playerId, int amount) {
-        String key = PLAYER_PREFIX + playerId;
-        String moneyStr = (String) redisTemplate.opsForHash().get(key, "money");
-        int current = moneyStr == null ? 0 : Integer.parseInt(moneyStr);
-        redisTemplate.opsForHash().put(key, "money", String.valueOf(current + amount));
-    }
 }

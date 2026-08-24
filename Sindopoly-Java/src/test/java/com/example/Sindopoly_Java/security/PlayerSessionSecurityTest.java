@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -132,6 +133,38 @@ class PlayerSessionSecurityTest {
                         .content("{\"gameId\":99,\"playerId\":" + player.playerId()
                                 + ",\"squareType\":5,\"yes\":true}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void directStateAndLifecycleMutationAdaptersAreNoLongerRoutable() throws Exception {
+        EstablishedPlayer player = createPlayer("ContainedRoutes");
+
+        mockMvc.perform(post("/api/player-state/" + player.playerId())
+                        .session(player.session())
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"money\":999999,\"position\":39,\"properties\":\"[1,2]\"}"))
+                .andExpect(status().isMethodNotAllowed());
+
+        mockMvc.perform(delete("/api/player-state/" + player.playerId())
+                        .session(player.session())
+                        .with(csrf()))
+                .andExpect(status().isMethodNotAllowed());
+
+        mockMvc.perform(post("/api/player-state/grant-money/" + player.playerId() + "/999999")
+                        .session(player.session())
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(delete("/api/game-state/123")
+                        .session(player.session())
+                        .with(csrf()))
+                .andExpect(status().isMethodNotAllowed());
+
+        mockMvc.perform(post("/api/game-state/123/check-end")
+                        .session(player.session())
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
     }
 
     @Test

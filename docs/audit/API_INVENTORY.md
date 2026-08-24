@@ -10,7 +10,7 @@ commands use the membership/host/active-player/phase matrix in
 
 Error handling: authentication is `401`; authorization is generic `403`;
 missing active games are `404`; lifecycle/turn-phase conflicts are `409`;
-malformed and legacy adapter validation failures remain `400`; unhandled
+unsupported methods are `405`; malformed and legacy adapter validation failures remain `400`; unhandled
 failures return `500` with generic `"Internal server error"`.
 
 ## Player session API: `/api/session`
@@ -38,18 +38,28 @@ failures return `500` with generic `"Internal server error"`.
 | POST | `/{gameId}/players/{targetPlayerId}/kick` | `kickPlayer` | path actor-independent target | text | authorization policy, `GameStateService` | Removes a target Redis membership | Explicit lobby-host command; target must be another current member. |
 | GET | `/{gameId}` | `getGameState` | path | Redis hash map | authorization policy | Authorized Redis hash read | Private member read; raw-map shaping remains for later boundary work. |
 | GET | `/{gameId}/players` | `getPlayers` | path | set of IDs | authorization policy | Authorized Redis set read | Private member read; duplicate of `/players/{gameId}`. |
-| DELETE | `/{gameId}` | `deleteGame` | path | text | authorization policy, `GameStateService` | Deletes Redis game hash/set | Host member and lobby lifecycle required; REVAMP-017 owns final containment decision. |
-| POST | `/{gameId}/check-end` | `checkGameEnd` | path | text | authorization policy, `GameStateService` | May end game/finalize stats | Host member and in-progress lifecycle required, but external exposure remains for REVAMP-017 containment. |
 
 ## Player state API: `/api/player-state`
 
 | Method | Path | Controller method | Request | Response | State/effects | Main concerns |
 | --- | --- | --- | --- | --- | --- | --- |
 | POST | `/create` | `createPlayer` | map with `nickname` | player ID | Creates MariaDB player and establishes session | Anonymous establishment endpoint; nickname regex is A-Z/a-z/0-9/_ 2-15. |
-| POST | `/{playerId}` | `savePlayer` | arbitrary map | text | Writes arbitrary fields to `player:{playerId}` | Self-session only, but arbitrary authoritative-state mutation remains a confirmed vulnerability. |
 | GET | `/{playerId}` | `getPlayer` | path | Redis hash map | Reads active player state | Self-session consistency enforced; broader resource policy remains pending. |
-| DELETE | `/{playerId}` | `deletePlayer` | path | text | Deletes Redis player hash | Self-session only; lifecycle safety remains pending. |
-| POST | `/grant-money/{playerId}/{amount}` | `grantPlayerMoney` | path | player ID | Adds money in Redis | Self-session only, but still a direct cheating endpoint pending containment. |
+
+Removed in REVAMP-017: `POST /{playerId}` arbitrary state overwrite,
+`DELETE /{playerId}` direct active-state deletion, and
+`POST /grant-money/{playerId}/{amount}` direct balance mutation. These routes
+now resolve as `404` or `405`; server-owned game commands remain the only
+supported mutation path for money, position, ownership, jail, and other active
+player state.
+
+Removed from the game-state API in REVAMP-017:
+
+- `DELETE /api/game-state/{gameId}`; a player leaves through the authenticated
+  `POST /api/game-state/{gameId}/remove-player` command, while canonical cleanup
+  remains server-owned.
+- `POST /api/game-state/{gameId}/check-end`; completion evaluation remains an
+  internal transition/scheduler concern.
 
 Frontend references but backend does not expose:
 

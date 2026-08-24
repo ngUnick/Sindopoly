@@ -170,7 +170,7 @@ square/card definitions, and idempotently finalized statistics—not live turns.
 | `POST /api/turn/{gameId}/{playerId}/throw` | `RollDice` | Path player ID is not proof; no command/version |
 | `POST .../action` | `PerformOptionalAction` | Path/body identity mismatch is accepted |
 | `POST .../pass` | `PassOptionalAction` | Actor authentication absent |
-| public `check-end` | Internal/system completion evaluation | Must not remain a public mutation path |
+| removed public `check-end` | Internal/system completion evaluation | Removed in REVAMP-017; no client replacement |
 
 Transport eventually maps typed categories: unauthenticated, forbidden, not
 found, invalid command/input, invalid lifecycle/phase, stale conflict, duplicate
@@ -211,7 +211,7 @@ deck, command markers, and timer metadata. A late/duplicate cleanup is safe.
 | Tests | Current evidence | Target relation | Classification |
 | --- | --- | --- | --- |
 | `GameStateControllerCharacterizationTest` create/join/start | Current adapter responses/prechecks | `CreateGame`, `JoinGame`, `StartGame` | Partial match; actor authorization missing |
-| same remove/check-end | Public caller can mutate lifecycle | `LeaveGame`, internal completion | DEFECT |
+| same remove plus removed check-end | Authenticated self-leave remains; public completion adapter removed | `LeaveGame`, internal completion | Partial match; leave atomicity/version pending |
 | `TurnControllerCharacterizationTest` throw | Path IDs forwarded | `RollDice` adapter | Actor/command/version guards missing |
 | same action mismatch | Body identity wins | Optional-action command | DEFECT |
 | same pass | Clears option and finishes turn | `PassOptionalAction` | Partial match; auth/version missing |

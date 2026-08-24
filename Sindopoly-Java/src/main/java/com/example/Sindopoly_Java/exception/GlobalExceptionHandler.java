@@ -5,7 +5,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Map;
 
@@ -35,6 +37,21 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", "Game not found"));
     }
 
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, String>> handleUnknownRoute(NoResourceFoundException ex) {
+        return ResponseEntity
+                .status(404)
+                .body(Map.of("error", "Resource not found"));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, String>> handleMethodNotAllowed(
+            HttpRequestMethodNotSupportedException ex) {
+        return ResponseEntity
+                .status(405)
+                .body(Map.of("error", "Method not allowed"));
+    }
+
     @ExceptionHandler(GameStateConflictException.class)
     public ResponseEntity<Map<String, String>> handleConflict(GameStateConflictException ex) {
         return ResponseEntity
@@ -52,7 +69,6 @@ public class GlobalExceptionHandler {
                .body(Map.of("error", ex.getMessage()));
     }
 
-    // NEW: Catch any other exception and return a 500
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String,String>> handleServerError(Exception ex) {
         log.error("Unhandled exception caught by GlobalExceptionHandler", ex);

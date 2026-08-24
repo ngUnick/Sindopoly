@@ -1,21 +1,14 @@
 package com.example.Sindopoly_Java.controller;
 
 import com.example.Sindopoly_Java.model.Player;
-import com.example.Sindopoly_Java.model.dto.ActionRequestDto;
-import com.example.Sindopoly_Java.model.dto.ActionResultDto;
-import com.example.Sindopoly_Java.repository.PlayerRepository; // Add this import
-import com.example.Sindopoly_Java.service.GameStateService;
+import com.example.Sindopoly_Java.repository.PlayerRepository;
 import com.example.Sindopoly_Java.service.PlayerStateService;
-import com.example.Sindopoly_Java.service.core.SquareActionService;
-import com.example.Sindopoly_Java.service.orchestrator.TurnService;
 import com.example.Sindopoly_Java.security.AuthenticatedPlayerResolver;
 import com.example.Sindopoly_Java.security.PlayerSessionService;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.val;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -28,29 +21,20 @@ import java.util.Map;
 public class PlayerStateController {
 
     private final PlayerStateService playerStateService;
-    private final SquareActionService squareActionSvc;
     private final PlayerRepository playerRepository;
-    private final GameStateService gameStateSvc;
-    private final TurnService turnSvc;
     private final ValidationUtils validationUtils;
     private final AuthenticatedPlayerResolver authenticatedPlayerResolver;
     private final PlayerSessionService playerSessionService;
 
     @Autowired
     public PlayerStateController(PlayerStateService playerStateService,
-                                 SquareActionService squareActionSvc,
                                  PlayerRepository playerRepository,
-                                 GameStateService gameStateSvc,
-                                 TurnService turnSvc,
                                  ValidationUtils v,
                                  AuthenticatedPlayerResolver authenticatedPlayerResolver,
                                  PlayerSessionService playerSessionService) {
         this.playerStateService = playerStateService;
-        this.squareActionSvc= squareActionSvc;
-        this.playerRepository     = playerRepository;
-        this.gameStateSvc   = gameStateSvc;
-        this.turnSvc        = turnSvc;
-        this.validationUtils= v;
+        this.playerRepository = playerRepository;
+        this.validationUtils = v;
         this.authenticatedPlayerResolver = authenticatedPlayerResolver;
         this.playerSessionService = playerSessionService;
     }
@@ -85,21 +69,6 @@ public class PlayerStateController {
     }
 
     /**
-     * Save Player State
-     * POST /api/player-state/{playerId}
-     * Body: JSON like { "position": 10, "money": 500, ... }
-     */
-    @PostMapping("/{playerId}")
-    public String savePlayer(
-            @PathVariable int playerId,
-            @RequestBody Map<String, Object> playerData,
-            Authentication authentication) {
-        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
-        playerStateService.savePlayerState(playerId, playerData);
-        return "Player state saved successfully.";
-    }
-
-    /**
      * Get Player State
      * GET /api/player-state/{playerId}
      */
@@ -109,32 +78,4 @@ public class PlayerStateController {
         return playerStateService.getPlayerState(playerId);
     }
 
-    /**
-     * Delete Player State
-     * DELETE /api/player-state/{playerId}
-     */
-    @DeleteMapping("/{playerId}")
-    public String deletePlayer(@PathVariable int playerId, Authentication authentication) {
-        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
-        playerStateService.deletePlayer(playerId);
-        return "Player state deleted successfully.";
-    }
-
-    /**
-     * Grant a Player Money
-     * POST /api/player-state/grant-money/{playerId}/{amount}
-     * Body: JSON like { "nickname": "Player1" }
-     */
-    @PostMapping("/grant-money/{playerId}/{amount}")
-    public ResponseEntity<Integer> grantPlayerMoney(
-            @PathVariable int playerId,
-            @PathVariable int amount,
-            Authentication authentication) {
-        authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
-        validationUtils.validatePlayerExists(playerId);
-        playerStateService.grantMoney(playerId, amount);
-        return ResponseEntity.ok(playerId); // return player ID
-        
-    }
-        
 }

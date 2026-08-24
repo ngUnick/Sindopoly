@@ -290,29 +290,4 @@ public class GameStateController {
         return gameAuthorizationService.requireMember(gameId, actorId).memberIds();
     }
 
-    /**
-     * Delete game state
-     * DELETE /api/game-state/{gameId}
-     */
-    @DeleteMapping("/{gameId}")
-    public String deleteGame(@PathVariable int gameId, Authentication authentication) {
-        int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
-        gameAuthorizationService.requireHostInLobby(gameId, actorId);
-        gameStateService.deleteGame(gameId);
-        return "Game state deleted.";
-    }
-
-    /**
-     * Check end conditions
-     * GET /api/game-state/{gameId}/check-end
-     */
-    @PostMapping("/{gameId}/check-end")
-    public String checkGameEnd(@PathVariable int gameId, Authentication authentication) {
-        int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
-        gameAuthorizationService.requireHostInProgress(gameId, actorId);
-        boolean ended = gameStateService.checkEndCondition(gameId);
-        return ended ? "Game ended due to condition." : "Game continues.";
-    }
-
-
 }

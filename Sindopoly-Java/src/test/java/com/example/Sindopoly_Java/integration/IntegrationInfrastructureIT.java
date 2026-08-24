@@ -29,6 +29,7 @@ import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -248,5 +249,72 @@ class IntegrationInfrastructureIT {
                         .param("inviteCode", inviteCode)
                         .param("playerId", String.valueOf(otherId)))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void removedDirectMutationAdaptersCannotChangeAuthoritativeRedisState() throws Exception {
+        MvcResult creation = mockMvc.perform(post("/api/player-state/create")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"ContainedIT\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        int playerId = Integer.parseInt(creation.getResponse().getContentAsString());
+        MockHttpSession session = (MockHttpSession) creation.getRequest().getSession(false);
+
+        redis.opsForHash().put("player:" + playerId, "money", "1500");
+        redis.opsForHash().put("player:" + playerId, "position", "0");
+
+        mockMvc.perform(post("/api/player-state/" + playerId)
+                        .session(session)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"money\":999999,\"position\":39}"))
+                .andExpect(status().isMethodNotAllowed());
+
+        mockMvc.perform(post("/api/player-state/grant-money/" + playerId + "/999999")
+                        .session(session)
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(delete("/api/player-state/" + playerId)
+                        .session(session)
+                        .with(csrf()))
+                .andExpect(status().isMethodNotAllowed());
+
+        assertThat(redis.opsForHash().get("player:" + playerId, "money")).isEqualTo("1500");
+        assertThat(redis.opsForHash().get("player:" + playerId, "position")).isEqualTo("0");
+
+        mockMvc.perform(post("/api/game-state/create")
+                        .session(session)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ownerId\":" + playerId + ",\"visibility\":\"public\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/api/game-state/" + playerId)
+                        .session(session)
+                        .with(csrf()))
+                .andExpect(status().isMethodNotAllowed());
+
+        mockMvc.perform(post("/api/game-state/" + playerId + "/check-end")
+                        .session(session)
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
+
+        assertThat(redis.opsForHash().get("game:" + playerId, "status")).isEqualTo("lobby");
+        assertThat(redis.opsForSet().isMember("game:" + playerId + ":players", String.valueOf(playerId)))
+                .isTrue();
+
+        mockMvc.perform(post("/api/game-state/" + playerId + "/remove-player")
+                        .session(session)
+                        .with(csrf())
+                        .param("playerId", String.valueOf(playerId)))
+                .andExpect(status().isOk());
+
+        assertThat(redis.hasKey("game:" + playerId)).isFalse();
+        assertThat(redis.hasKey("game:" + playerId + ":players")).isFalse();
+
+        mockMvc.perform(get("/api/game-state/public-lobby"))
+                .andExpect(status().isOk());
     }
 }

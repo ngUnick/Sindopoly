@@ -35,7 +35,7 @@ bodies to avoid a flag-day DTO migration. At actor-owned boundaries these IDs
 are consistency checks against the authenticated principal:
 
 - game creation, in-game lookup, join, invite join, start, and self-removal;
-- player-state read/write/delete and the legacy money mutation route;
+- player-state read;
 - roll, optional action, and pass; action path/body game and player IDs must
   also agree.
 
@@ -108,11 +108,12 @@ Fixed in REVAMP-016:
   optional action, and pass;
 - deterministic missing-game and lifecycle/phase conflict responses.
 
-Deferred to REVAMP-017:
+Fixed in REVAMP-017:
 
-- containment/removal of arbitrary player-state, money-grant, delete-game, and
-  check-end adapters. REVAMP-016 restricts the game lifecycle routes to the
-  current host policy but does not claim those direct adapters are canonical.
+- removal of arbitrary player-state overwrite/deletion and direct money-grant
+  routes;
+- removal of client-triggered game deletion and manual completion evaluation;
+- stable `404`/`405` responses for removed routing surfaces.
 
 Deferred to REVAMP-021:
 

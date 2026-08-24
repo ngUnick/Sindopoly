@@ -294,7 +294,7 @@ Two choices are especially important:
 
 ### REVAMP-017 — Contain unsafe direct state-mutation and identity-mismatch endpoints
 
-- Status: `READY`; Priority: `P1`; Category: `SECURITY`.
+- Status: `DONE`; Priority: `P1`; Category: `SECURITY`.
 - Rationale / evidence: arbitrary player-state writes, money grant, public lifecycle mutations, and `/action` path/body mismatch permit tampering.
 - Desired outcome: each endpoint is explicitly routed through the command path, restricted to an authorized dev/admin context, deprecated, or removed with usage evidence.
 - Dependencies: REVAMP-015, REVAMP-016, REVAMP-011. Blocks: REVAMP-018 and release verification.
@@ -309,7 +309,7 @@ Two choices are especially important:
 
 ### REVAMP-018 — Establish the authoritative, idempotent game-state transition path
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `GAME_FLOW`.
+- Status: `READY`; Priority: `P1`; Category: `GAME_FLOW`.
 - Rationale / evidence: dice/action writes span multiple Redis mutations with no state version, command ID, lock, transaction, or Lua protection.
 - Desired outcome: one application command path for REST, future WebSocket, and timer transitions with documented per-game atomicity, idempotency, and post-commit event publication.
 - Dependencies: REVAMP-011 through REVAMP-017. Blocks: REVAMP-019 through REVAMP-023.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-017 — Contain unsafe direct
-state-mutation and identity-mismatch endpoints**. Later work remains blocked by
-the required endpoint-containment and command-path prerequisites.
+The immediate `READY` item is **REVAMP-018 — Establish the authoritative,
+idempotent game-state transition path**. Later work remains blocked by the
+required transition-path prerequisites.
 
 ## Planning review
 
