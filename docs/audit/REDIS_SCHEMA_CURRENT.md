@@ -2,6 +2,15 @@
 
 Serializer: `RedisConfig` sets `StringRedisSerializer` for keys, values, hash keys, and hash values.
 
+REVAMP-018 update: normal game commands now write through the centralized Lua
+compare-and-commit store described in
+`docs/architecture/AUTHORITATIVE_GAME_TRANSITIONS.md`. The game hash adds
+`stateVersion`; the new `game:{gameId}:commands` HASH stores
+bounded JSON replay records. Missing versions on pre-existing games read as
+logical zero. Game/membership/player/deck changes and the replay marker commit
+atomically on the current single Redis deployment. The detailed entries below
+retain pre-revamp audit provenance where explicitly labeled as risks.
+
 ## Keys
 
 ### `game:{gameId}`
@@ -16,6 +25,10 @@ Serializer: `RedisConfig` sets `StringRedisSerializer` for keys, values, hash ke
 - Fields observed: `status`, `creationTime`, `visibility`, `inviteCode`, `playerTurn`, `timer`, `startTime`, `maxTime`, `maxMoney`, `winner`, `lastDice`, `optionalAction`, `optionalDeadline`.
 - Purpose: authoritative active game metadata.
 - Risks: no atomic transitions; no owner field despite owner being inferred from game ID; optional action has two incompatible formats in code (JSON DTO and colon-delimited string).
+
+Implemented field: `stateVersion` is a base-10 integer. Normal migrated commands
+are atomic; owner inference, numeric turn ordering, and legacy optional-action
+helpers remain compatibility/refactor concerns.
 
 ### `game:{gameId}:players`
 
@@ -53,6 +66,23 @@ Serializer: `RedisConfig` sets `StringRedisSerializer` for keys, values, hash ke
 - Purpose: per-game shuffled card deck.
 - Risks: not deleted explicitly unless covered by `deleteGameAndPlayers`? Current deletion deletes only game hash, players set, and player hashes. Deck key can remain.
 
+The migrated roll path consumes and replaces this list within the same Lua
+commit as player/game state and aligns its TTL with the game. Its current
+exhaust-and-reshuffle behavior is intentionally preserved for REVAMP-019.
+
+### `game:{gameId}:commands`
+
+- Type: HASH; field is normalized UUID, value is JSON fingerprint/version/result.
+- Created/updated by: `RedisGameTransitionStore` Lua compare-and-commit.
+- TTL: 24h from game creation without join/start/replay/no-op refresh; a new
+  commands key for a legacy game inherits the game's remaining TTL; retained as a 30-second
+  tombstone when owner leave deletes lobby state.
+- Bound: at most 4096 accepted command IDs. No entry is evicted; a new ID fails
+  closed with `COMMAND_CAPACITY` when full, preserving replay/collision evidence
+  for the key's lifetime. Capacity checking is O(1) `HLEN`.
+- Purpose: exact semantic-result replay and command-ID collision detection.
+- Value JSON fields: `fingerprint`, `stateVersion`, `result`.
+
 ### `stats:leaderboard`
 
 - Type: STRING.
@@ -85,4 +115,3 @@ Serializer: `RedisConfig` sets `StringRedisSerializer` for keys, values, hash ke
 No Redis Pub/Sub publisher/subscriber was found. Event publication currently uses Spring's in-memory WebSocket broker directly through `SimpMessagingTemplate`.
 
 Status: confirmed by search for `RedisMessageListenerContainer`, `PatternTopic`, and `convertAndSend`.
-

@@ -9,5 +9,11 @@ import java.util.List;
 public record ActionResultDto(
     int newBalance,
     List<Integer> acquiredProperties,
-    int nextPlayerId
-) {}
+    int nextPlayerId,
+    long stateVersion,
+    boolean replayed
+) {
+    public ActionResultDto(int newBalance, List<Integer> acquiredProperties, int nextPlayerId) {
+        this(newBalance, acquiredProperties, nextPlayerId, 0, false);
+    }
+}

@@ -133,7 +133,7 @@ Future code should comment non-obvious concurrency/idempotency, persist-before-e
 | Deferred decision | Later owner |
 | --- | --- |
 | Exact session store, cookie tuning, and authorization implementation | ADR 0001; REVAMP-015/016 |
-| Exact Lua operation, command encoding, and configured marker TTL | ADR 0002; REVAMP-018–020 |
+| Lua operation, command encoding, and active-lifecycle marker TTL | Implemented by REVAMP-018; timer/stats refinements remain REVAMP-020 |
 | Final Redis key shapes and migration schedule | ADR 0003; REVAMP-021/024 |
 | Exact event field encoding and any later multi-instance broker | ADR 0004; REVAMP-021/022 |
 | REST versus WebSocket command preference | ADR 0004 leaves both as adapters |

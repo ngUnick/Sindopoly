@@ -12,15 +12,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-@Service
+/** Legacy characterization fixture: deliberately has no Spring stereotype and no production caller. */
 @RequiredArgsConstructor
+@Deprecated(forRemoval = true)
 public class TurnService {
 
     private final GameStateService      gameStateSvc;

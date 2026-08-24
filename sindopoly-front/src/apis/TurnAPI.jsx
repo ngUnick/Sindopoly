@@ -1,5 +1,6 @@
 import API_BASE_URL from "./apiConfig";
 import { apiFetch } from "./apiClient";
+import { commandHeaders, readCommandResponse } from "./gameCommandState";
 
 /**
  * Low-level wrappers around your two turn endpoints:
@@ -11,15 +12,11 @@ export const TurnAPI = {
   throwDice: async (gameId, playerId) => {
     const res = await apiFetch(
       `${API_BASE_URL}/api/turn/${gameId}/${playerId}/throw`,
-      { method: "POST" }
+      { method: "POST", headers: commandHeaders(gameId) }
     );
-    const body = await res.json();
-    if (!res.ok) {
-      throw new Error(body.error || "Throw dice failed");
-    }
     // body should be your ThrowResultDto:
     // { dice, newPosition, passedGo, squareType, data }
-    return body;
+    return await readCommandResponse(res, gameId);
   },
 
   /** STEP 2: apply buy/ok → POST /action */
@@ -29,16 +26,12 @@ export const TurnAPI = {
       `${API_BASE_URL}/api/turn/${gameId}/${playerId}/action`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...commandHeaders(gameId) },
         body: JSON.stringify(payload),
       }
     );
-    const body = await res.json();
-    if (!res.ok) {
-      throw new Error(body.error || "Action failed");
-    }
     // body should be your ActionResultDto:
     // { newBalance, acquiredProperties, nextPlayerId }
-    return body;
+    return await readCommandResponse(res, gameId);
   },
 };

@@ -4,9 +4,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.util.Set;
+import com.example.Sindopoly_Java.service.transition.GameLifecycleCommandService;
 
 @Component
 public class GameLoopScheduler {
@@ -15,10 +15,7 @@ public class GameLoopScheduler {
     private RedisTemplate<String, String> redisTemplate;
 
     @Autowired
-    private GameStateService gameStateService;
-
-    @Autowired
-    private SimpMessagingTemplate broker;
+    private GameLifecycleCommandService lifecycleCommands;
 
     /**
      * Every 2 seconds, scan all games and end any that meet the end‐of‐game criteria.
@@ -40,37 +37,9 @@ public class GameLoopScheduler {
                 continue;
             }
 
-            // returns true if we've just marked the game ended
-            boolean ended = gameStateService.checkEndCondition(gameId);
-            if (ended) {
-                // broadcast end‐of‐game to subscribers
-                broker.convertAndSend(
-                    "/topic/game/" + gameId,
-                    java.util.Map.of(
-                        "event",  "gameEnded",
-                        "gameId", gameId,
-                        "winner", redisTemplate.opsForHash().get("game:" + gameId, "winner")
-                    )
-                );
-            }
+            lifecycleCommands.completeIfTerminal(gameId);
         }
     }
 
-    @Scheduled(fixedRate = 5000)
-    public void cleanupEndedGames() {
-        Set<String> keys = redisTemplate.keys("game:*:players");
-        if (keys == null) return;
-
-        for (String playersKey : keys) {
-            // split "game:123:players" → ["game","123","players"]
-            String[] parts = playersKey.split(":");
-            int gameId = Integer.parseInt(parts[1]);
-
-            String gameKey = "game:" + gameId;
-            String status = (String) redisTemplate.opsForHash().get(gameKey, "status");
-            if ("ended".equals(status)) {
-                gameStateService.deleteGameAndPlayers(gameId);
-            }
-        }
-    }
+    // Completed state is retained for its 30-second transition TTL; Redis performs cleanup.
 }

@@ -14,5 +14,11 @@ public record ThrowResultDto(
     int  newPosition,
     boolean passedGo,
     int  squareType,
-    int  data
-) {}
+    int  data,
+    long stateVersion,
+    boolean replayed
+) {
+    public ThrowResultDto(int dice, int newPosition, boolean passedGo, int squareType, int data) {
+        this(dice, newPosition, passedGo, squareType, data, 0, false);
+    }
+}

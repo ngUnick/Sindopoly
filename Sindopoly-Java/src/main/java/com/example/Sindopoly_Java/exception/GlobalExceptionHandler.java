@@ -59,6 +59,17 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", ex.getMessage()));
     }
 
+    @ExceptionHandler(GameTransitionConflictException.class)
+    public ResponseEntity<Map<String, Object>> handleTransitionConflict(GameTransitionConflictException ex) {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("error", ex.getMessage());
+        body.put("reason", ex.getReason());
+        if (ex.getCurrentStateVersion() != null && ex.getCurrentStateVersion() >= 0) {
+            body.put("stateVersion", ex.getCurrentStateVersion());
+        }
+        return ResponseEntity.status(409).body(body);
+    }
+
     @ExceptionHandler({
         IllegalArgumentException.class,
         IllegalStateException.class

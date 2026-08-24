@@ -54,7 +54,7 @@ function SearchGame() {
             disabled={disabled}
             onClick={async () => {
               try {
-                await GameAPI.joinGame(record.GameId);
+                await GameAPI.joinGame(record.GameId, record.StateVersion);
                 navigate(`/lobby?game_id=${record.GameId}`);
               } catch (err) {
                 message.error("Failed to join game.");
@@ -79,6 +79,7 @@ function SearchGame() {
         GameId: g.gameId,
         Creator: g.creatorNickname,
         PlayerCount: `${g.playerCount}/4`,
+        StateVersion: g.stateVersion,
       }));
       setGames(formatted);
     } catch (err) {

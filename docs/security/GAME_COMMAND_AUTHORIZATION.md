@@ -10,7 +10,7 @@ compatibility selectors or consistency checks; they never grant authority.
 
 The policy loads one authorization snapshot from the existing Redis game hash
 and membership set. Controllers use it for private reads and lifecycle actions;
-`TurnService` uses it at the application-command boundary before gameplay
+`TurnCommandService` applies the equivalent snapshot policy at the application-command boundary before gameplay
 mutation. The same policy has no servlet dependency and can be reused by future
 inbound WebSocket adapters.
 
@@ -73,8 +73,9 @@ load, then reuses that snapshot for its membership, host, active-player, and
 phase checks. There is no authorization cache because stale authorization is
 more dangerous than the bounded Redis reads.
 
-Redis schema/key changes: **NONE**. No key rename, serializer change, namespace,
-TTL change, session key, role cache, or membership duplicate was introduced.
+REVAMP-018 adds `stateVersion` to the existing game hash and the bounded
+`game:{gameId}:commands` retry hash. It does not rename existing keys, change
+serializers, or add a session/role cache.
 
 MariaDB schema/entity changes: **NONE**. Durable `Player` existence continues
 to be checked by the established actor resolver; active membership and roles
@@ -82,13 +83,22 @@ are not duplicated into MariaDB.
 
 ## Concurrency and deferred boundaries
 
-Authorization is adjacent to each command and turn services reuse the loaded
-game hash for the initial decision. The current game hash and membership set
-are nevertheless separate Redis reads, and legacy mutations are not an atomic
-compare-and-commit. Membership, active player, or phase can change between
-authorization and mutation. REVAMP-018 owns `stateVersion`, command IDs,
-idempotency, and the per-game Redis atomic transition; REVAMP-016 introduces no
-JVM/global lock and makes no multi-instance atomicity claim.
+REVAMP-018 now calculates normal create/join/start/leave/kick/roll/action/pass
+commands from an authoritative snapshot and compares that snapshot's version in
+one Redis Lua commit. Membership, host, active-player, and phase facts cannot
+change between authorization and a successful mutation without causing a stale
+conflict. Current membership is checked before private turn/start/kick replay;
+exact replay is then checked before freshness, and fingerprints bind the
+server-derived actor. Self-leave replay is intentionally allowed after the
+command revokes membership because its result is bounded non-private removal
+metadata. No JVM/global/distributed lock is used. Snapshot reads
+remain separate Redis operations, but their result is only advisory until the
+compare-and-commit succeeds.
+
+This closes per-game TOCTOU only. The cross-game "one active game per player"
+scan is not protected by either game's version, so simultaneous joins to two
+games remain a documented race for the state-infrastructure/index work in
+REVAMP-023/REVAMP-027.
 
 REVAMP-017 removed arbitrary player-state overwrite/deletion, money grant,
 client-triggered game deletion, and manual completion evaluation. Authenticated

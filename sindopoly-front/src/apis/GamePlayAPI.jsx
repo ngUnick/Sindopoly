@@ -1,6 +1,7 @@
 import API_BASE_URL from "./apiConfig";
 import { TurnAPI }  from "./TurnAPI";
 import { apiFetch } from "./apiClient";
+import { observeGameSnapshot } from "./gameCommandState";
 
 /**
  * Helper that builds the "board" blob Board.jsx expects.
@@ -11,6 +12,7 @@ async function assembleBoard(gameId) {
   const gameRes = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}`);
   if (!gameRes.ok) throw new Error("Game state fetch failed");
   const gameHash = await gameRes.json();
+  observeGameSnapshot(gameId, gameHash);
 
   // 2) fetch per‐player list
   const playersRes = await apiFetch(
@@ -36,6 +38,7 @@ async function assembleBoard(gameId) {
       gameStatus: gameHash.status,
       playerTurn: gameHash.playerTurn,
       winner:     gameHash.winner,
+      stateVersion: gameHash.stateVersion,
     },
     ...normalized.slice(1),
   ];
@@ -102,7 +105,9 @@ export const GamePlayAPI = {
 export async function getGameState(gameId) {
   const r = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}`);
   if (!r.ok) throw new Error("Game state fetch failed");
-  return r.json();
+  const game = await r.json();
+  observeGameSnapshot(gameId, game);
+  return game;
 }
 
 export async function getPlayersDetailed(gameId) {

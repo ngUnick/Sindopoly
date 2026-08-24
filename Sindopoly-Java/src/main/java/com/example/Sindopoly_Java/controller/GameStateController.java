@@ -8,10 +8,12 @@ import com.example.Sindopoly_Java.model.dto.PlayerDetailedDto;
 import com.example.Sindopoly_Java.repository.PlayerRepository;
 import com.example.Sindopoly_Java.security.AuthenticatedPlayerResolver;
 import com.example.Sindopoly_Java.security.GameAuthorizationService;
-import com.example.Sindopoly_Java.exception.GameStateConflictException;
+import com.example.Sindopoly_Java.service.transition.CommandMetadata;
+import com.example.Sindopoly_Java.service.transition.CommandMetadataResolver;
+import com.example.Sindopoly_Java.service.transition.GameCommandService;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -32,15 +34,21 @@ public class GameStateController {
     private final PlayerStateService playerStateService;
     private final AuthenticatedPlayerResolver authenticatedPlayerResolver;
     private final GameAuthorizationService gameAuthorizationService;
+    private final GameCommandService gameCommandService;
+    private final CommandMetadataResolver commandMetadataResolver;
 
     public GameStateController(GameStateService gameStateService, 
                                PlayerStateService playerStateService,
                                AuthenticatedPlayerResolver authenticatedPlayerResolver,
-                               GameAuthorizationService gameAuthorizationService) {
+                               GameAuthorizationService gameAuthorizationService,
+                               GameCommandService gameCommandService,
+                               CommandMetadataResolver commandMetadataResolver) {
         this.playerStateService = playerStateService;
         this.gameStateService = gameStateService;
         this.authenticatedPlayerResolver = authenticatedPlayerResolver;
         this.gameAuthorizationService = gameAuthorizationService;
+        this.gameCommandService = gameCommandService;
+        this.commandMetadataResolver = commandMetadataResolver;
     }
 
 
@@ -117,14 +125,14 @@ public class GameStateController {
      * Body: { "ownerId": 1, "visibility": "private" }
      */
     @PostMapping("/create")
-    public Map<String, String> createGame(
+    public JsonNode createGame(
             @RequestBody GameCreationRequest request,
-            Authentication authentication) {
+            Authentication authentication,
+            @RequestHeader(value = CommandMetadata.COMMAND_ID_HEADER, required = false) String commandId,
+            @RequestHeader(value = CommandMetadata.EXPECTED_VERSION_HEADER, required = false) String expectedVersion) {
         int ownerId = authenticatedPlayerResolver.requireMatchingPlayerId(
                 request.getOwnerId(), authentication);
-        Map<String, String> response = gameStateService.createGame(ownerId, request.getVisibility());
-        response.put("gameId", String.valueOf(ownerId));
-        return response;
+        return gameCommandService.create(ownerId, request.getVisibility(), metadata(commandId, expectedVersion)).semanticResult();
     }
 
 
@@ -151,17 +159,11 @@ public class GameStateController {
     public ResponseEntity<?> startGame(
             @PathVariable int gameId,
             @RequestParam int playerId,
-            Authentication authentication) {
+            Authentication authentication,
+            @RequestHeader(value = CommandMetadata.COMMAND_ID_HEADER, required = false) String commandId,
+            @RequestHeader(value = CommandMetadata.EXPECTED_VERSION_HEADER, required = false) String expectedVersion) {
         authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
-        var access = gameAuthorizationService.requireHostInLobby(gameId, playerId);
-        Set<String> currentPlayers = access.memberIds();
-
-        if (currentPlayers.size() < 2) {
-            throw new GameStateConflictException("At least 2 players are required to start the game");
-        }
-
-        gameStateService.startGame(gameId, playerId);
-        return ResponseEntity.ok(Map.of("status", "inProgress", "gameId", gameId));
+        return ResponseEntity.ok(gameCommandService.start(gameId, playerId, metadata(commandId, expectedVersion)).semanticResult());
     }
 
 
@@ -181,28 +183,15 @@ public class GameStateController {
      * POST /api/game-state/add/{gameId}/{playerId}
      */
     @PostMapping("/add/{gameId}/{playerId}")
-    public ResponseEntity<String> addPlayer(
+    public ResponseEntity<JsonNode> addPlayer(
             @PathVariable int gameId,
             @PathVariable int playerId,
-            Authentication authentication) {
+            Authentication authentication,
+            @RequestHeader(value = CommandMetadata.COMMAND_ID_HEADER, required = false) String commandId,
+            @RequestHeader(value = CommandMetadata.EXPECTED_VERSION_HEADER, required = false) String expectedVersion) {
         authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
-        // ❌ Prevent player from joining multiple games
-        if (gameStateService.isPlayerInAnyGame(playerId)) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Player is already in another game.");
-        }
-
-        Set<String> currentPlayers = gameStateService.getPlayersInGame(gameId);
-
-        // Reject if lobby already has 4 players
-        if (currentPlayers.size() >= 4) {
-            return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body("This game is already full (4 players).");
-        }
-
-        // ✅ Proceed to add
-        gameStateService.addPlayerToGame(gameId, playerId);
-        return ResponseEntity.ok("Player added to game.");
+        return ResponseEntity.ok(gameCommandService.joinPublic(gameId, playerId,
+                metadata(commandId, expectedVersion)).semanticResult());
     }
 
 
@@ -221,18 +210,20 @@ public class GameStateController {
      * POST /api/game-state/join-with-invite?inviteCode=ABC123&playerId=2
      */
     @PostMapping("/join-with-invite")
-    public Map<String, String> joinWithInvite(@RequestParam String inviteCode,
+    public JsonNode joinWithInvite(@RequestParam String inviteCode,
                                             @RequestParam int playerId,
-                                            Authentication authentication) {
+                                            Authentication authentication,
+                                            @RequestHeader(value = CommandMetadata.COMMAND_ID_HEADER, required = false) String commandId,
+                                            @RequestHeader(value = CommandMetadata.EXPECTED_VERSION_HEADER, required = false) String expectedVersion) {
         authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
+        return gameCommandService.joinInvite(inviteCode, playerId,
+                metadata(commandId, expectedVersion)).semanticResult();
+    }
 
-        String id = gameStateService.addPlayerToGameWithInviteCode(inviteCode, playerId);
-
-        // for error paths we still return the message
-        if (!id.chars().allMatch(Character::isDigit)) {
-            return Map.of("error", id);
-        }
-        return Map.of("gameId", id);
+    /** Bounded pre-join metadata lets private joins supply the required version. */
+    @GetMapping("/invite-metadata")
+    public GameCommandService.InviteMetadata getInviteMetadata(@RequestParam String inviteCode) {
+        return gameCommandService.inviteMetadata(inviteCode);
     }
 
 
@@ -242,32 +233,29 @@ public class GameStateController {
      * POST /api/game-state/{gameId}/remove-player?playerId=2
      */
     @PostMapping("/{gameId}/remove-player")
-    public String removePlayer(
+    public JsonNode removePlayer(
             @PathVariable int gameId,
             @RequestParam int playerId,
-            Authentication authentication) {
+            Authentication authentication,
+            @RequestHeader(value = CommandMetadata.COMMAND_ID_HEADER, required = false) String commandId,
+            @RequestHeader(value = CommandMetadata.EXPECTED_VERSION_HEADER, required = false) String expectedVersion) {
         authenticatedPlayerResolver.requireMatchingPlayerId(playerId, authentication);
-        gameAuthorizationService.requireMember(gameId, playerId);
-        gameStateService.removePlayerFromGame(gameId, playerId);
-        return "Player removed from game.";
+        return gameCommandService.leave(gameId, playerId, metadata(commandId, expectedVersion)).semanticResult();
     }
 
     /**
      * Host removal keeps the authenticated host as actor; the path player is only the target.
      */
     @PostMapping("/{gameId}/players/{targetPlayerId}/kick")
-    public String kickPlayer(
+    public JsonNode kickPlayer(
             @PathVariable int gameId,
             @PathVariable int targetPlayerId,
-            Authentication authentication) {
+            Authentication authentication,
+            @RequestHeader(value = CommandMetadata.COMMAND_ID_HEADER, required = false) String commandId,
+            @RequestHeader(value = CommandMetadata.EXPECTED_VERSION_HEADER, required = false) String expectedVersion) {
         int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
-        var access = gameAuthorizationService.requireHostInLobby(gameId, actorId);
-        if (actorId == targetPlayerId) {
-            throw new IllegalArgumentException("Host must use the leave command for self-removal");
-        }
-        gameAuthorizationService.requireTargetMember(access, targetPlayerId);
-        gameStateService.removePlayerFromGame(gameId, targetPlayerId);
-        return "Player removed from game.";
+        return gameCommandService.kick(gameId, actorId, targetPlayerId,
+                metadata(commandId, expectedVersion)).semanticResult();
     }
 
     /**
@@ -288,6 +276,10 @@ public class GameStateController {
     public Set<String> getPlayers(@PathVariable int gameId, Authentication authentication) {
         int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
         return gameAuthorizationService.requireMember(gameId, actorId).memberIds();
+    }
+
+    private CommandMetadata metadata(String commandId, String expectedVersion) {
+        return commandMetadataResolver.resolve(commandId, expectedVersion);
     }
 
 }

@@ -13,6 +13,15 @@ missing active games are `404`; lifecycle/turn-phase conflicts are `409`;
 unsupported methods are `405`; malformed and legacy adapter validation failures remain `400`; unhandled
 failures return `500` with generic `"Internal server error"`.
 
+REVAMP-018 command update: every game-state or turn `POST` listed below now
+requires `X-Sindopoly-Command-Id` (canonical UUID) and
+`X-Sindopoly-Expected-Version` (non-negative, except create uses `-1`). These
+commands delegate to the authoritative compare-and-commit services documented
+in `docs/architecture/AUTHORITATIVE_GAME_TRANSITIONS.md`; older service/effect
+wording below remains audit provenance rather than the current write boundary.
+Successful JSON command results expose `stateVersion` and `replayed`; stale or
+command-ID-reuse conflicts are `409`.
+
 ## Player session API: `/api/session`
 
 | Method | Path | Response | State/effects | Main concerns |
@@ -23,19 +32,23 @@ failures return `500` with generic `"Internal server error"`.
 
 ## Game state API: `/api/game-state`
 
+`GET /invite-metadata?inviteCode=...` is the authenticated bounded preflight for
+a private join and returns only `{gameId,stateVersion}` for a matching lobby.
+Public-lobby entries include `stateVersion`.
+
 | Method | Path | Controller method | Request | Response | Service(s) | State/effects | Main concerns |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/players-detailed-lobby/{gameId}` | `getPlayerDetailsInGame` | path `gameId` | list of maps `{id,nickname}` | authorization policy, `PlayerRepository` | Authorized Redis membership read; MariaDB lookup per player | Private member read; N+1 DB lookups remain. |
 | GET | `/players-detailed/{gameId}` | `getPlayersDetailed` | path `gameId` | `List<PlayerDetailedDto>` | authorization policy, `PlayerStateService`, `PlayerRepository` | Authorized Redis game/membership/player reads; MariaDB lookup per player | Private member read; controller shaping remains. |
-| POST | `/create` | `createGame` | `GameCreationRequest` | map with game fields and `gameId` | `GameStateService` | Creates Redis game hash/set | Session actor must match legacy owner ID; command-level host policy remains. |
+| POST | `/create` | `createGame` | `GameCreationRequest` + command headers | map with game fields, `gameId`, version/replay metadata | `GameCommandService` | Atomically bootstraps Redis game/membership/version/replay state | Session actor must match legacy owner ID; expected `-1` proves absence. |
 | GET | `/in-game/{playerId}` | `isPlayerInGame` | path `playerId` | boolean | `GameStateService` | Redis `KEYS game:*:players` scan | Session actor must match selector; scan remains potentially expensive. |
-| POST | `/{gameId}/start?playerId=` | `startGame` | path+query | `{status,gameId}` or error | authorization policy, `GameStateService` | Initializes game/player Redis hashes | Host member only, lobby only, minimum two members; current host convention remains `gameId == actorId`. |
+| POST | `/{gameId}/start?playerId=` | `startGame` | path+query + command headers | versioned JSON result | `GameCommandService` | Atomically initializes game/player Redis hashes | Host member only, lobby only, minimum two members; current host convention remains `gameId == actorId`. |
 | GET | `/public-lobby` | `getAllPublicLobbyGames` | none | list of maps | `GameStateService` | Redis `KEYS game:*`, MariaDB owner lookup | KEYS scan; hard-coded owner inference. |
-| POST | `/add/{gameId}/{playerId}` | `addPlayer` | path | text | `GameStateService` | Adds Redis set member | Session actor must match player ID; duplicate/max-player checks remain split. |
+| POST | `/add/{gameId}/{playerId}` | `addPlayer` | path + command headers | versioned JSON result | `GameCommandService` | Atomically adds Redis membership and replay record | Session actor must match player ID; visibility/capacity checks precede versioned commit. |
 | GET | `/players/{gameId}` | `getPlayersInGame` | path | set of IDs | authorization policy | Authorized Redis set read | Private member read; duplicates `/{gameId}/players`. |
-| POST | `/join-with-invite?inviteCode=&playerId=` | `joinWithInvite` | query | `{gameId}` or `{error}` | `GameStateService` | Adds Redis set member | Session actor must match player ID; some errors still use HTTP 200 maps. |
-| POST | `/{gameId}/remove-player?playerId=` | `removePlayer` | path+query | text | authorization policy, `GameStateService` | Removes the actor's Redis membership; may finalize current legacy stats flow | Authenticated actor must match selector and be a member. |
-| POST | `/{gameId}/players/{targetPlayerId}/kick` | `kickPlayer` | path actor-independent target | text | authorization policy, `GameStateService` | Removes a target Redis membership | Explicit lobby-host command; target must be another current member. |
+| POST | `/join-with-invite?inviteCode=&playerId=` | `joinWithInvite` | query + command headers | versioned JSON result | `GameCommandService` | Atomically adds Redis membership and replay record | Session actor must match player ID; invite metadata supplies the version without exposing private state. |
+| POST | `/{gameId}/remove-player?playerId=` | `removePlayer` | path+query + command headers | versioned JSON result | `GameCommandService` | Atomically removes the actor's membership/owned lobby state | Self-leave replay remains available after its own membership revocation. |
+| POST | `/{gameId}/players/{targetPlayerId}/kick` | `kickPlayer` | path target + command headers | versioned JSON result | `GameCommandService` | Atomically removes target membership | Explicit lobby-host command; current host authorization is rechecked before replay. |
 | GET | `/{gameId}` | `getGameState` | path | Redis hash map | authorization policy | Authorized Redis hash read | Private member read; raw-map shaping remains for later boundary work. |
 | GET | `/{gameId}/players` | `getPlayers` | path | set of IDs | authorization policy | Authorized Redis set read | Private member read; duplicate of `/players/{gameId}`. |
 
@@ -72,9 +85,9 @@ Evidence: `sindopoly-front/src/apis/GamePlayAPI.jsx`; no matching mappings found
 
 | Method | Path | Controller method | Request | Response | State/effects | Main concerns |
 | --- | --- | --- | --- | --- | --- | --- |
-| POST | `/{gameId}/{playerId}/throw` | `throwDice` | path | `ThrowResultDto` | Policy verifies membership/lifecycle/active player/phase; rolls; mutates Redis | No idempotency/atomic compare-and-commit yet; no WebSocket event on throw. |
-| POST | `/{gameId}/{playerId}/action` | `doAction` | path + `ActionRequestDto` | `ActionResultDto` | Policy verifies member/active/pending phase; applies optional; rotates; broadcasts `actionCompleted` | Session/path/body identity agree; body identity does not enter the application service; version/idempotency remain. |
-| POST | `/{gameId}/{playerId}/pass` | `passOptional` | path | `{status:"passed"}` | Authorized application-service pass clears optional, rotates, and broadcasts | Membership/active/pending phase enforced; version/idempotency remain. |
+| POST | `/{gameId}/{playerId}/throw` | `throwDice` | path + command headers | `ThrowResultDto` with version/replay metadata | Snapshot calculation plus atomic Redis transition; post-commit notification | Exact retry is returned before dice generation; stale/competing command is `409`. |
+| POST | `/{gameId}/{playerId}/action` | `doAction` | path + `ActionRequestDto` choice + command headers | `ActionResultDto` with version/replay metadata | Snapshot calculation, atomic optional-action/player/turn transition, post-commit notification | Session/path/body identity agree; fingerprint binds the semantic choice. |
+| POST | `/{gameId}/{playerId}/pass` | `passOptional` | path + command headers | `ActionResultDto` with version/replay metadata | Atomically clears option and advances frozen order | Membership/active/pending phase and expected version enforced. |
 
 Commented obsolete endpoints remain in `TurnController`.
 

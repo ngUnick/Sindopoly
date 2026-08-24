@@ -309,7 +309,7 @@ Two choices are especially important:
 
 ### REVAMP-018 — Establish the authoritative, idempotent game-state transition path
 
-- Status: `READY`; Priority: `P1`; Category: `GAME_FLOW`.
+- Status: `DONE`; Priority: `P1`; Category: `GAME_FLOW`.
 - Rationale / evidence: dice/action writes span multiple Redis mutations with no state version, command ID, lock, transaction, or Lua protection.
 - Desired outcome: one application command path for REST, future WebSocket, and timer transitions with documented per-game atomicity, idempotency, and post-commit event publication.
 - Dependencies: REVAMP-011 through REVAMP-017. Blocks: REVAMP-019 through REVAMP-023.
@@ -324,7 +324,7 @@ Two choices are especially important:
 
 ### REVAMP-019 — Repair approved dice, turn, and square-action behavior
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `GAME_FLOW`.
+- Status: `READY`; Priority: `P1`; Category: `GAME_FLOW`.
 - Rationale / evidence: rent direction likely corrupts balances; jail mapping conflicts; turn order is not join order; doubles are undefined.
 - Desired outcome: state-machine-approved dice, movement, optional action, rent/tax/card/jail, and turn-order behavior with explicit rule decisions.
 - Dependencies: REVAMP-010, REVAMP-014, REVAMP-018. Blocks: REVAMP-023 and later cleanup.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-018 — Establish the authoritative,
-idempotent game-state transition path**. Later work remains blocked by the
-required transition-path prerequisites.
+The immediate `READY` item is **REVAMP-019 — Repair approved dice, turn, and
+square-action behavior**. Later work remains blocked by the required rule,
+timer, and synchronization prerequisites.
 
 ## Planning review
 

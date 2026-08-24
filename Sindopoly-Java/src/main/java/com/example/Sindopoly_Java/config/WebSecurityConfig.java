@@ -102,7 +102,9 @@ public class WebSecurityConfig {
         CorsConfiguration cfg = new CorsConfiguration();
         cfg.setAllowedOrigins(allowedOrigins);
         cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
-        cfg.setAllowedHeaders(List.of("*"));
+        cfg.setAllowedHeaders(List.of(
+                "Content-Type", "Accept", "X-XSRF-TOKEN",
+                "X-Sindopoly-Command-Id", "X-Sindopoly-Expected-Version"));
         cfg.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -33,11 +33,10 @@ const Lobby = () => {
   const fetchPlayers = async () => {
     try {
       const resPlayers = await apiFetch(`http://localhost:8080/api/game-state/players-detailed-lobby/${gameId}`);
-      const resGame = await apiFetch(`http://localhost:8080/api/game-state/${gameId}`);
-      if (!resPlayers.ok || !resGame.ok) throw new Error("Failed to fetch");
+      if (!resPlayers.ok) throw new Error("Failed to fetch");
 
       const players = await resPlayers.json();
-      const game = await resGame.json();
+      const game = await GameAPI.getGameInfo(gameId);
 
        // 🚀 if someone (the owner) already started → go to board
       if (game.status === "inProgress") {
@@ -58,10 +57,7 @@ const Lobby = () => {
 
   const handleLeaveGame = async () => {
     try {
-      const response = await apiFetch(`http://localhost:8080/api/game-state/${gameId}/remove-player?playerId=${playerId}`, {
-        method: 'POST'
-      });
-      if (!response.ok) throw new Error("Failed to leave game");
+      await GameAPI.removePlayer(gameId, playerId);
       navigate("/");
     } catch (err) {
       console.error(err);

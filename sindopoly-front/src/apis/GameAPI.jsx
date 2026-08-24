@@ -1,5 +1,6 @@
 import API_BASE_URL from "./apiConfig";
 import { apiFetch } from "./apiClient";
+import { commandHeaders, observeGameSnapshot, readCommandResponse } from "./gameCommandState";
 
 export const GameAPI = {
   // ✅ Create Game
@@ -11,7 +12,7 @@ export const GameAPI = {
 
     const response = await apiFetch(`${API_BASE_URL}/api/game-state/create`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...commandHeaders(payload.ownerId, -1) },
       body: JSON.stringify(payload),
     });
 
@@ -20,18 +21,17 @@ export const GameAPI = {
       throw new Error(`Create game failed: ${errText}`);
     }
 
-    return await response.json();
+    return await readCommandResponse(response, payload.ownerId);
   },
 
   // ✅ Start Game
   startGame: async (gameId, playerId) => {
     const res = await apiFetch(
       `${API_BASE_URL}/api/game-state/${gameId}/start?playerId=${playerId}`,
-      { method: "POST" }
+      { method: "POST", headers: commandHeaders(gameId) }
     );
 
-    if (!res.ok) throw new Error(await res.text() || "Failed to start");
-    return await res.json();          // → { status:"inProgress", gameId: 9 }
+    return await readCommandResponse(res, gameId);
   },
 
 
@@ -40,35 +40,36 @@ export const GameAPI = {
   getPublicLobbyGames: async () => {
     const res = await apiFetch("http://localhost:8080/api/game-state/public-lobby");
     if (!res.ok) throw new Error("Failed to fetch public games");
-    return await res.json();
+    const games = await res.json();
+    games.forEach(game => observeGameSnapshot(game.gameId, game));
+    return games;
   },
 
   // ✅ Join Public Game
-  joinGame: async (gameId) => {
+  joinGame: async (gameId, stateVersion) => {
     const playerId = parseInt(localStorage.getItem("player_id"));
     const response = await apiFetch(`${API_BASE_URL}/api/game-state/add/${gameId}/${playerId}`, {
       method: "POST",
+      headers: commandHeaders(gameId, Number(stateVersion)),
     });
 
-    if (!response.ok) throw new Error("Failed to join game");
-    return await response.text();
+    return await readCommandResponse(response, gameId);
   },
 
   // ✅ Join Private Game by Code
   joinWithInvite: async (inviteCode) => {
     const playerId = localStorage.getItem("player_id");
+    const metadataRes = await apiFetch(
+      `${API_BASE_URL}/api/game-state/invite-metadata?inviteCode=${encodeURIComponent(inviteCode)}`
+    );
+    if (!metadataRes.ok) throw new Error("Invalid or expired invite code");
+    const metadata = await metadataRes.json();
+    observeGameSnapshot(metadata.gameId, metadata);
     const res = await apiFetch(
       `${API_BASE_URL}/api/game-state/join-with-invite?inviteCode=${inviteCode}&playerId=${playerId}`,
-      { method: "POST" }
+      { method: "POST", headers: commandHeaders(metadata.gameId, metadata.stateVersion) }
     );
-    if (!res.ok) throw new Error("Failed to join private game");
-
-    const text = await res.text();        // could be "4"  or  {"gameId":"4"}
-    try {
-      return JSON.parse(text);            // → {gameId:"4"}
-    } catch {
-      return { gameId: text.trim() };     // → {gameId:"4"}
-    }
+    return await readCommandResponse(res, metadata.gameId);
   },
 
 
@@ -77,7 +78,9 @@ export const GameAPI = {
   getGameInfo: async (gameId) => {
     const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}`);
     if (!response.ok) throw new Error("Failed to get game info");
-    return await response.json(); // Redis hash
+    const game = await response.json();
+    observeGameSnapshot(gameId, game);
+    return game;
   },
 
   // ✅ Get Lobby Player IDs
@@ -91,23 +94,19 @@ export const GameAPI = {
   removePlayer: async (gameId, playerId) => {
     const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}/remove-player?playerId=${playerId}`, {
       method: "POST",
+      headers: commandHeaders(gameId),
     });
 
-    if (!response.ok) throw new Error("Failed to remove player");
-    return await response.text();
+    return await readCommandResponse(response, gameId);
   },
 
   // Host remains the authenticated actor; targetPlayerId selects the member to remove.
   kickPlayer: async (gameId, targetPlayerId) => {
     const response = await apiFetch(
       `${API_BASE_URL}/api/game-state/${gameId}/players/${targetPlayerId}/kick`,
-      { method: "POST" }
+      { method: "POST", headers: commandHeaders(gameId) }
     );
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || "Failed to remove player");
-    }
-    return await response.text();
+    return await readCommandResponse(response, gameId);
   }
 };
