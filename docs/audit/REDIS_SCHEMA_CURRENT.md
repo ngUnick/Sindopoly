@@ -62,7 +62,10 @@ private authoritative state, and is removed from public-lobby projections.
 - TTL: 2h at initialization; 30s after `endGame`.
 - Fields observed: `position`, `money`, `jail`, `jailTime`, `bankrupt`, `properties`, `afk`.
 - Purpose: authoritative active player state.
-- Risks: arbitrary client write endpoint can overwrite fields; no version; no per-game namespace, so one player in multiple games would collide if membership checks fail.
+- Risks: the former arbitrary client-write routes were removed by REVAMP-017,
+  but deprecated internal raw helpers remain; the key is not game-namespaced, so
+  one player in multiple games would still collide if cross-game membership
+  exclusion races.
 
 ### `game:{gameId}:deck`
 
