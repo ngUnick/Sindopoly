@@ -489,7 +489,7 @@ public class GameStateService {
     /** Finalize Player Stats */
     // This method is called when the game ends
     // It updates the player's stats in the database
-    // It checks if the player already has stats, if not, it creates a new stats object
+    // The player-insert trigger owns Stats row creation; missing durable state is an error.
     // It updates the total games, wins, losses, money, and time played
     // Finally, it saves the stats object to the database
     // This method is called for each player in the game
@@ -498,11 +498,8 @@ public class GameStateService {
         Player player = playerRepo.findById(playerId)
         .orElseThrow(() -> new IllegalArgumentException("Player not found"));
 
-        Stats stats = statsRepo.findByPlayer(player).orElseGet(() -> {
-            Stats s = new Stats();
-            s.setPlayer(player); // 👈 Now Player object, not int
-            return s;
-        });
+        Stats stats = statsRepo.findByPlayer(player)
+                .orElseThrow(() -> new IllegalStateException("Player Stats row is missing"));
 
 
     
@@ -526,19 +523,9 @@ public class GameStateService {
         String gameKey    = "game:" + gameId;
         String playersKey = gameKey + ":players";
 
-        // 1) fetch the list of player IDs
-        Set<String> playerIds = redisTemplate.opsForSet().members(playersKey);
-
-        // 2) delete the game-level keys
+        // player:{id} is shared identity/runtime state and cannot be proven owned by this old game.
         redisTemplate.delete(gameKey);
         redisTemplate.delete(playersKey);
-
-        // 3) delete each player:<pid> hash
-        if (playerIds != null) {
-            for (String pid : playerIds) {
-                redisTemplate.delete("player:" + pid);
-            }
-        }
     }
     
 

@@ -84,9 +84,9 @@ balance, phase, active player, or next player.
 | same | `PassOptionalAction` | Same guards; option explicitly declinable | Purchase: clear option and rotate; jail payment: clear option, decrement remaining jail turns, and rotate | Next player's `AWAITING_ROLL`; after third skipped jail turn player is released for their next turn; version +1 | Resolution/turn changed; non-declinable/invalid/stale |
 | `IN_PROGRESS/*` | `HandleTurnTimeout` | System actor; referenced active player/phase/version still current | Current turn and deadline; apply approved timeout consequence once | Approved next phase/player; version +1 | `TurnTimedOut`/turn changed; stale timer is no-op/conflict |
 | `IN_PROGRESS/*` | leave/disconnect | Authenticated member or system observation; policy pending | Membership/turn/state | Only through canonical command; version +1 if accepted | No independent cleanup or duplicate turn mutation |
-| `IN_PROGRESS/*` | terminal condition after accepted transition/system check | Current version; condition approved | Active state; compute final result | `COMPLETED/NONE`; version +1 | One `GameCompleted` after persistence |
+| `IN_PROGRESS/*` | terminal condition after accepted transition/system check | Current version; condition approved | Active state; freeze final result | `COMPLETED/NONE`; version +1 | One post-Redis `GameCompleted`; Stats may still be pending |
 | `COMPLETED/NONE` | durable finalization | Idempotent system work | Redis final snapshot; write MariaDB statistics once | Lifecycle remains completed | No second completion event |
-| `COMPLETED/NONE` | `CleanupGame` | Finalization complete; recovery TTL elapsed; current terminal version | All game-owned Redis keys | Active keys removed; durable records retained | Operational result only |
+| `COMPLETED/NONE` | Redis expiry | Configured terminal TTL elapsed | Game-owned Redis keys only | Active keys removed; durable records retained if finalized | Operational result only |
 
 The exact event envelope is deferred to REVAMP-021. Events are versioned
 notifications after persistence, not authoritative history.
@@ -159,9 +159,10 @@ Implemented migration state and remaining legacy representations:
 | `game:{id}.playerTurn` | Active player | Server-owned active player | REVAMP-018 |
 | presence of typed `optionalAction` | Implemented phase marker bound to actor/version/type | `AWAITING_OPTIONAL_ACTION`; absence during active game implies `AWAITING_ROLL` | REVAMP-018/019 |
 | `lastDice` | Last server total | Roll result metadata, never client authority | REVAMP-018/019 |
-| `timer`, `startTime`, `maxTime`, `maxMoney` | Current terminal/time inputs | Version-guarded lifecycle/timeout policy | REVAMP-020 |
+| `timer`, `startTime`, `maxTime`, `maxMoney` | `startTime` plus limits are terminal authority; `timer` is compatibility display only | Version-guarded lifecycle policy | REVAMP-020 |
 | `winner` | Current result | Committed terminal result | REVAMP-020 |
-| `optionalDeadline` | Partial timeout metadata | Timer references turn/phase/version | REVAMP-020 |
+| `turnDeadlineEpochMs` | Authoritative server deadline | Timer identity includes turn/phase/version/deadline | REVAMP-020 |
+| `terminalResult` | Frozen bounded finalization input | Retry MariaDB without another transition/event | REVAMP-020 |
 | `game:{id}:players` plus `game:{id}.turnOrder` | Membership SET plus explicit JSON join order | Membership and separately persisted frozen turn order | REVAMP-019 |
 | `player:{id}` hashes | Active money/position/jail/properties | Active player state, including jailed flag and remaining jail turns | REVAMP-018/019 |
 | `game:{id}:deck` | Isolated cycling Redis LIST | Money/transport card order; atomic head-to-tail draw | REVAMP-019; cleanup REVAMP-020 |
@@ -238,7 +239,7 @@ deck, command markers, and timer metadata. A late/duplicate cleanup is safe.
 REVAMP-019 tests cover Start passing/exact landing reward; rent transfer and
 self-owner/no-rent; positive-cost tax; money/transport effects and per-game deck
 cycling; Jail visiting, Go To Jail, payment, three skipped turns/release; and
-frozen order/leave preservation. REVAMP-020 must finish completion trigger,
+frozen order/leave preservation. REVAMP-020 completes the elapsed-time trigger,
 total assets, both tie-breaks, cleanup, and timer interaction. Integration tests
 cover lifecycle/phase snapshots, adapter error
 categories, Redis isolation, and durable metadata boundaries without treating

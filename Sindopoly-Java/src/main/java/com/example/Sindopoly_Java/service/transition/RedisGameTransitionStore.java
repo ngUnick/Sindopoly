@@ -51,7 +51,8 @@ public class RedisGameTransitionStore {
 
             if type(commandId) ~= 'string' or type(fingerprint) ~= 'string'
                or type(plan) ~= 'table' or type(record) ~= 'table'
-               or type(record.fingerprint) ~= 'string' or record.result == nil
+               or type(record.fingerprint) ~= 'string'
+               or type(record.resultJson) ~= 'string'
                or type(maxRecords) ~= 'number' or maxRecords <= 0 or maxRecords % 1 ~= 0
                or type(maxVersion) ~= 'number' or maxVersion <= 0 then
               return redis.error_reply('invalid transition arguments')
@@ -81,14 +82,17 @@ public class RedisGameTransitionStore {
             if old then
               local replay = cjson.decode(old)
               if type(replay) ~= 'table' or type(replay.fingerprint) ~= 'string'
-                 or replay.stateVersion == nil or replay.result == nil then
+                 or replay.stateVersion == nil
+                 or (type(replay.resultJson) ~= 'string' and replay.result == nil) then
                 return redis.error_reply('stored replay record is invalid')
               elseif replay.fingerprint ~= fingerprint then
                 return {'REUSE_MISMATCH', tostring(replay.stateVersion), ''}
               elseif plan.bootstrap and not exists then
                 return {'STALE', '-1', ''}
               end
-              return {'REPLAY', tostring(replay.stateVersion), cjson.encode(replay.result)}
+              local exactResult = replay.resultJson
+              if exactResult == nil then exactResult = cjson.encode(replay.result) end
+              return {'REPLAY', tostring(replay.stateVersion), exactResult}
             end
 
             local current = -1
@@ -229,7 +233,7 @@ public class RedisGameTransitionStore {
             for index, item in ipairs(plan.playerTtls) do
               redis.call('EXPIRE', KEYS[item.keyIndex], item.ttl)
             end
-            return {plan.stateChanging and 'APPLIED' or 'NO_OP', tostring(nextVersion), cjson.encode(record.result)}
+            return {plan.stateChanging and 'APPLIED' or 'NO_OP', tostring(nextVersion), record.resultJson}
             """, List.class);
 
     private final RedisTemplate<String, String> redis;
@@ -267,7 +271,7 @@ public class RedisGameTransitionStore {
                         "Command ID was already used for a different intent", record.stateVersion());
             }
             return Optional.of(new TransitionExecution(TransitionExecution.Status.REPLAY,
-                    record.stateVersion(), record.result()));
+                    record.stateVersion(), record.semanticResult(mapper)));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Stored command replay record is malformed", exception);
         }
@@ -289,8 +293,11 @@ public class RedisGameTransitionStore {
         plan.playerTtlSeconds().keySet().forEach(id -> addPlayerKey(keys, playerKeyIndexes, id));
 
         Map<String, Object> scriptPlan = scriptPlan(plan, playerKeyIndexes);
-        Map<String, Object> replay = Map.of("fingerprint", fingerprint, "result", semanticResult);
+        Map<String, Object> replay;
         try {
+            // Store the semantic result as exact JSON text so Redis Lua cannot turn
+            // an empty JSON array into an empty object during cjson decode/encode.
+            replay = Map.of("fingerprint", fingerprint, "resultJson", mapper.writeValueAsString(semanticResult));
             @SuppressWarnings("unchecked")
             List<String> response = (List<String>) redis.execute(COMMIT_SCRIPT, keys,
                     metadata.commandId(), fingerprint, String.valueOf(metadata.expectedStateVersion()),

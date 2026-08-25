@@ -339,7 +339,7 @@ Two choices are especially important:
 
 ### REVAMP-020 — Make timer, cleanup, and end-game processing transition-safe
 
-- Status: `READY`; Priority: `P1`; Category: `GAME_FLOW`.
+- Status: `DONE`; Priority: `P1`; Category: `GAME_FLOW`.
 - Rationale / evidence: scheduler and turn flow independently end/cleanup games and publish inconsistent end events.
 - Desired outcome: timers submit the same versioned commands as players; end/cleanup is idempotent with defined ownership and lifecycle.
 - Dependencies: REVAMP-014, REVAMP-018, REVAMP-019. Blocks: REVAMP-021, REVAMP-023, REVAMP-030.
@@ -354,7 +354,7 @@ Two choices are especially important:
 
 ### REVAMP-021 — Define and implement WebSocket event synchronization and recovery
 
-- Status: `BLOCKED`; Priority: `P2`; Category: `WEBSOCKET`.
+- Status: `READY`; Priority: `P2`; Category: `WEBSOCKET`.
 - Rationale / evidence: server broadcasts selected events through an in-memory broker, while frontend polls and commented STOMP code has no recovery contract.
 - Desired outcome: approved polling or WebSocket-plus-snapshot strategy with event envelope, subscription authorization, ordering/deduplication, reconnect, and multi-instance limits defined.
 - Dependencies: REVAMP-013, REVAMP-015, REVAMP-016, REVAMP-018, REVAMP-020. Blocks: REVAMP-022 and realtime-dependent UX changes.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-020 — Make timer, cleanup, and end-game
-processing transition-safe**. Later work remains blocked by the required timer
-and synchronization prerequisites.
+The immediate `READY` item is **REVAMP-021 — Define and implement WebSocket
+event synchronization and recovery**. Later work remains blocked by the
+required synchronization prerequisites.
 
 ## Planning review
 

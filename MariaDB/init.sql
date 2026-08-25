@@ -39,14 +39,25 @@ CREATE TABLE IF NOT EXISTS square(
 
 CREATE TABLE IF NOT EXISTS stats(
     id INT AUTO_INCREMENT,
-    player INT,
+    player INT NOT NULL,
     total_wins INT DEFAULT 0,
     total_losses INT DEFAULT 0,
     total_games INT DEFAULT 0,
     total_money INT DEFAULT 0,
     total_time_played INT DEFAULT 0,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_stats_player (player),
     FOREIGN KEY (player) REFERENCES player(id)
+);
+
+CREATE TABLE IF NOT EXISTS game_finalization(
+    finalization_id CHAR(36) NOT NULL,
+    game_id INT NOT NULL,
+    game_created_at_epoch_ms BIGINT NOT NULL,
+    winner_player_id INT NOT NULL,
+    completed_at_epoch_ms BIGINT NOT NULL,
+    PRIMARY KEY (finalization_id),
+    UNIQUE KEY uq_game_finalization_instance (game_id, game_created_at_epoch_ms)
 );
 
 
@@ -79,13 +90,13 @@ INSERT INTO player (p_name) VALUES ('Bob'), ('Alice');
 
 
 -- ── Initialize Stats ──────────────────────────────────────────
-INSERT INTO stats (player, total_wins, total_losses, total_games,
-                   total_money, total_time_played)
-VALUES
-  -- Player #1  (all counters start at zero)
-  (1, 10, 2, 12, 55000, 215),
-  -- Player #2  (also zeroed)
-  (2, 5, 0, 5, 25000, 80);
+-- The player trigger owns row creation; seed history updates those rows.
+UPDATE stats SET total_wins = 10, total_losses = 2, total_games = 12,
+                 total_money = 55000, total_time_played = 215
+WHERE player = 1;
+UPDATE stats SET total_wins = 5, total_losses = 0, total_games = 5,
+                 total_money = 25000, total_time_played = 80
+WHERE player = 2;
 
 -- ── Initialize Squares ───────────────────────────────────────
 INSERT INTO square(id, s_type, price, rent) VALUES

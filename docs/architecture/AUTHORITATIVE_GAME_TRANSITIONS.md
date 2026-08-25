@@ -42,11 +42,11 @@ rename or Redis Cluster migration.
 
 | Key | Type / format | Ownership and purpose | Lifecycle |
 | --- | --- | --- | --- |
-| `game:<gameId>` | HASH of string fields | Authoritative game state. `stateVersion` is a base-10 non-negative safe integer; `turnOrder` is a JSON array of 1-4 unique positive IDs in accepted join order. | 24 hours from lobby creation, retained on start, 30 seconds after completion. |
+| `game:<gameId>` | HASH of string fields | Authoritative game state. `stateVersion` is a base-10 non-negative safe integer; `turnOrder` is a JSON array of 1-4 unique positive IDs in accepted join order. | 24 hours from lobby creation, retained on start, configurable 300-second default after completion. |
 | `game:<gameId>:players` | SET of decimal player IDs | Authoritative membership. | Same transition-managed TTL as the game. |
-| `player:<playerId>` | HASH of string fields | Authoritative active player state. | Initialized at start with a 2-hour TTL; completion uses 30 seconds. |
+| `player:<playerId>` | HASH of string fields | Authoritative active player state shared across game identity. | Initialized at start with a 2-hour TTL; completion/abandonment never shortens it. |
 | `game:<gameId>:deck` | LIST of decimal card IDs | Per-game isolated cycling card order; an atomic draw moves the head to the tail while applying its effect. | Same TTL as the game when present. |
-| `game:<gameId>:commands` | HASH; field is normalized command UUID, value is `{"fingerprint":string,"stateVersion":number,"result":JSON}` | Idempotency fingerprint, committed version, and structurally bounded semantic result. This is active-state retry data, not an audit log. | Same remaining TTL as the game; retained for 30 seconds when owner-leave deletes lobby state. Maximum 4096 accepted IDs; new IDs fail closed at capacity. |
+| `game:<gameId>:commands` | HASH; field is normalized command UUID. New values use `{"fingerprint":string,"stateVersion":number,"resultJson":string}`; readers also accept legacy `result` JSON. | Idempotency fingerprint, committed version, and exact serialized semantic result. This is active-state retry data, not an audit log; the compatible value evolution needs no key rewrite. | Same remaining TTL as the game; retained for 30 seconds when owner-leave deletes lobby state. Maximum 4096 accepted IDs; new IDs fail closed at capacity. |
 
 For an active game created before REVAMP-018, a missing `stateVersion` is read as
 logical version `0`; the first successful state-changing command persists `1`.
@@ -145,13 +145,13 @@ carry the committed `stateVersion`. Replays, stale commands, collisions, and
 failed computations emit nothing. The current in-memory STOMP broker still has
 a crash window after Redis commit and before publication; clients recover from
 the authenticated REST snapshot. Durable delivery, subscription authorization,
-and full reconnect/multi-instance behavior remain REVAMP-020/REVAMP-021 scope.
+and full reconnect/multi-instance event behavior remain REVAMP-021 scope.
 
-Scheduler completion now submits a deterministic system command derived from
-game ID and expected version. Redis completion is authoritative. MariaDB stats
-updates happen after the Redis commit and are not claimed to be atomic with it;
-the crash/retry and exactly-once stats policy remains REVAMP-020 scope. No
-MariaDB schema or migration changed in REVAMP-018.
+Scheduler timeout and completion submit deterministic system commands carrying
+the same expected-version contract as player commands. Redis completion is
+authoritative. MariaDB finalization occurs afterward through a durable marker
+and one transaction; retained `terminalResult` permits retries without another
+Redis transition or event. The stores are not claimed to be atomic.
 
 ## Compatibility and known deferrals
 
@@ -166,16 +166,16 @@ REVAMP-019 repairs the approved rent, tax, card, Jail/Go-To-Jail, Start reward,
 purchase/decline, frozen join-order, and no-doubles behavior inside this same
 transition path. A missing `turnOrder` is initialized only for an unambiguous
 single-host lobby; ambiguous lobbies and in-progress legacy games fail closed.
-No membership SET iteration or numeric sorting reconstructs order. Timer ownership, cleanup races,
-durable event delivery, multi-instance recovery, and exactly-once MariaDB stats
-finalization remain explicit follow-up work rather than hidden guarantees.
+No membership SET iteration or numeric sorting reconstructs order. Durable
+event delivery and reconnect recovery remain explicit REVAMP-021 work.
 
 Lobby creation sets 24-hour game/membership/commands TTLs. Join, start, turn,
 replay, stale, reuse, and no-op processing do not refresh the game lifetime;
 start creates player hashes with 2-hour TTLs while retaining the game's existing
 24-hour deadline. For a migrated legacy game, a newly created commands/deck key
-inherits the game's remaining TTL. Completion shortens game, membership,
-commands, deck, and current player keys to 30 seconds.
+inherits the game's remaining TTL. Completion applies the configurable terminal
+TTL to game, membership, commands, and deck only; shared player hashes are not
+shortened.
 
 ## Verification
 

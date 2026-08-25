@@ -7,11 +7,11 @@ import com.example.Sindopoly_Java.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -32,15 +32,19 @@ public class GameCommandService {
     private final ValidationUtils validation;
     private final GameStateService legacyReads;
     private final ObjectMapper mapper;
+    private final GameTimingService timing;
     private final SecureRandom random = new SecureRandom();
 
+    @Autowired
     public GameCommandService(RedisGameTransitionStore store, RedisTemplate<String, String> redis,
-                              ValidationUtils validation, GameStateService legacyReads, ObjectMapper mapper) {
+                              ValidationUtils validation, GameStateService legacyReads, ObjectMapper mapper,
+                              GameTimingService timing) {
         this.store = store;
         this.redis = redis;
         this.validation = validation;
         this.legacyReads = legacyReads;
         this.mapper = mapper;
+        this.timing = timing;
     }
 
     public TransitionExecution create(int ownerId, String visibility, CommandMetadata metadata) {
@@ -63,7 +67,7 @@ public class GameCommandService {
         }
         Map<String, String> game = new LinkedHashMap<>();
         game.put("status", "lobby");
-        game.put("creationTime", Instant.now().toString());
+        game.put("creationTime", timing.now().toString());
         game.put("visibility", normalizedVisibility);
         game.put(TurnOrder.FIELD, TurnOrder.encode(mapper, List.of(ownerId)));
         if ("private".equals(normalizedVisibility)) game.put("inviteCode", inviteCode());
@@ -160,7 +164,8 @@ public class GameCommandService {
         if (!order.contains(gameId)) throw new GameStateConflictException("TURN_ORDER_INVALID: host is missing");
         GameTransitionPlan plan = GameTransitionPlan.transition()
                 .putGame(Map.of("status", "inProgress", "playerTurn", String.valueOf(order.get(0)), "timer", "0",
-                        "startTime", Instant.now().toString(), "maxTime", "1200", "maxMoney", "5000", "winner", "null"));
+                        "startTime", timing.now().toString(), "maxTime", "1200", "maxMoney", "5000", "winner", "null",
+                        "turnDeadlineEpochMs", String.valueOf(timing.newTurnDeadlineEpochMs())));
         Map<String, String> initial = Map.of("position", "0", "money", "1500", "jail", "false",
                 "jailTime", "0", "bankrupt", "false", "properties", "[]", "afk", "false");
         snapshot.members().stream().map(Integer::parseInt).forEach(id -> plan.putPlayer(id, initial).playerTtl(id, PLAYER_TTL_SECONDS));
@@ -209,7 +214,9 @@ public class GameCommandService {
             int removedIndex = previousOrder.indexOf(targetId);
             int nextIndex = removedIndex >= remainingOrder.size() ? 0 : removedIndex;
             int nextPlayer = remainingOrder.get(nextIndex);
-            plan.putGame("playerTurn", String.valueOf(nextPlayer)).deleteGameField("optionalDeadline");
+            plan.putGame("playerTurn", String.valueOf(nextPlayer))
+                    .putGame("turnDeadlineEpochMs", String.valueOf(timing.newTurnDeadlineEpochMs()))
+                    .deleteGameField("optionalDeadline");
             Map<String, String> nextState = snapshot.players().get(nextPlayer);
             if (nextState != null && Boolean.parseBoolean(nextState.getOrDefault("jail", "false"))) {
                 plan.putGame("optionalAction", json(PendingOptionalAction.jailPayment(
@@ -229,7 +236,8 @@ public class GameCommandService {
             plan.putGame("optionalAction", json(pending.atVersion(snapshot.stateVersion() + 1)));
         }
         if (targetId == gameId && "lobby".equalsIgnoreCase(snapshot.game().get("status"))) {
-            plan.deleteGameAndOwnedState(snapshot.members().stream().map(Integer::parseInt).toList()).lifecycleTtl(30);
+            // player:{id} is shared across games and cannot be proven owned by this lobby.
+            plan.deleteGameAndOwnedState(List.of()).lifecycleTtl(30);
         }
         return commit(gameId, metadata, fingerprint, plan,
                 mapper.valueToTree(Map.of("status", "removed", "gameId", gameId, "playerId", targetId,

@@ -4,6 +4,7 @@ import com.jayway.jsonpath.JsonPath;
 import com.example.Sindopoly_Java.repository.CardRepository;
 import com.example.Sindopoly_Java.repository.PlayerRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
+import com.example.Sindopoly_Java.repository.StatsRepository;
 import com.example.Sindopoly_Java.exception.GameTransitionConflictException;
 import com.example.Sindopoly_Java.service.transition.CommandMetadata;
 import com.example.Sindopoly_Java.service.transition.GameTransitionPlan;
@@ -13,6 +14,11 @@ import com.example.Sindopoly_Java.service.transition.TransitionExecution;
 import com.example.Sindopoly_Java.service.transition.TurnCommandService;
 import com.example.Sindopoly_Java.service.core.DiceService;
 import com.example.Sindopoly_Java.service.core.CardDataCompatibilityService;
+import com.example.Sindopoly_Java.service.core.DatabaseCompatibilityService;
+import com.example.Sindopoly_Java.service.transition.FinalizationFailureProbe;
+import com.example.Sindopoly_Java.service.transition.GameFinalizationService;
+import com.example.Sindopoly_Java.service.transition.GameLifecycleCommandService;
+import com.example.Sindopoly_Java.service.transition.TerminalGameResult;
 import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.model.dto.ActionResultDto;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,6 +37,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.GenericContainer;
@@ -41,6 +49,7 @@ import org.testcontainers.utility.MountableFile;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.UUID;
@@ -51,6 +60,11 @@ import java.util.concurrent.Executors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -131,6 +145,24 @@ class IntegrationInfrastructureIT {
     @Autowired
     private CardDataCompatibilityService cardDataCompatibility;
 
+    @Autowired
+    private DatabaseCompatibilityService databaseCompatibility;
+
+    @Autowired
+    private GameFinalizationService gameFinalization;
+
+    @Autowired
+    private GameLifecycleCommandService gameLifecycle;
+
+    @Autowired
+    private StatsRepository statsRepository;
+
+    @MockBean
+    private FinalizationFailureProbe finalizationFailureProbe;
+
+    @SpyBean
+    private SimpMessagingTemplate broker;
+
     @BeforeEach
     @AfterEach
     void clearDedicatedRedisContainer() {
@@ -155,6 +187,305 @@ class IntegrationInfrastructureIT {
         assertThat(playerRepository.count()).isGreaterThanOrEqualTo(2);
         assertThat(squareRepository.count()).isEqualTo(40);
         assertThat(cardRepository.count()).isGreaterThan(0);
+    }
+
+    @Test
+    void freshMariaDbEnforcesSingleTriggerOwnedStatsRow() {
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM stats WHERE player IS NULL", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM (SELECT player FROM stats GROUP BY player HAVING COUNT(*) > 1) d",
+                Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stats'
+                  AND INDEX_NAME = 'uq_stats_player' AND NON_UNIQUE = 0
+                """, Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+                SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stats' AND COLUMN_NAME = 'player'
+                """, String.class)).isEqualTo("NO");
+        assertThat(jdbc.queryForObject("SELECT total_wins FROM stats WHERE player = 1", Integer.class)).isEqualTo(10);
+        int id = insertPlayer("TriggerOwner");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM stats WHERE player = ?", Integer.class, id)).isEqualTo(1);
+    }
+
+    @Test
+    void compatibilityRepairsOnlyUnambiguousLegacyDuplicatesAndIsIdempotent() {
+        int populated = insertPlayer("LegacyPopulated");
+        int allZero = insertPlayer("LegacyZero");
+        dropStatsInvariant();
+        try {
+            jdbc.update("UPDATE stats SET total_wins = 3 WHERE player = ?", populated);
+            jdbc.update("INSERT INTO stats (player) VALUES (?)", populated);
+            jdbc.update("INSERT INTO stats (player) VALUES (?)", allZero);
+            int retainedZeroId = jdbc.queryForObject(
+                    "SELECT MIN(id) FROM stats WHERE player = ?", Integer.class, allZero);
+
+            databaseCompatibility.ensureCompatibility();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM stats WHERE player = ?", Integer.class, populated)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT total_wins FROM stats WHERE player = ?", Integer.class, populated)).isEqualTo(3);
+            assertThat(jdbc.queryForObject("SELECT id FROM stats WHERE player = ?", Integer.class, allZero)).isEqualTo(retainedZeroId);
+            databaseCompatibility.ensureCompatibility();
+            assertStatsInvariant();
+        } finally {
+            restoreStatsInvariant();
+        }
+    }
+
+    @Test
+    void compatibilityRejectsAmbiguousPopulatedDuplicatesWithoutMerging() {
+        int player = insertPlayer("LegacyAmbiguous");
+        dropStatsInvariant();
+        jdbc.update("UPDATE stats SET total_wins = 2 WHERE player = ?", player);
+        jdbc.update("INSERT INTO stats (player, total_losses) VALUES (?, 4)", player);
+        try {
+            assertThatThrownBy(databaseCompatibility::ensureCompatibility)
+                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+                    .hasMessageContaining("multiple populated rows")
+                    .hasMessageContaining(String.valueOf(player));
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM stats WHERE player = ?", Integer.class, player)).isEqualTo(2);
+        } finally {
+            jdbc.update("DELETE FROM stats WHERE player = ? AND total_losses = 4", player);
+            restoreStatsInvariant();
+        }
+    }
+
+    @Test
+    void compatibilityRejectsNullOwnerWithoutDeletingIt() {
+        dropStatsInvariant();
+        jdbc.update("INSERT INTO stats (player) VALUES (NULL)");
+        try {
+            assertThatThrownBy(databaseCompatibility::ensureCompatibility)
+                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+                    .hasMessageContaining("NULL player ownership");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM stats WHERE player IS NULL", Integer.class)).isEqualTo(1);
+        } finally {
+            jdbc.update("DELETE FROM stats WHERE player IS NULL");
+            restoreStatsInvariant();
+        }
+    }
+
+    @Test
+    void finalizationIsExactlyOnceAndRollsBackMarkerWithPartialStats() {
+        int first = insertPlayer("FinalizeA");
+        int second = insertPlayer("FinalizeB");
+        TerminalGameResult terminal = terminal("final-once", 99001, first, second);
+        assertThat(gameFinalization.finalizeGame(terminal)).isEqualTo(GameFinalizationService.Outcome.APPLIED);
+        assertThat(gameFinalization.finalizeGame(terminal)).isEqualTo(GameFinalizationService.Outcome.ALREADY_FINALIZED);
+        assertThat(jdbc.queryForObject("SELECT total_games FROM stats WHERE player = ?", Integer.class, first)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT total_games FROM stats WHERE player = ?", Integer.class, second)).isEqualTo(1);
+
+        int rollbackFirst = insertPlayer("RollbackA");
+        int rollbackSecond = insertPlayer("RollbackB");
+        TerminalGameResult rollback = terminal("final-rollback", 99002, rollbackFirst, rollbackSecond);
+        reset(finalizationFailureProbe);
+        doThrow(new IllegalStateException("injected")).when(finalizationFailureProbe).afterPlayerUpdate(1);
+        assertThatThrownBy(() -> gameFinalization.finalizeGame(rollback)).hasMessageContaining("injected");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM game_finalization WHERE finalization_id = ?",
+                Integer.class, rollback.finalizationId())).isZero();
+        assertThat(jdbc.queryForObject("SELECT total_games FROM stats WHERE player = ?", Integer.class, rollbackFirst)).isZero();
+        assertThat(jdbc.queryForObject("SELECT total_games FROM stats WHERE player = ?", Integer.class, rollbackSecond)).isZero();
+        reset(finalizationFailureProbe);
+    }
+
+    @Test
+    void concurrentFinalizationUsesDatabaseUniquenessAsRaceBoundary() throws Exception {
+        int first = insertPlayer("ConcurrentFinalizeA");
+        int second = insertPlayer("ConcurrentFinalizeB");
+        TerminalGameResult terminal = terminal("final-concurrent", 99003, first, second);
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            List<Callable<GameFinalizationService.Outcome>> work = List.of(
+                    () -> { barrier.await(); return gameFinalization.finalizeGame(terminal); },
+                    () -> { barrier.await(); return gameFinalization.finalizeGame(terminal); });
+            List<GameFinalizationService.Outcome> outcomes = executor.invokeAll(work).stream().map(future -> {
+                try { return future.get(); } catch (Exception exception) { throw new RuntimeException(exception); }
+            }).toList();
+            assertThat(outcomes).containsExactlyInAnyOrder(
+                    GameFinalizationService.Outcome.APPLIED,
+                    GameFinalizationService.Outcome.ALREADY_FINALIZED);
+            assertThat(jdbc.queryForObject("SELECT total_games FROM stats WHERE player = ?", Integer.class, first)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT total_games FROM stats WHERE player = ?", Integer.class, second)).isEqualTo(1);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void statsRepositoryCardinalityIsDatabaseEnforced() {
+        int player = insertPlayer("UniqueStats");
+        assertThat(statsRepository.findByPlayer(playerRepository.findById(player).orElseThrow())).isPresent();
+        assertThatThrownBy(() -> jdbc.update("INSERT INTO stats (player) VALUES (?)", player))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void dueRollAndOptionalTimeoutsApplyOnceThroughVersionCas() throws Exception {
+        int first = 8801;
+        int second = 8802;
+        seedActiveGame(first, second, 0, "[]", "[]");
+        redis.opsForHash().put("game:" + first, "turnDeadlineEpochMs", "0");
+        TurnCommandService.TurnTimeoutCandidate roll = turnCommands.dueTimeout(first).orElseThrow();
+        assertThat(turnCommands.executeTimeout(roll)).isTrue();
+        assertThat(turnCommands.executeTimeout(roll)).isFalse();
+        assertThat(redis.opsForHash().get("game:" + first, "playerTurn")).isEqualTo(String.valueOf(second));
+        assertThat(redis.opsForHash().get("player:" + first, "position")).isEqualTo("0");
+
+        long version = Long.parseLong((String) redis.opsForHash().get("game:" + first, "stateVersion"));
+        redis.opsForHash().put("game:" + first, "playerTurn", String.valueOf(second));
+        redis.opsForHash().put("game:" + first, "turnDeadlineEpochMs", "0");
+        redis.opsForHash().put("game:" + first, "optionalAction", objectMapper.writeValueAsString(
+                new com.example.Sindopoly_Java.service.transition.PendingOptionalAction(
+                        com.example.Sindopoly_Java.service.transition.PendingOptionalAction.Type.PURCHASE_PROPERTY,
+                        first, second, version, 1, 60, true)));
+        assertThat(turnCommands.timeoutIfDue(first)).isTrue();
+        assertThat(redis.opsForHash().get("game:" + first, "optionalAction")).isNull();
+        assertThat(redis.opsForHash().get("game:" + first, "playerTurn")).isEqualTo(String.valueOf(first));
+        assertThat(redis.opsForHash().get("player:" + second, "money")).isEqualTo("1500");
+    }
+
+    @Test
+    void propertyPassReplayPreservesTypedEmptyAcquiredPropertiesArray() throws Exception {
+        int first = 8803;
+        int second = 8804;
+        seedActiveGame(first, second, 0, "[]", "[]");
+        redis.opsForHash().put("game:" + first, "optionalAction", objectMapper.writeValueAsString(
+                new com.example.Sindopoly_Java.service.transition.PendingOptionalAction(
+                        com.example.Sindopoly_Java.service.transition.PendingOptionalAction.Type.PURCHASE_PROPERTY,
+                        first, first, 0, 1, 60, true)));
+        CommandMetadata command = metadata(0);
+
+        ActionResultDto applied = turnCommands.pass(first, first, command);
+        ActionResultDto replay = turnCommands.pass(first, first, command);
+
+        assertThat(applied.acquiredProperties()).isEmpty();
+        assertThat(replay.acquiredProperties()).isEmpty();
+        assertThat(replay.replayed()).isTrue();
+        assertThat(replay.newBalance()).isEqualTo(applied.newBalance());
+        assertThat(replay.nextPlayerId()).isEqualTo(applied.nextPlayerId());
+        assertThat(redis.opsForHash().get("game:" + first, "stateVersion")).isEqualTo("1");
+    }
+
+    @Test
+    void timeoutAndPlayerCommandRaceAllowsOneVersionedResolution() throws Exception {
+        int first = 8811;
+        int second = 8812;
+        seedActiveGame(first, second, 0, "[]", "[]");
+        redis.opsForHash().put("game:" + first, "turnDeadlineEpochMs", "0");
+        redis.opsForHash().put("game:" + first, "optionalAction", objectMapper.writeValueAsString(
+                new com.example.Sindopoly_Java.service.transition.PendingOptionalAction(
+                        com.example.Sindopoly_Java.service.transition.PendingOptionalAction.Type.PURCHASE_PROPERTY,
+                        first, first, 0, 1, 60, true)));
+        TurnCommandService.TurnTimeoutCandidate timeout = turnCommands.dueTimeout(first).orElseThrow();
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            List<Callable<Object>> work = List.of(
+                    () -> { barrier.await(); return capture(() -> turnCommands.executeTimeout(timeout)); },
+                    () -> { barrier.await(); return capture(() -> turnCommands.pass(first, first, metadata(0))); });
+            List<Object> outcomes = executor.invokeAll(work).stream().map(future -> {
+                try { return future.get(); } catch (Exception exception) { throw new RuntimeException(exception); }
+            }).toList();
+            assertThat(outcomes.stream().filter(value -> Boolean.TRUE.equals(value)
+                    || value instanceof ActionResultDto).count()).isEqualTo(1);
+            assertThat(redis.opsForHash().get("game:" + first, "stateVersion")).isEqualTo("1");
+            assertThat(redis.opsForHash().get("game:" + first, "playerTurn")).isEqualTo(String.valueOf(second));
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void jailTimeoutUsesCanonicalSkipAndAbandonmentPreservesPlayerHash() throws Exception {
+        int jailed = 8821;
+        int next = 8822;
+        seedActiveGame(jailed, next, 10, "[]", "[]");
+        redis.opsForHash().putAll("player:" + jailed, java.util.Map.of("jail", "true", "jailTime", "3"));
+        redis.opsForHash().put("game:" + jailed, "turnDeadlineEpochMs", "0");
+        redis.opsForHash().put("game:" + jailed, "optionalAction", objectMapper.writeValueAsString(
+                new com.example.Sindopoly_Java.service.transition.PendingOptionalAction(
+                        com.example.Sindopoly_Java.service.transition.PendingOptionalAction.Type.PAY_JAIL_EXIT,
+                        jailed, jailed, 0, null, 50, true)));
+        TurnCommandService.TurnTimeoutCandidate jailTimeout = turnCommands.dueTimeout(jailed).orElseThrow();
+        assertThat(turnCommands.executeTimeout(jailTimeout)).isTrue();
+        assertThat(redis.opsForHash().get("player:" + jailed, "jailTime")).isEqualTo("2");
+        assertThat(redis.opsForHash().get("game:" + jailed, "playerTurn")).isEqualTo(String.valueOf(next));
+        String timeoutParameters = jailTimeout.playerId() + "|" + jailTimeout.phase() + "|" + jailTimeout.deadlineEpochMs();
+        CommandMetadata timeoutMetadata = new CommandMetadata(jailTimeout.commandId(), jailTimeout.expectedVersion());
+        String timeoutFingerprint = com.example.Sindopoly_Java.service.transition.CommandFingerprint.create(
+                jailed, "SYSTEM", "TURN_TIMEOUT", timeoutMetadata, timeoutParameters);
+        TransitionExecution replay = transitions.replayIfPresent(jailed, timeoutMetadata, timeoutFingerprint).orElseThrow();
+        ActionResultDto replayResult = objectMapper.treeToValue(replay.semanticResult(), ActionResultDto.class);
+        assertThat(replayResult.acquiredProperties()).isEmpty();
+        assertThat(turnCommands.executeTimeout(jailTimeout)).isFalse();
+        assertThat(redis.opsForHash().get("player:" + jailed, "jailTime")).isEqualTo("2");
+
+        int owner = insertPlayer("AbandonedOwner");
+        redis.opsForHash().putAll("game:" + owner, java.util.Map.of(
+                "status", "lobby", "stateVersion", "0", "turnOrder", "[" + owner + "]"));
+        redis.opsForSet().add("game:" + owner + ":players", String.valueOf(owner));
+        redis.opsForHash().put("player:" + owner, "money", "1500");
+        gameCommands.leave(owner, owner, metadata(0));
+        assertThat(redis.hasKey("game:" + owner)).isFalse();
+        assertThat(redis.hasKey("player:" + owner)).isTrue();
+    }
+
+    @Test
+    void terminalTransitionFreezesRecoveryAndNeverShortensPlayerHashes() {
+        int winner = insertPlayer("TerminalWinner");
+        int loser = insertPlayer("TerminalLoser");
+        seedActiveGame(winner, loser, 0, "[]", "[]");
+        redis.opsForHash().putAll("game:" + winner, java.util.Map.of(
+                "creationTime", "2026-08-25T10:00:00Z", "startTime", "2026-08-25T10:00:00Z",
+                "maxTime", "1200", "maxMoney", "5000", "turnDeadlineEpochMs", "0"));
+        redis.opsForHash().put("player:" + winner, "money", "5000");
+
+        long completedVersion = Long.parseLong((String) redis.opsForHash().get("game:" + winner, "stateVersion"));
+        long playerTtlBefore = redis.getExpire("player:" + winner);
+        assertThat(gameLifecycle.processScheduledGame(winner)).isTrue();
+        assertThat(redis.opsForHash().get("game:" + winner, "stateVersion"))
+                .isEqualTo(String.valueOf(completedVersion + 1));
+        assertThat(redis.opsForHash().get("game:" + winner, "status")).isEqualTo("ended");
+        assertThat(redis.opsForHash().get("game:" + winner, "terminalResult")).isNotNull();
+        assertThat(redis.opsForHash().get("game:" + winner, "turnDeadlineEpochMs")).isNull();
+        assertThat(redis.getExpire("game:" + winner)).isBetween(1L, 300L);
+        long playerTtlAfter = redis.getExpire("player:" + winner);
+        if (playerTtlBefore < 0) assertThat(playerTtlAfter).isEqualTo(playerTtlBefore);
+        else assertThat(playerTtlAfter).isBetween(Math.max(1L, playerTtlBefore - 2), playerTtlBefore);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM game_finalization WHERE game_id = ?",
+                Integer.class, winner)).isEqualTo(1);
+        assertThat(gameLifecycle.processScheduledGame(winner)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT total_games FROM stats WHERE player = ?", Integer.class, winner)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT total_games FROM stats WHERE player = ?", Integer.class, loser)).isEqualTo(1);
+    }
+
+    @Test
+    void competingCompletionPollsCommitAndPublishExactlyOnce() throws Exception {
+        int winner = insertPlayer("ConcurrentEndWinner");
+        int loser = insertPlayer("ConcurrentEndLoser");
+        seedActiveGame(winner, loser, 0, "[]", "[]");
+        redis.opsForHash().putAll("game:" + winner, java.util.Map.of(
+                "creationTime", "2026-08-25T10:01:00Z", "startTime", "2026-08-25T10:01:00Z",
+                "maxTime", "1200", "maxMoney", "5000", "turnDeadlineEpochMs", "0"));
+        redis.opsForHash().put("player:" + winner, "money", "5000");
+        clearInvocations(broker);
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            List<Callable<Boolean>> work = List.of(
+                    () -> { barrier.await(); return gameLifecycle.processScheduledGame(winner); },
+                    () -> { barrier.await(); return gameLifecycle.processScheduledGame(winner); });
+            executor.invokeAll(work).forEach(future -> {
+                try { assertThat(future.get()).isTrue(); } catch (Exception exception) { throw new RuntimeException(exception); }
+            });
+            assertThat(redis.opsForHash().get("game:" + winner, "stateVersion")).isEqualTo("1");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM game_finalization WHERE game_id = ?",
+                    Integer.class, winner)).isEqualTo(1);
+            verify(broker, times(1)).convertAndSend(
+                    org.mockito.ArgumentMatchers.eq("/topic/game/" + winner), org.mockito.ArgumentMatchers.any(Map.class));
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
@@ -804,6 +1135,67 @@ class IntegrationInfrastructureIT {
         assertThat(redis.opsForHash().get("game:710", "marker")).isNull();
         assertThat(redis.opsForHash().get("game:710", "stateVersion")).isEqualTo("0");
         assertThat(redis.hasKey("game:710:commands")).isFalse();
+    }
+
+    private int insertPlayer(String prefix) {
+        jdbc.update("INSERT INTO player (p_name) VALUES (?)", prefix + UUID.randomUUID());
+        return jdbc.queryForObject("SELECT LAST_INSERT_ID()", Integer.class);
+    }
+
+    private void dropStatsInvariant() {
+        if (!statsIndexExists("idx_stats_player_legacy")) {
+            // Historical MariaDB kept a non-unique player index to support the FK.
+            // The canonical unique index cannot be dropped until that support exists.
+            jdbc.execute("CREATE INDEX idx_stats_player_legacy ON stats (player)");
+        }
+        if (statsIndexExists("uq_stats_player")) {
+            jdbc.execute("ALTER TABLE stats DROP INDEX uq_stats_player");
+        }
+        String type = jdbc.queryForObject("""
+                SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stats' AND COLUMN_NAME = 'player'
+                """, String.class);
+        jdbc.execute("ALTER TABLE stats MODIFY COLUMN player " + type + " NULL");
+    }
+
+    private void restoreStatsInvariant() {
+        databaseCompatibility.ensureCompatibility();
+        if (statsIndexExists("idx_stats_player_legacy")) {
+            jdbc.execute("ALTER TABLE stats DROP INDEX idx_stats_player_legacy");
+        }
+        assertStatsInvariant();
+    }
+
+    private boolean statsIndexExists(String indexName) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stats' AND INDEX_NAME = ?
+                """, Integer.class, indexName) > 0;
+    }
+
+    private void assertStatsInvariant() {
+        assertThat(jdbc.queryForObject("""
+                SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stats' AND COLUMN_NAME = 'player'
+                """, String.class)).isEqualTo("NO");
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stats'
+                  AND INDEX_NAME = 'uq_stats_player' AND NON_UNIQUE = 0
+                """, Integer.class)).isEqualTo(1);
+    }
+
+    private TerminalGameResult terminal(String identity, int gameId, int winner, int loser) {
+        String finalizationId = UUID.nameUUIDFromBytes(identity.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+        return new TerminalGameResult(finalizationId, gameId, 1_000L, 11_000L, 10, winner,
+                List.of(new TerminalGameResult.TerminalPlayerResult(winner, 1500, true),
+                        new TerminalGameResult.TerminalPlayerResult(loser, 1200, false)));
+    }
+
+    private Object capture(Callable<?> work) {
+        try { return work.call(); }
+        catch (RuntimeException exception) { return exception; }
+        catch (Exception exception) { return new RuntimeException(exception); }
     }
 
     private Object attempt(int gameId, CommandMetadata metadata, String fingerprint, String marker) {

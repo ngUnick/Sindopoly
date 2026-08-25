@@ -34,11 +34,7 @@ public class StatsService {
                 .orElseThrow(() -> new IllegalArgumentException("Player not found"));
 
         Stats stats = statsRepository.findByPlayer(player)
-                .orElseGet(() -> {               // if row is missing, fabricate zeros
-                Stats s = new Stats();
-                s.setPlayer(player);
-                return s;
-            });
+                .orElseThrow(() -> new IllegalStateException("Player Stats row is missing"));
 
         double winRate = stats.getTotalGames() == 0
                     ? 0.0

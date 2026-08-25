@@ -11,7 +11,8 @@ public class Stats {
     private int id;
 
     @OneToOne
-    @JoinColumn(name = "player", referencedColumnName = "id", nullable = false, unique = true)
+    // Explicit pre-Hibernate compatibility owns NOT NULL/UNIQUE enforcement.
+    @JoinColumn(name = "player", referencedColumnName = "id")
     private Player player;
 
     @Column(name = "total_wins")

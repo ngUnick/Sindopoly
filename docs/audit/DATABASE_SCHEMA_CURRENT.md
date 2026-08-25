@@ -14,17 +14,18 @@ Runtime JPA schema setting: `spring.jpa.hibernate.ddl-auto=update` in `Sindopoly
 | `card` | `Card` | `id`, `title`, `description`, `type`, `amount` | `MariaDB/init.sql`; `Card.java` |
 | `square` | `Square` | `id`, `s_type`, `price`, `rent` | `MariaDB/init.sql`; `Square.java` |
 | `stats` | `Stats` | `id`, `player`, counters | `MariaDB/init.sql`; `Stats.java` |
+| `game_finalization` | JDBC boundary | deterministic finalization/game identity and completion fields | `MariaDB/init.sql`; `GameFinalizationService.java` |
 
 ## Relationships and repositories
 
-- `Stats` has `@OneToOne` to `Player` with `@JoinColumn(name = "player", unique = true)`.
+- `Stats` maps one player; explicit pre-Hibernate compatibility owns SQL enforcement.
 - `StatsRepository#findByPlayer(Player player)` supports stats lookup.
 - `SquareRepository#findIdsByColour(SquareType type)` queries square IDs by type.
 
 ## Seed data
 
 - `player`: Bob and Alice.
-- `stats`: explicit rows for player 1 and 2, while a trigger also inserts a stats row after every player insert.
+- `stats`: the player trigger creates one row; seed history updates those rows.
 - `square`: 40 board squares.
 - `card`: Chance and Community Chest cards.
 
@@ -38,7 +39,10 @@ update identified by type, title, exact seed description, and old value `20`;
 it changes that row to `-20` and is a no-op for fresh or already-corrected data.
 No schema migration framework or schema change is introduced.
 
-Risk: `trg_player_after_insert` inserts stats rows, then `init.sql` also inserts stats rows for players 1 and 2. Because `stats.player` in raw SQL has no unique constraint, seed may produce duplicate stats rows even though JPA maps the relationship as unique.
+The former duplicate root cause was trigger creation followed by explicit seed
+INSERTs. Fresh SQL now uses UPDATE and enforces `stats.player INT NOT NULL` plus
+`UNIQUE KEY uq_stats_player (player)`. The trigger is the sole live creation
+owner; services fail if its row is unexpectedly missing.
 
 ## Indexes and constraints
 
@@ -46,10 +50,11 @@ Confirmed:
 
 - Primary keys on all tables.
 - Foreign key from `stats.player` to `player.id`.
+- `stats.player` is `NOT NULL` and uniquely indexed as `uq_stats_player`.
+- `game_finalization` has a primary finalization ID and unique game-instance identity.
 
 Missing/questionable:
 
-- No SQL-level unique constraint on `stats.player` in `init.sql`, despite JPA `unique=true`.
 - No unique constraint on `player.p_name`.
 - No indexes visible for leaderboard ordering fields.
 - No migration tool (Flyway/Liquibase) found.
@@ -71,4 +76,8 @@ Duplication:
 
 ## Transaction boundaries
 
-No explicit `@Transactional` annotations were found in current main source during audit search. JPA repository operations use default repository transactions, but cross-resource Redis + MariaDB updates are not transactional as a unit.
+`GameFinalizationService` uses one MariaDB transaction for the marker and all
+bounded Stats updates. Duplicate markers change no Stats, and failures roll back
+the marker and every update. Redis commits first and is not atomic with MariaDB;
+retained terminal JSON supports retry. Existing-volume compatibility runs before
+Hibernate schema update and fails closed on unsafe durable data.

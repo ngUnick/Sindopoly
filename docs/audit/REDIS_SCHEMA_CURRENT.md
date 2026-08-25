@@ -21,13 +21,18 @@ retain pre-revamp audit provenance where explicitly labeled as risks.
 - Updated by: `GameStateService#startGame`, `setGameField`, `updateGameFields`, `endGame`; `TurnService` via `GameStateService`.
 - Read by: controllers, `TurnService`, `GameLoopScheduler`, frontend through REST.
 - Deleted by: `GameStateService#deleteGame`, `deleteGameAndPlayers`.
-- TTL: 24h at lobby creation; 30s after `endGame`; startGame leaves earlier TTL in place.
-- Fields observed: `status`, `creationTime`, `visibility`, `inviteCode`, `playerTurn`, `turnOrder`, `timer`, `startTime`, `maxTime`, `maxMoney`, `winner`, `lastDice`, `optionalAction`, `optionalDeadline`, `stateVersion`.
+- TTL: 24h at lobby creation; configurable 300s default after authoritative completion; start leaves the earlier lobby TTL in place.
+- Fields observed: `status`, `creationTime`, `visibility`, `inviteCode`, `playerTurn`, `turnOrder`, `timer`, `startTime`, `maxTime`, `maxMoney`, `winner`, `lastDice`, `optionalAction`, `optionalDeadline`, `stateVersion`, `turnDeadlineEpochMs`, `terminalResult`.
 - Purpose: authoritative active game metadata.
 - `optionalAction` is server-created typed JSON bound to the active player and
   committed `stateVersion`; a concurrent surviving-player membership change
   rebinds it in the same CAS while invalidating intent from the older snapshot.
 - Risks: no owner field despite owner being inferred from game ID; deprecated raw helpers still contain legacy optional-action formats but are not live transport paths.
+
+`turnDeadlineEpochMs` is the server-owned deadline for the current actionable
+phase. `terminalResult` is bounded JSON containing all durable finalization
+inputs. Completion removes the deadline and retains terminal state for the
+terminal TTL; polling and retries do not refresh it.
 
 `stateVersion` is a base-10 integer. `turnOrder` is a JSON array of one to four
 unique positive decimal player IDs, for example `[41,7,103]`; it is created as
@@ -47,7 +52,7 @@ private authoritative state, and is removed from public-lobby projections.
 - Updated by: `addPlayerToGame`, `addPlayerToGameWithInviteCode`, `removePlayerFromGame`.
 - Read by: lobby/game details, membership authorization, and ownership scanning; never used as an ordering source.
 - Deleted by: `deleteGame`, `deleteGameAndPlayers`.
-- TTL: 24h at lobby creation; 30s after `endGame`.
+- TTL: 24h at lobby creation; configurable 300s default after completion.
 - Purpose: active game membership.
 - Ordering: Redis SET iteration and numeric player IDs have no turn-order semantics; `game:{gameId}.turnOrder` is authoritative.
 
@@ -58,8 +63,8 @@ private authoritative state, and is removed from public-lobby projections.
 - Created by: `PlayerStateService#initializePlayer` at game start.
 - Updated by: `PlayerStateService#savePlayerState`, `grantMoney`, `payToExitJail`; `TurnService`; `SquareActionService`.
 - Read by: game details, turn flow, end conditions, winner calculation.
-- Deleted by: `PlayerStateService#deletePlayer`, `deleteGameAndPlayers`; expired after game end.
-- TTL: 2h at initialization; 30s after `endGame`.
+- Deleted by: explicit player lifecycle only; game completion/abandonment does not own this shared key.
+- TTL: 2h at initialization; never shortened by old-game terminal cleanup.
 - Fields observed: `position`, `money`, `jail`, `jailTime`, `bankrupt`, `properties`, `afk`.
 - Purpose: authoritative active player state.
 - Risks: the former arbitrary client-write routes were removed by REVAMP-017,
@@ -73,7 +78,7 @@ private authoritative state, and is removed from public-lobby projections.
 - Example: `game:1:deck`.
 - Created by: `CardService#initialiseDeck`.
 - Updated/read by: the authoritative `TurnCommandService`; deprecated `CardService` remains an unwired compatibility helper.
-- TTL: aligned with the game by the transition store; completion shortens it to 30 seconds.
+- TTL: aligned with the game by the transition store; completion uses the configurable terminal TTL (300s default).
 - Stored value: card IDs as strings.
 - Purpose: isolated per-game cycling card order. A draw removes the head and appends that card to the tail in the same atomic transition as its effect.
 - Static effect contract: MariaDB money-card amount is signed (positive credit,
@@ -97,7 +102,13 @@ cards then cycle rather than disappear.
   closed with `COMMAND_CAPACITY` when full, preserving replay/collision evidence
   for the key's lifetime. Capacity checking is O(1) `HLEN`.
 - Purpose: exact semantic-result replay and command-ID collision detection.
-- Value JSON fields: `fingerprint`, `stateVersion`, `result`.
+- Value JSON fields for newly accepted commands: `fingerprint`, `stateVersion`,
+  `resultJson`. `resultJson` holds the exact serialized semantic-result JSON so
+  Lua validation does not change empty arrays into objects. Readers retain
+  compatibility with legacy records that used the decoded `result` field.
+
+Completed-game command records use the terminal TTL (300s default), preserving
+completion/timeout replay evidence for the terminal window.
 
 ### `stats:leaderboard`
 

@@ -15,16 +15,19 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /** Authoritative calculation and atomic commit path for player turn commands. */
 @Service
@@ -41,16 +44,25 @@ public class TurnCommandService {
     private final CardRepository cards;
     private final ObjectMapper mapper;
     private final SimpMessagingTemplate broker;
+    private final GameTimingService timing;
     private final SecureRandom shuffle = new SecureRandom();
 
     public TurnCommandService(RedisGameTransitionStore store, DiceService dice, SquareRepository squares,
                               CardRepository cards, ObjectMapper mapper, SimpMessagingTemplate broker) {
+        this(store, dice, squares, cards, mapper, broker, defaultTiming());
+    }
+
+    @Autowired
+    public TurnCommandService(RedisGameTransitionStore store, DiceService dice, SquareRepository squares,
+                              CardRepository cards, ObjectMapper mapper, SimpMessagingTemplate broker,
+                              GameTimingService timing) {
         this.store = store;
         this.dice = dice;
         this.squares = squares;
         this.cards = cards;
         this.mapper = mapper;
         this.broker = broker;
+        this.timing = timing;
     }
 
     public ThrowResultDto throwDice(int gameId, int actorId, CommandMetadata metadata) {
@@ -82,7 +94,8 @@ public class TurnCommandService {
         if (resolution.optionalAction() == null) {
             completeTurn(snapshot, plan, order, actorId, actor);
         } else {
-            plan.putGame("optionalAction", json(resolution.optionalAction()));
+            plan.putGame("optionalAction", json(resolution.optionalAction()))
+                    .putGame("turnDeadlineEpochMs", String.valueOf(timing.newTurnDeadlineEpochMs()));
         }
         if (resolution.deck() != null) plan.replaceDeck(resolution.deck());
         plan.putPlayer(actorId, actor);
@@ -141,7 +154,9 @@ public class TurnCommandService {
                 actor.put("jailTime", "0");
                 // Paying exits before rolling, so the same player remains active.
                 next = actorId;
-                plan.putGame("playerTurn", String.valueOf(actorId)).deleteGameField("optionalAction");
+                plan.putGame("playerTurn", String.valueOf(actorId))
+                        .putGame("turnDeadlineEpochMs", String.valueOf(timing.newTurnDeadlineEpochMs()))
+                        .deleteGameField("optionalAction");
             }
             default -> throw new GameStateConflictException("Unsupported optional action");
         }
@@ -171,7 +186,9 @@ public class TurnCommandService {
         PendingOptionalAction option = PendingOptionalAction.jailPayment(
                 gameId, actorId, snapshot.stateVersion() + 1);
         GameTransitionPlan plan = GameTransitionPlan.transition()
-                .putGame("optionalAction", json(option)).putPlayer(actorId, actor);
+                .putGame("optionalAction", json(option))
+                .putGame("turnDeadlineEpochMs", String.valueOf(timing.newTurnDeadlineEpochMs()))
+                .putPlayer(actorId, actor);
         ThrowResultDto result = new ThrowResultDto(0, integer(actor, "position"), false, 10,
                 JAIL_EXIT_COST, snapshot.stateVersion() + 1, false);
         return commitThrow(gameId, metadata, fingerprint, plan, result);
@@ -179,6 +196,12 @@ public class TurnCommandService {
 
     private ActionResultDto resolvePass(int gameId, int actorId, CommandMetadata metadata, String fingerprint,
                                         GameSnapshot snapshot, List<Integer> order, PendingOptionalAction pending) {
+        return resolvePass(gameId, actorId, metadata, fingerprint, snapshot, order, pending, "turnFinished");
+    }
+
+    private ActionResultDto resolvePass(int gameId, int actorId, CommandMetadata metadata, String fingerprint,
+                                        GameSnapshot snapshot, List<Integer> order, PendingOptionalAction pending,
+                                        String event) {
         if (!pending.declinable()) throw new GameStateConflictException("Optional action cannot be declined");
         Map<String, String> actor = player(snapshot, actorId);
         GameTransitionPlan plan = GameTransitionPlan.transition().deleteGameField("optionalDeadline");
@@ -195,14 +218,15 @@ public class TurnCommandService {
         int next = completeTurn(snapshot, plan, order, actorId, actor);
         ActionResultDto result = new ActionResultDto(integer(actor, "money"), List.of(), next,
                 snapshot.stateVersion() + 1, false);
-        return commitAction(gameId, metadata, fingerprint, plan, result, "turnFinished");
+        return commitAction(gameId, metadata, fingerprint, plan, result, event);
     }
 
     /** Rotates once and materializes a jailed next player's choice in the same commit. */
     private int completeTurn(GameSnapshot snapshot, GameTransitionPlan plan, List<Integer> order,
                              int currentActor, Map<String, String> effectiveCurrentState) {
         int next = TurnOrder.next(order, currentActor);
-        plan.putGame("playerTurn", String.valueOf(next));
+        plan.putGame("playerTurn", String.valueOf(next))
+                .putGame("turnDeadlineEpochMs", String.valueOf(timing.newTurnDeadlineEpochMs()));
         Map<String, String> nextState = next == currentActor
                 ? effectiveCurrentState : snapshot.players().get(next);
         if (nextState == null) throw new GameStateConflictException("Next player state is missing");
@@ -218,6 +242,71 @@ public class TurnCommandService {
         plan.deleteGameField("optionalDeadline");
         return next;
     }
+
+    /** Captures all authoritative timeout identity fields before a CAS attempt. */
+    public Optional<TurnTimeoutCandidate> dueTimeout(int gameId) {
+        GameSnapshot snapshot = store.load(gameId);
+        if (!"inProgress".equalsIgnoreCase(snapshot.game().get("status"))) return Optional.empty();
+        String rawDeadline = snapshot.game().get("turnDeadlineEpochMs");
+        String rawPlayer = snapshot.game().get("playerTurn");
+        if (rawDeadline == null || rawPlayer == null) return Optional.empty();
+        try {
+            long deadline = Long.parseLong(rawDeadline);
+            if (timing.nowEpochMs() < deadline) return Optional.empty();
+            int playerId = Integer.parseInt(rawPlayer);
+            String phase = snapshot.game().containsKey("optionalAction")
+                    ? "AWAITING_OPTIONAL_ACTION" : "AWAITING_ROLL";
+            String identity = "TURN_TIMEOUT|" + gameId + "|" + snapshot.stateVersion() + "|"
+                    + playerId + "|" + phase + "|" + deadline;
+            String commandId = UUID.nameUUIDFromBytes(identity.getBytes(StandardCharsets.UTF_8)).toString();
+            return Optional.of(new TurnTimeoutCandidate(gameId, snapshot.stateVersion(), playerId,
+                    phase, deadline, commandId));
+        } catch (NumberFormatException exception) {
+            throw new GameStateConflictException("Turn deadline state is malformed");
+        }
+    }
+
+    public boolean timeoutIfDue(int gameId) {
+        return dueTimeout(gameId).map(this::executeTimeout).orElse(false);
+    }
+
+    /** Executes the frozen timeout intent; Redis version CAS arbitrates timer/player races. */
+    public boolean executeTimeout(TurnTimeoutCandidate candidate) {
+        CommandMetadata metadata = new CommandMetadata(candidate.commandId(), candidate.expectedVersion());
+        String parameters = candidate.playerId() + "|" + candidate.phase() + "|" + candidate.deadlineEpochMs();
+        String fingerprint = CommandFingerprint.create(candidate.gameId(), "SYSTEM", "TURN_TIMEOUT", metadata, parameters);
+        Optional<TransitionExecution> replay = store.replayIfPresent(candidate.gameId(), metadata, fingerprint);
+        if (replay.isPresent()) return false;
+        GameSnapshot snapshot = store.load(candidate.gameId());
+        if (!matches(candidate, snapshot) || timing.nowEpochMs() < candidate.deadlineEpochMs()) return false;
+        List<Integer> order = TurnOrder.parseRequired(mapper, snapshot);
+        if ("AWAITING_OPTIONAL_ACTION".equals(candidate.phase())) {
+            PendingOptionalAction pending = readPending(snapshot, candidate.playerId());
+            resolvePass(candidate.gameId(), candidate.playerId(), metadata, fingerprint, snapshot, order, pending,
+                    "turnTimedOut");
+            return true;
+        }
+        Map<String, String> actor = player(snapshot, candidate.playerId());
+        GameTransitionPlan plan = GameTransitionPlan.transition();
+        int next = completeTurn(snapshot, plan, order, candidate.playerId(), actor);
+        ActionResultDto result = new ActionResultDto(integer(actor, "money"), List.of(), next,
+                snapshot.stateVersion() + 1, false);
+        commitAction(candidate.gameId(), metadata, fingerprint, plan, result, "turnTimedOut");
+        return true;
+    }
+
+    private boolean matches(TurnTimeoutCandidate candidate, GameSnapshot snapshot) {
+        String phase = snapshot.game().containsKey("optionalAction")
+                ? "AWAITING_OPTIONAL_ACTION" : "AWAITING_ROLL";
+        return "inProgress".equalsIgnoreCase(snapshot.game().get("status"))
+                && snapshot.stateVersion() == candidate.expectedVersion()
+                && String.valueOf(candidate.playerId()).equals(snapshot.game().get("playerTurn"))
+                && candidate.phase().equals(phase)
+                && String.valueOf(candidate.deadlineEpochMs()).equals(snapshot.game().get("turnDeadlineEpochMs"));
+    }
+
+    public record TurnTimeoutCandidate(int gameId, long expectedVersion, int playerId, String phase,
+                                       long deadlineEpochMs, String commandId) { }
 
     private RollResolution resolveSquare(GameSnapshot snapshot, int actorId, Map<String, String> actor,
                                          int position, int rolled, GameTransitionPlan plan) {
@@ -448,6 +537,10 @@ public class TurnCommandService {
 
     private void publish(int gameId, String event, long version) {
         broker.convertAndSend("/topic/game/" + gameId, Map.of("event", event, "stateVersion", version));
+    }
+
+    private static GameTimingService defaultTiming() {
+        return new GameTimingService(java.time.Clock.systemUTC(), new GameLifecycleProperties());
     }
 
     private record PreparedCard(Card card, List<String> deck) { }
