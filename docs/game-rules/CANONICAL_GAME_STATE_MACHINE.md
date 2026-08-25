@@ -1,5 +1,9 @@
 # Canonical game state machine
 
+Realtime reconnect and snapshot recovery do not create a lifecycle or turn phase.
+They reconstruct the latest committed lifecycle/phase projection described here;
+see `docs/architecture/REALTIME_SYNCHRONIZATION.md`.
+
 ## Status and interpretation
 
 This document defines the approved target command/state vocabulary. It does not
@@ -148,7 +152,8 @@ Implemented migration state and remaining legacy representations:
   candidates;
 - `/action` path/body identity agreement is enforced and server session identity
   remains authoritative;
-- selected events `actionCompleted`, `turnFinished`, `gameOver`, `gameEnded`;
+- active notifications use `LOBBY_UPDATED`, `GAME_STARTED`, `TURN_UPDATED`, and
+  `GAME_COMPLETED`; legacy event names remain only in an unwired deprecated fixture;
 - notifications remain non-durable and snapshot recovery remains required.
 
 ## Redis and durable-data mapping
@@ -243,9 +248,9 @@ frozen order/leave preservation. REVAMP-020 completes the elapsed-time trigger,
 total assets, both tie-breaks, cleanup, and timer interaction. Integration tests
 cover lifecycle/phase snapshots, adapter error
 categories, Redis isolation, and durable metadata boundaries without treating
-the listed defects as target contracts. REVAMP-021/022 cover subscription
+the listed defects as target contracts. REVAMP-021 covers subscription
 authorization, post-commit versioned events, duplicates/gaps, and snapshot
-recovery.
+recovery; REVAMP-022 owns broker-backed STOMP and critical end-to-end coverage.
 
 ## Security and performance invariants
 

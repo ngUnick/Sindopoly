@@ -14,7 +14,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import com.example.Sindopoly_Java.realtime.GameEventPublisher;
+import com.example.Sindopoly_Java.realtime.GameEventReason;
+import com.example.Sindopoly_Java.realtime.GameEventType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -43,25 +45,20 @@ public class TurnCommandService {
     private final SquareRepository squares;
     private final CardRepository cards;
     private final ObjectMapper mapper;
-    private final SimpMessagingTemplate broker;
+    private final GameEventPublisher events;
     private final GameTimingService timing;
     private final SecureRandom shuffle = new SecureRandom();
 
-    public TurnCommandService(RedisGameTransitionStore store, DiceService dice, SquareRepository squares,
-                              CardRepository cards, ObjectMapper mapper, SimpMessagingTemplate broker) {
-        this(store, dice, squares, cards, mapper, broker, defaultTiming());
-    }
-
     @Autowired
     public TurnCommandService(RedisGameTransitionStore store, DiceService dice, SquareRepository squares,
-                              CardRepository cards, ObjectMapper mapper, SimpMessagingTemplate broker,
+                              CardRepository cards, ObjectMapper mapper, GameEventPublisher events,
                               GameTimingService timing) {
         this.store = store;
         this.dice = dice;
         this.squares = squares;
         this.cards = cards;
         this.mapper = mapper;
-        this.broker = broker;
+        this.events = events;
         this.timing = timing;
     }
 
@@ -429,14 +426,17 @@ public class TurnCommandService {
     private ThrowResultDto commitThrow(int gameId, CommandMetadata metadata, String fingerprint,
                                        GameTransitionPlan plan, ThrowResultDto result) {
         TransitionExecution execution = store.commit(gameId, metadata, fingerprint, plan, mapper.valueToTree(result));
-        if (execution.shouldPublish()) publish(gameId, "rollCompleted", execution.stateVersion());
+        if (execution.shouldPublish()) events.publish(gameId, execution.stateVersion(),
+                GameEventType.TURN_UPDATED, GameEventReason.ROLL_COMPLETED);
         return throwResult(execution, execution.replayed());
     }
 
     private ActionResultDto commitAction(int gameId, CommandMetadata metadata, String fingerprint,
                                          GameTransitionPlan plan, ActionResultDto result, String event) {
         TransitionExecution execution = store.commit(gameId, metadata, fingerprint, plan, mapper.valueToTree(result));
-        if (execution.shouldPublish()) publish(gameId, event, execution.stateVersion());
+        if (execution.shouldPublish()) events.publish(gameId, execution.stateVersion(),
+                GameEventType.TURN_UPDATED,
+                "turnTimedOut".equals(event) ? GameEventReason.TURN_TIMED_OUT : GameEventReason.ACTION_RESOLVED);
         return actionResult(execution, execution.replayed());
     }
 
@@ -533,14 +533,6 @@ public class TurnCommandService {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Could not serialize command state", exception);
         }
-    }
-
-    private void publish(int gameId, String event, long version) {
-        broker.convertAndSend("/topic/game/" + gameId, Map.of("event", event, "stateVersion", version));
-    }
-
-    private static GameTimingService defaultTiming() {
-        return new GameTimingService(java.time.Clock.systemUTC(), new GameLifecycleProperties());
     }
 
     private record PreparedCard(Card card, List<String> deck) { }

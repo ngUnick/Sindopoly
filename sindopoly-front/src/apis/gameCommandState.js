@@ -1,4 +1,5 @@
 const versions = new Map();
+const snapshotVersions = new Map();
 const refreshRequired = new Set();
 
 export function observeGameVersion(gameId, value) {
@@ -24,8 +25,24 @@ export function observeGameSnapshot(gameId, value) {
   observeGameVersion(gameId, value);
   const parsed = Number(value?.stateVersion ?? value);
   if (Number.isSafeInteger(parsed) && parsed >= 0 && gameId != null) {
+    const key = String(gameId);
+    snapshotVersions.set(key, Math.max(snapshotVersions.get(key) ?? 0, parsed));
     refreshRequired.delete(String(gameId));
   }
+}
+
+export function currentGameVersion(gameId) {
+  return snapshotVersions.get(String(gameId));
+}
+
+/** Apply snapshots monotonically so a late HTTP response cannot roll the UI back. */
+export function acceptGameSnapshot(gameId, value) {
+  const parsed = Number(value?.stateVersion);
+  const current = currentGameVersion(gameId);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 ||
+      (Number.isSafeInteger(current) && parsed < current)) return false;
+  observeGameSnapshot(gameId, value);
+  return true;
 }
 
 export function commandHeaders(gameId, expectedVersion = expectedGameVersion(gameId)) {
@@ -56,5 +73,6 @@ export async function readCommandResponse(response, gameId) {
 
 export function clearGameVersion(gameId) {
   versions.delete(String(gameId));
+  snapshotVersions.delete(String(gameId));
   refreshRequired.delete(String(gameId));
 }

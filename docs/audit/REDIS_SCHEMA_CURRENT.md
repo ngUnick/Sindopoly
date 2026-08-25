@@ -1,5 +1,9 @@
 # Redis schema current
 
+REVAMP-021 adds no Redis key, serializer, TTL, Pub/Sub channel, Stream, or event
+history. Realtime notifications are process-local and ephemeral; recovery reads
+the existing authoritative keys through a version-bracketed snapshot.
+
 Serializer: `RedisConfig` sets `StringRedisSerializer` for keys, values, hash keys, and hash values.
 
 REVAMP-018/019 update: normal game commands now write through the centralized Lua

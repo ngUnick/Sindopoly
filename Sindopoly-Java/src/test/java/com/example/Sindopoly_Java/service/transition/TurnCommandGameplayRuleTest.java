@@ -8,6 +8,7 @@ import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.repository.CardRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.service.core.DiceService;
+import com.example.Sindopoly_Java.realtime.GameEventPublisher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,7 +19,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
@@ -44,14 +44,15 @@ class TurnCommandGameplayRuleTest {
     @Mock DiceService dice;
     @Mock SquareRepository squares;
     @Mock CardRepository cards;
-    @Mock SimpMessagingTemplate broker;
+    @Mock GameEventPublisher events;
 
     private final ObjectMapper mapper = new ObjectMapper();
     private TurnCommandService service;
 
     @BeforeEach
     void setUp() {
-        service = new TurnCommandService(store, dice, squares, cards, mapper, broker);
+        service = new TurnCommandService(store, dice, squares, cards, mapper, events,
+                new GameTimingService(java.time.Clock.systemUTC(), new GameLifecycleProperties()));
         when(store.replayIfPresent(anyInt(), any(), anyString())).thenReturn(Optional.empty());
         when(store.commit(anyInt(), any(), anyString(), any(), any(JsonNode.class))).thenAnswer(invocation -> {
             CommandMetadata metadata = invocation.getArgument(1);
@@ -135,10 +136,10 @@ class TurnCommandGameplayRuleTest {
     @Test
     void startRewardCoversPassAndExactLandingButNotOrdinaryMove() {
         assertMoveMoney(35, 4, 39, 1500, false);
-        org.mockito.Mockito.reset(store, dice, squares, cards, broker);
+        org.mockito.Mockito.reset(store, dice, squares, cards, events);
         setUp();
         assertMoveMoney(39, 2, 1, 1700, true);
-        org.mockito.Mockito.reset(store, dice, squares, cards, broker);
+        org.mockito.Mockito.reset(store, dice, squares, cards, events);
         setUp();
         assertMoveMoney(38, 2, 0, 1700, true);
     }
@@ -198,7 +199,7 @@ class TurnCommandGameplayRuleTest {
         Map<String, String> jailed = committedPlan().playerPuts().get(41);
         assertThat(jailed).containsEntry("position", "10").containsEntry("jail", "true").containsEntry("jailTime", "3");
 
-        org.mockito.Mockito.reset(store, dice, squares, cards, broker);
+        org.mockito.Mockito.reset(store, dice, squares, cards, events);
         setUp();
         when(store.load(41)).thenReturn(snapshot(0, player(8, 1500, "[]"), player(0, 1500, "[]"), List.of()));
         when(dice.roll()).thenReturn(2);
@@ -218,7 +219,7 @@ class TurnCommandGameplayRuleTest {
         assertThat(offered.squareType()).isEqualTo(10);
         verify(dice, never()).roll();
 
-        org.mockito.Mockito.reset(store, dice, squares, cards, broker);
+        org.mockito.Mockito.reset(store, dice, squares, cards, events);
         setUp();
         when(store.load(41)).thenReturn(snapshot(1, Map.of("optionalAction", option), jailed,
                 player(0, 1500, "[]"), List.of()));
@@ -288,7 +289,7 @@ class TurnCommandGameplayRuleTest {
                 .isInstanceOf(GameStateConflictException.class);
         verify(store, never()).commit(anyInt(), any(), anyString(), any(), any(JsonNode.class));
 
-        org.mockito.Mockito.reset(store, dice, squares, cards, broker);
+        org.mockito.Mockito.reset(store, dice, squares, cards, events);
         setUp();
         String current = mapper.writeValueAsString(PendingOptionalAction.jailPayment(41, 41, 2));
         when(store.load(41)).thenReturn(snapshot(2, Map.of("optionalAction", current), poorJailed,

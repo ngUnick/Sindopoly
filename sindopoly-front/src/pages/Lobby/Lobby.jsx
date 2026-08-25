@@ -1,9 +1,10 @@
 import { Button, message } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { apiFetch } from '../../apis/apiClient';
 import { useEffect, useState, useMemo } from 'react';
 import { GameAPI } from '../../apis/GameAPI';
+import { acceptGameSnapshot } from '../../apis/gameCommandState';
 import bgImg from "../../assets/images/monopoly_bg.png";
+import { useGameRealtime } from '../../hooks/useGameRealtime';
 
 const Lobby = () => {
   const navigate = useNavigate();
@@ -30,30 +31,28 @@ const Lobby = () => {
   };
 
 
+  const applyLobbySnapshot = (snapshot) => {
+      if (snapshot.status === "inProgress") {
+        navigate(`/Game?game=${gameId}&player=${playerId}`, { replace: true });
+        return;
+      }
+      setPlayers((snapshot.players ?? []).map(player => ({
+        id: player.playerId,
+        nickname: player.nickname,
+      })));
+      if (visibility === 'private') setInviteCode(snapshot.inviteCode ?? null);
+  };
+
   const fetchPlayers = async () => {
     try {
-      const resPlayers = await apiFetch(`http://localhost:8080/api/game-state/players-detailed-lobby/${gameId}`);
-      if (!resPlayers.ok) throw new Error("Failed to fetch");
-
-      const players = await resPlayers.json();
-      const game = await GameAPI.getGameInfo(gameId);
-
-       // 🚀 if someone (the owner) already started → go to board
-      if (game.status === "inProgress") {
-        navigate(`/Game?game=${gameId}&player=${playerId}`, { replace: true });
-        return;  // skip the rest
-      }
-
-      setPlayers(players);
-
-      // ✅ Store invite code if private
-      if (visibility === 'private' && game.inviteCode) {
-        setInviteCode(game.inviteCode);
-      }
+      const snapshot = await GameAPI.getRealtimeSnapshot(gameId);
+      if (acceptGameSnapshot(gameId, snapshot)) applyLobbySnapshot(snapshot);
     } catch (err) {
       console.error(err);
     }
   };
+
+  useGameRealtime(gameId, applyLobbySnapshot);
 
   const handleLeaveGame = async () => {
     try {
@@ -76,9 +75,17 @@ const Lobby = () => {
   };
 
   useEffect(() => {
-    const interval = setInterval(fetchPlayers, 1000);
+    // STOMP drives normal updates; this slower poll repairs missed delivery/socket failure.
+    let polling = false;
+    const poll = async () => {
+      if (polling) return;
+      polling = true;
+      try { await fetchPlayers(); } finally { polling = false; }
+    };
+    void poll();
+    const interval = setInterval(poll, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [gameId]);
 
   return (
     <div className="flex-grow flex justify-center items-center bg-cover bg-no-repeat" style={{ backgroundImage: `url(${bgImg})` }}>

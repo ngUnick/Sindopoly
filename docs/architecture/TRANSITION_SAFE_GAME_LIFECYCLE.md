@@ -34,7 +34,7 @@ owns cleanup; polls, replay, and finalization retry never refresh it. Shared
 `player:{playerId}` hashes are neither deleted nor terminal-shortened because
 the current schema cannot prove old-game ownership.
 
-Only an applied completion publishes `gameEnded`. Redis completion remains
+Only an applied completion publishes a typed `GAME_COMPLETED` notification. Redis completion remains
 authoritative if MariaDB is unavailable; retained terminal JSON permits later
 Stats retries without another transition or event. Expiry before a successful
 retry can lose Stats, an explicit bounded non-atomic limitation.
@@ -65,9 +65,11 @@ the whole operation is not claimed to be rollbackable.
 
 ## Contract effects
 
-- Existing REST snapshots expose retained terminal state; no endpoint is added.
-- `turnTimedOut` and `gameEnded` use existing post-commit events. Snapshot
-  recovery remains authoritative; durable realtime recovery is REVAMP-021.
+- Retained terminal state remains readable; REVAMP-021 adds the bounded member-only
+  `/api/game-state/{gameId}/snapshot` recovery projection.
+- Timer transitions and completion use bounded post-commit notifications.
+  Snapshot recovery remains authoritative; delivery is non-durable and the
+  simple broker remains process-local.
 - No Pub/Sub or new Redis key is introduced. The only new game HASH fields are
   `turnDeadlineEpochMs` and `terminalResult`.
 - No frontend contract change is required.

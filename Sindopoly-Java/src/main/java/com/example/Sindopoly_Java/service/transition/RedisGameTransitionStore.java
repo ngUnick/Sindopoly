@@ -23,6 +23,8 @@ import java.util.Optional;
 @Repository
 public class RedisGameTransitionStore {
 
+    private static final int STABLE_READ_ATTEMPTS = 3;
+
     private static final int MAX_COMMAND_RECORDS = 4096;
     private static final long MAX_EXPECTED_STATE_VERSION = 9_007_199_254_740_990L;
     private static final DefaultRedisScript<List> COMMIT_SCRIPT = new DefaultRedisScript<>("""
@@ -258,6 +260,26 @@ public class RedisGameTransitionStore {
         List<String> deck = redis.opsForList().range(RedisGameKeys.deck(gameId), 0, -1);
         return new GameSnapshot(gameId, Map.copyOf(game), members == null ? Set.of() : Set.copyOf(members),
                 Map.copyOf(players), deck == null ? List.of() : List.copyOf(deck));
+    }
+
+    /**
+     * Brackets the multi-key read with the authoritative version. Since every
+     * transition is one Redis script, equal boundary versions prove a coherent snapshot.
+     */
+    public GameSnapshot loadStable(int gameId) {
+        for (int attempt = 0; attempt < STABLE_READ_ATTEMPTS; attempt++) {
+            String before = storedVersion(gameId);
+            GameSnapshot snapshot = load(gameId);
+            String after = storedVersion(gameId);
+            if (java.util.Objects.equals(before, after)) return snapshot;
+        }
+        throw new GameTransitionConflictException("SNAPSHOT_BUSY",
+                "Game changed while the recovery snapshot was being read", -1L);
+    }
+
+    private String storedVersion(int gameId) {
+        Object value = redis.opsForHash().get(RedisGameKeys.game(gameId), "stateVersion");
+        return value == null ? null : value.toString();
     }
 
     /** Fast replay check used before nondeterministic command calculation such as dice. */

@@ -8,6 +8,11 @@ IDs are consistency checks at the migrated boundaries described in
 commands use the membership/host/active-player/phase matrix in
 `docs/security/GAME_COMMAND_AUTHORIZATION.md`.
 
+Realtime synchronization is defined in
+`docs/architecture/REALTIME_SYNCHRONIZATION.md`: authenticated members subscribe
+to `/topic/game/{gameId}`, while `GET /api/game-state/{gameId}/snapshot` is the
+authoritative reconnect and version-gap recovery contract.
+
 Error handling: authentication is `401`; authorization is generic `403`;
 missing active games are `404`; lifecycle/turn-phase conflicts are `409`;
 unsupported methods are `405`; malformed and legacy adapter validation failures remain `400`; unhandled

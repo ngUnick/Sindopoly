@@ -10,6 +10,9 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import com.example.Sindopoly_Java.realtime.GameEventPublisher;
+import com.example.Sindopoly_Java.realtime.GameEventReason;
+import com.example.Sindopoly_Java.realtime.GameEventType;
 
 import java.security.SecureRandom;
 import java.util.LinkedHashMap;
@@ -33,18 +36,20 @@ public class GameCommandService {
     private final GameStateService legacyReads;
     private final ObjectMapper mapper;
     private final GameTimingService timing;
+    private final GameEventPublisher events;
     private final SecureRandom random = new SecureRandom();
 
     @Autowired
     public GameCommandService(RedisGameTransitionStore store, RedisTemplate<String, String> redis,
                               ValidationUtils validation, GameStateService legacyReads, ObjectMapper mapper,
-                              GameTimingService timing) {
+                              GameTimingService timing, GameEventPublisher events) {
         this.store = store;
         this.redis = redis;
         this.validation = validation;
         this.legacyReads = legacyReads;
         this.mapper = mapper;
         this.timing = timing;
+        this.events = events;
     }
 
     public TransitionExecution create(int ownerId, String visibility, CommandMetadata metadata) {
@@ -73,7 +78,8 @@ public class GameCommandService {
         if ("private".equals(normalizedVisibility)) game.put("inviteCode", inviteCode());
         JsonNode result = mapper.valueToTree(withVersionAndReplay(game, ownerId, 0, false));
         return commit(ownerId, metadata, fingerprint,
-                GameTransitionPlan.bootstrap().putGame(game).addMember(ownerId).lifecycleTtl(LOBBY_TTL_SECONDS), result);
+                GameTransitionPlan.bootstrap().putGame(game).addMember(ownerId).lifecycleTtl(LOBBY_TTL_SECONDS), result,
+                GameEventType.LOBBY_UPDATED, GameEventReason.GAME_CREATED);
     }
 
     public TransitionExecution joinPublic(int gameId, int actorId, CommandMetadata metadata) {
@@ -90,7 +96,8 @@ public class GameCommandService {
             return commit(gameId, metadata, fingerprint,
                     GameTransitionPlan.transition().noOp(),
                     mapper.valueToTree(Map.of("gameId", gameId, "status", "reconnected", "replayed", false,
-                            "stateVersion", snapshot.stateVersion())));
+                            "stateVersion", snapshot.stateVersion())),
+                    GameEventType.LOBBY_UPDATED, GameEventReason.PLAYER_JOINED);
         }
         requireLobby(snapshot);
         if (!"public".equalsIgnoreCase(snapshot.game().get("visibility"))) {
@@ -103,7 +110,8 @@ public class GameCommandService {
                 GameTransitionPlan.transition().addMember(actorId)
                         .putGame(TurnOrder.FIELD, TurnOrder.encode(mapper, order)),
                 mapper.valueToTree(Map.of("gameId", gameId, "status", "joined", "replayed", false,
-                        "stateVersion", snapshot.stateVersion() + 1)));
+                        "stateVersion", snapshot.stateVersion() + 1)),
+                GameEventType.LOBBY_UPDATED, GameEventReason.PLAYER_JOINED);
     }
 
     public TransitionExecution joinInvite(String inviteCode, int actorId, CommandMetadata metadata) {
@@ -138,7 +146,8 @@ public class GameCommandService {
         long resultVersion = snapshot.stateVersion() + (plan.stateChanging() ? 1 : 0);
         return commit(invite.gameId(), metadata, fingerprint, plan,
                 mapper.valueToTree(Map.of("gameId", invite.gameId(), "status", plan.stateChanging() ? "joined" : "reconnected",
-                        "replayed", false, "stateVersion", resultVersion)));
+                        "replayed", false, "stateVersion", resultVersion)),
+                GameEventType.LOBBY_UPDATED, GameEventReason.PLAYER_JOINED);
     }
 
     public InviteMetadata inviteMetadata(String inviteCode) {
@@ -171,7 +180,8 @@ public class GameCommandService {
         snapshot.members().stream().map(Integer::parseInt).forEach(id -> plan.putPlayer(id, initial).playerTtl(id, PLAYER_TTL_SECONDS));
         return commit(gameId, metadata, fingerprint, plan,
                 mapper.valueToTree(Map.of("status", "inProgress", "gameId", gameId, "replayed", false,
-                        "stateVersion", snapshot.stateVersion() + 1)));
+                        "stateVersion", snapshot.stateVersion() + 1)),
+                GameEventType.GAME_STARTED, GameEventReason.GAME_STARTED);
     }
 
     public TransitionExecution leave(int gameId, int actorId, CommandMetadata metadata) {
@@ -241,7 +251,8 @@ public class GameCommandService {
         }
         return commit(gameId, metadata, fingerprint, plan,
                 mapper.valueToTree(Map.of("status", "removed", "gameId", gameId, "playerId", targetId,
-                        "replayed", false, "stateVersion", snapshot.stateVersion() + 1)));
+                        "replayed", false, "stateVersion", snapshot.stateVersion() + 1)),
+                GameEventType.LOBBY_UPDATED, kick ? GameEventReason.PLAYER_KICKED : GameEventReason.PLAYER_LEFT);
     }
 
     private void requireJoinCapacity(int actorId, GameSnapshot snapshot) {
@@ -270,11 +281,13 @@ public class GameCommandService {
     }
 
     private TransitionExecution commit(int gameId, CommandMetadata metadata, String fingerprint,
-                                       GameTransitionPlan plan, JsonNode result) {
+                                       GameTransitionPlan plan, JsonNode result,
+                                       GameEventType eventType, GameEventReason reason) {
         TransitionExecution execution = store.commit(gameId, metadata, fingerprint, plan, result);
         if (execution.replayed() && execution.semanticResult().isObject()) {
             ((com.fasterxml.jackson.databind.node.ObjectNode) execution.semanticResult()).put("replayed", true);
         }
+        if (execution.shouldPublish()) events.publish(gameId, execution.stateVersion(), eventType, reason);
         return execution;
     }
 

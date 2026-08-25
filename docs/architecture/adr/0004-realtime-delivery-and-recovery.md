@@ -55,8 +55,9 @@ considered only if snapshot recovery proves insufficient.
 
 REST remains recovery authority. Event contracts need identifiers/version and
 one post-commit publisher. Clients must tolerate duplicates/gaps and perform a
-bounded snapshot refresh. Current `gameEnded`/`gameOver` and missing dice event
-inconsistencies are migrated later, not preserved as target behavior.
+bounded snapshot refresh. REVAMP-021 replaces active legacy completion/event
+shapes with the bounded taxonomy; old names remain only in an unwired deprecated
+fixture pending cleanup.
 
 ## Security implications
 

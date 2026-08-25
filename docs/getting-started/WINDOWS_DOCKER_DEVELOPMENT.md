@@ -65,7 +65,7 @@ The intended frontend commands from `sindopoly-front` are `npm.cmd ci`,
 | `npm.cmd run dev` | `UNVERIFIED` | Script exists; Vite server was not run. |
 | `npm.cmd run build` | `PARTIALLY_VERIFIED` | Passed outside the restricted sandbox after install, with warnings; sandbox execution failed on esbuild permissions. |
 | `npm.cmd run lint` | `KNOWN_BROKEN` | 40 problems, including undefined `cardMessage` in `Board.jsx`. |
-| `npm.cmd test` | `KNOWN_BROKEN` | No `test` script exists. |
+| `npm.cmd test` | `VERIFIED` | REVAMP-021 adds a Node-based synchronization test script; 7 tests pass locally and in CI. |
 
 Do not present any unverified command as a clean startup guarantee.
 
@@ -142,11 +142,13 @@ These prevent claiming a clean `clone → configure → start → verify` workfl
 2. Maven Wrapper cache permissions failed in the audit (REVAMP-007, REVAMP-030).
 3. Native datasource hostname and Redis variable names are inconsistent (REVAMP-007).
 4. Frontend lint fails with 40 baseline problems (REVAMP-007).
-5. No frontend test script or suite exists (REVAMP-007 and later testing work).
+5. Narrow frontend synchronization tests exist; browser-backed WebSocket and
+   critical game-flow E2E coverage remain REVAMP-022.
 6. Frontend localhost API calls versus container networking are unverified
    (REVAMP-007, REVAMP-021, REVAMP-028).
 7. MariaDB trigger/seed/uniqueness behavior is not characterized (REVAMP-011, REVAMP-024).
-8. No repeatable local verification or CI contract exists (REVAMP-007, REVAMP-008).
+8. Local and CI verification contracts exist; clean-checkout verification remains
+   REVAMP-030.
 
 REVAMP-006 documents these blockers; it does not fix them.
 

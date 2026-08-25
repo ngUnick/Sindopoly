@@ -18,9 +18,12 @@ import com.example.Sindopoly_Java.service.core.DatabaseCompatibilityService;
 import com.example.Sindopoly_Java.service.transition.FinalizationFailureProbe;
 import com.example.Sindopoly_Java.service.transition.GameFinalizationService;
 import com.example.Sindopoly_Java.service.transition.GameLifecycleCommandService;
+import com.example.Sindopoly_Java.service.transition.GameLifecycleProperties;
 import com.example.Sindopoly_Java.service.transition.TerminalGameResult;
 import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.model.dto.ActionResultDto;
+import com.example.Sindopoly_Java.realtime.GameEventEnvelope;
+import com.example.Sindopoly_Java.realtime.GameEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -482,7 +485,8 @@ class IntegrationInfrastructureIT {
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM game_finalization WHERE game_id = ?",
                     Integer.class, winner)).isEqualTo(1);
             verify(broker, times(1)).convertAndSend(
-                    org.mockito.ArgumentMatchers.eq("/topic/game/" + winner), org.mockito.ArgumentMatchers.any(Map.class));
+                    org.mockito.ArgumentMatchers.eq("/topic/game/" + winner),
+                    org.mockito.ArgumentMatchers.any(GameEventEnvelope.class));
         } finally {
             executor.shutdownNow();
         }
@@ -526,6 +530,12 @@ class IntegrationInfrastructureIT {
                 .andExpect(jsonPath("$.status").value("lobby"));
 
         mockMvc.perform(get("/api/game-state/" + ownerId).session(outsiderSession))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/game-state/" + ownerId + "/snapshot"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/game-state/" + ownerId + "/snapshot").session(outsiderSession))
                 .andExpect(status().isForbidden());
 
         mockMvc.perform(get("/api/game-state/999999").session(ownerSession))
@@ -587,6 +597,14 @@ class IntegrationInfrastructureIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("inProgress"))
                 .andExpect(jsonPath("$.playerTurn").value(String.valueOf(ownerId)));
+
+        mockMvc.perform(get("/api/game-state/" + ownerId + "/snapshot").session(memberSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gameId").value(ownerId))
+                .andExpect(jsonPath("$.stateVersion").value(4))
+                .andExpect(jsonPath("$.players[0].playerId").value(ownerId))
+                .andExpect(jsonPath("$.terminalResult").doesNotExist())
+                .andExpect(jsonPath("$.finalizationId").doesNotExist());
 
         mockMvc.perform(post("/api/turn/" + ownerId + "/" + memberId + "/throw")
                         .header("X-Sindopoly-Command-Id", java.util.UUID.randomUUID())
@@ -1241,7 +1259,9 @@ class IntegrationInfrastructureIT {
         Deque<Integer> values = new ArrayDeque<>();
         for (int value : dieValues) values.add(value);
         return new TurnCommandService(transitions, new DiceService(values::removeFirst), squareRepository,
-                cardRepository, objectMapper, mock(SimpMessagingTemplate.class));
+                cardRepository, objectMapper, mock(GameEventPublisher.class),
+                new com.example.Sindopoly_Java.service.transition.GameTimingService(
+                        java.time.Clock.systemUTC(), new GameLifecycleProperties()));
     }
 
     private PlayerSession createPlayer(String prefix) throws Exception {

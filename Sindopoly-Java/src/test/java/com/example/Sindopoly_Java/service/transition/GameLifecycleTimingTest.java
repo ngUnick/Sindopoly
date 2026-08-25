@@ -3,10 +3,10 @@ package com.example.Sindopoly_Java.service.transition;
 import com.example.Sindopoly_Java.repository.CardRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.service.core.DiceService;
+import com.example.Sindopoly_Java.realtime.GameEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -36,7 +36,7 @@ class GameLifecycleTimingTest {
                 Map.of("turnDeadlineEpochMs", String.valueOf(now.plusSeconds(1).toEpochMilli()))));
         TurnCommandService service = new TurnCommandService(store, mock(DiceService.class),
                 mock(SquareRepository.class), mock(CardRepository.class), mapper,
-                mock(SimpMessagingTemplate.class), timing);
+                mock(GameEventPublisher.class), timing);
 
         assertThat(service.dueTimeout(41)).isEmpty();
         verify(store, never()).commit(anyInt(), any(), any(), any(), any());
@@ -47,7 +47,7 @@ class GameLifecycleTimingTest {
         RedisGameTransitionStore store = mock(RedisGameTransitionStore.class);
         GameFinalizationService finalization = mock(GameFinalizationService.class);
         SquareRepository squares = mock(SquareRepository.class);
-        SimpMessagingTemplate broker = mock(SimpMessagingTemplate.class);
+        GameEventPublisher events = mock(GameEventPublisher.class);
         Instant start = Instant.parse("2026-08-25T10:00:00Z");
         GameSnapshot snapshot = snapshot("inProgress", 0, Map.of(
                 "creationTime", "2026-08-25T09:59:00Z", "startTime", start.toString(),
@@ -55,14 +55,14 @@ class GameLifecycleTimingTest {
         when(store.load(41)).thenReturn(snapshot);
 
         GameLifecycleCommandService before = new GameLifecycleCommandService(store, squares, finalization,
-                timing(start.plusSeconds(59)), mapper, broker);
+                timing(start.plusSeconds(59)), mapper, events);
         assertThat(before.processScheduledGame(41)).isFalse();
         verify(store, never()).commit(anyInt(), any(), any(), any(), any());
 
         when(store.commit(anyInt(), any(), any(), any(), any())).thenReturn(new TransitionExecution(
                 TransitionExecution.Status.APPLIED, 1, mapper.createObjectNode()));
         GameLifecycleCommandService boundary = new GameLifecycleCommandService(store, squares, finalization,
-                timing(start.plusSeconds(60)), mapper, broker);
+                timing(start.plusSeconds(60)), mapper, events);
         assertThat(boundary.processScheduledGame(41)).isTrue();
         ArgumentCaptor<GameTransitionPlan> plan = ArgumentCaptor.forClass(GameTransitionPlan.class);
         verify(store).commit(anyInt(), any(), any(), plan.capture(), any());

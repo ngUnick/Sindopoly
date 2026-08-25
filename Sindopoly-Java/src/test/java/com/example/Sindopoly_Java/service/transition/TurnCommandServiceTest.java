@@ -5,6 +5,7 @@ import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.repository.CardRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.service.core.DiceService;
+import com.example.Sindopoly_Java.realtime.GameEventPublisher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,7 +14,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
@@ -37,7 +37,7 @@ class TurnCommandServiceTest {
     @Mock DiceService dice;
     @Mock SquareRepository squares;
     @Mock CardRepository cards;
-    @Mock SimpMessagingTemplate broker;
+    @Mock GameEventPublisher events;
     @Mock Square square;
     private final ObjectMapper mapper = new ObjectMapper();
     private TurnCommandService service;
@@ -45,7 +45,8 @@ class TurnCommandServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TurnCommandService(store, dice, squares, cards, mapper, broker);
+        service = new TurnCommandService(store, dice, squares, cards, mapper, events,
+                new GameTimingService(java.time.Clock.systemUTC(), new GameLifecycleProperties()));
         metadata = new CommandMetadata("00000000-0000-0000-0000-000000000001", 0);
     }
 
@@ -62,9 +63,9 @@ class TurnCommandServiceTest {
         ThrowResultDto result = service.throwDice(1, 1, metadata);
 
         assertThat(result.stateVersion()).isEqualTo(1);
-        InOrder order = inOrder(store, broker);
+        InOrder order = inOrder(store, events);
         order.verify(store).commit(anyInt(), any(), anyString(), any(), any(JsonNode.class));
-        order.verify(broker).convertAndSend(anyString(), any(Object.class));
+        order.verify(events).publish(anyInt(), org.mockito.ArgumentMatchers.anyLong(), any(), any());
     }
 
     @Test
@@ -80,7 +81,7 @@ class TurnCommandServiceTest {
         assertThat(result.replayed()).isTrue();
         verify(dice, never()).roll();
         verify(store).load(1);
-        verify(broker, never()).convertAndSend(anyString(), any(Object.class));
+        verify(events, never()).publish(anyInt(), org.mockito.ArgumentMatchers.anyLong(), any(), any());
     }
 
     @Test
@@ -93,7 +94,7 @@ class TurnCommandServiceTest {
                 .isInstanceOf(AccessDeniedException.class);
         verify(store, never()).replayIfPresent(anyInt(), any(), anyString());
         verify(dice, never()).roll();
-        verify(broker, never()).convertAndSend(anyString(), any(Object.class));
+        verify(events, never()).publish(anyInt(), org.mockito.ArgumentMatchers.anyLong(), any(), any());
     }
 
     private GameSnapshot snapshot() {

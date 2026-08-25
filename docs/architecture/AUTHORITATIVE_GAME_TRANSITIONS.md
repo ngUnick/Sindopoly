@@ -144,8 +144,10 @@ Notifications are emitted only for `APPLIED`, after Redis returns success, and
 carry the committed `stateVersion`. Replays, stale commands, collisions, and
 failed computations emit nothing. The current in-memory STOMP broker still has
 a crash window after Redis commit and before publication; clients recover from
-the authenticated REST snapshot. Durable delivery, subscription authorization,
-and full reconnect/multi-instance event behavior remain REVAMP-021 scope.
+the authenticated REST snapshot. REVAMP-021 implements membership-authorized
+subscriptions and monotonic reconnect recovery. Durable delivery and
+cross-instance fan-out remain deliberately absent; broker-backed and full
+end-to-end coverage is REVAMP-022 scope.
 
 Scheduler timeout and completion submit deterministic system commands carrying
 the same expected-version contract as player commands. Redis completion is
@@ -166,8 +168,9 @@ REVAMP-019 repairs the approved rent, tax, card, Jail/Go-To-Jail, Start reward,
 purchase/decline, frozen join-order, and no-doubles behavior inside this same
 transition path. A missing `turnOrder` is initialized only for an unambiguous
 single-host lobby; ambiguous lobbies and in-progress legacy games fail closed.
-No membership SET iteration or numeric sorting reconstructs order. Durable
-event delivery and reconnect recovery remain explicit REVAMP-021 work.
+No membership SET iteration or numeric sorting reconstructs order. Durable event
+delivery remains out of scope; REVAMP-021 supplies snapshot-based reconnect
+recovery over the process-local simple broker.
 
 Lobby creation sets 24-hour game/membership/commands TTLs. Join, start, turn,
 replay, stale, reuse, and no-op processing do not refresh the game lifetime;

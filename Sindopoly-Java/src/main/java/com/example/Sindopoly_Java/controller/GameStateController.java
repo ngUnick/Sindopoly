@@ -12,6 +12,8 @@ import com.example.Sindopoly_Java.service.transition.CommandMetadata;
 import com.example.Sindopoly_Java.service.transition.CommandMetadataResolver;
 import com.example.Sindopoly_Java.service.transition.GameCommandService;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.example.Sindopoly_Java.realtime.GameRealtimeSnapshot;
+import com.example.Sindopoly_Java.realtime.GameRealtimeSnapshotService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -36,19 +38,22 @@ public class GameStateController {
     private final GameAuthorizationService gameAuthorizationService;
     private final GameCommandService gameCommandService;
     private final CommandMetadataResolver commandMetadataResolver;
+    private final GameRealtimeSnapshotService realtimeSnapshots;
 
     public GameStateController(GameStateService gameStateService, 
                                PlayerStateService playerStateService,
                                AuthenticatedPlayerResolver authenticatedPlayerResolver,
                                GameAuthorizationService gameAuthorizationService,
                                GameCommandService gameCommandService,
-                               CommandMetadataResolver commandMetadataResolver) {
+                               CommandMetadataResolver commandMetadataResolver,
+                               GameRealtimeSnapshotService realtimeSnapshots) {
         this.playerStateService = playerStateService;
         this.gameStateService = gameStateService;
         this.authenticatedPlayerResolver = authenticatedPlayerResolver;
         this.gameAuthorizationService = gameAuthorizationService;
         this.gameCommandService = gameCommandService;
         this.commandMetadataResolver = commandMetadataResolver;
+        this.realtimeSnapshots = realtimeSnapshots;
     }
 
 
@@ -266,6 +271,14 @@ public class GameStateController {
     public Map<String, String> getGameState(@PathVariable int gameId, Authentication authentication) {
         int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
         return gameAuthorizationService.requireMember(gameId, actorId).game();
+    }
+
+    /** Authoritative recovery state for reconnects, gaps, and duplicate notifications. */
+    @GetMapping("/{gameId}/snapshot")
+    public GameRealtimeSnapshot getRealtimeSnapshot(@PathVariable int gameId, Authentication authentication) {
+        int actorId = authenticatedPlayerResolver.requirePlayerId(authentication);
+        gameAuthorizationService.requireMember(gameId, actorId);
+        return realtimeSnapshots.load(gameId);
     }
 
     /**

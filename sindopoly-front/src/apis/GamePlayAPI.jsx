@@ -1,45 +1,41 @@
 import API_BASE_URL from "./apiConfig";
 import { TurnAPI }  from "./TurnAPI";
 import { apiFetch } from "./apiClient";
-import { observeGameSnapshot } from "./gameCommandState";
+import { acceptGameSnapshot, observeGameSnapshot } from "./gameCommandState";
+import { GameAPI } from "./GameAPI";
 
 /**
  * Helper that builds the "board" blob Board.jsx expects.
  * Uses your existing /players-detailed endpoint.
  */
 async function assembleBoard(gameId) {
-  // 1) fetch game‐level fields
-  const gameRes = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}`);
-  if (!gameRes.ok) throw new Error("Game state fetch failed");
-  const gameHash = await gameRes.json();
-  observeGameSnapshot(gameId, gameHash);
+  const snapshot = await GameAPI.getRealtimeSnapshot(gameId);
+  if (!acceptGameSnapshot(gameId, snapshot)) return null;
+  return boardFromSnapshot(snapshot);
+}
 
-  // 2) fetch per‐player list
-  const playersRes = await apiFetch(
-    `${API_BASE_URL}/api/game-state/players-detailed/${gameId}`
-  );
-  if (!playersRes.ok) throw new Error("Players fetch failed");
-  const players = await playersRes.json();
+export function boardFromSnapshot(snapshot) {
+  const players = snapshot.players ?? [];
   if (!players.length) return [];
 
   // 3) normalize
   const normalized = players.map(p => ({
-    player_id: p.player_id ?? p.id,
+    player_id: p.playerId ?? p.player_id ?? p.id,
     nickname:  p.nickname,
     position:  p.position,
     money:     p.money,
-    properties: p.properties,
+    properties: JSON.stringify(p.properties ?? []),
   }));
 
   // 4) merge game‐level into the first slot
   return [
     {
       ...normalized[0],
-      gameStatus: gameHash.status,
-      playerTurn: gameHash.playerTurn,
-      winner:     gameHash.winner,
-      stateVersion: gameHash.stateVersion,
-      optionalAction: gameHash.optionalAction,
+      gameStatus: snapshot.status,
+      playerTurn: snapshot.playerTurn,
+      winner:     snapshot.winner,
+      stateVersion: snapshot.stateVersion,
+      optionalAction: snapshot.optionalAction ? JSON.stringify(snapshot.optionalAction) : null,
     },
     ...normalized.slice(1),
   ];

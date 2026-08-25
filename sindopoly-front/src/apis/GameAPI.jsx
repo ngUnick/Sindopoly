@@ -83,6 +83,12 @@ export const GameAPI = {
     return game;
   },
 
+  getRealtimeSnapshot: async (gameId) => {
+    const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}/snapshot`);
+    if (!response.ok) throw new Error("Failed to recover game snapshot");
+    return response.json();
+  },
+
   // ✅ Get Lobby Player IDs
   getGamePlayers: async (gameId) => {
     const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}/players`);

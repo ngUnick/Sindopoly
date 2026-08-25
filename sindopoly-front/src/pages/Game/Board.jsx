@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { GamePlayAPI } from "../../apis/GamePlayAPI";
+import { GamePlayAPI, boardFromSnapshot } from "../../apis/GamePlayAPI";
+import { useGameRealtime } from "../../hooks/useGameRealtime";
 import { TurnAPI }    from "../../apis/TurnAPI";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -549,11 +550,16 @@ const Board = () => {
 
 
   // Handle Game Tick --------------------------------------------------------------------------------------------------
-  const handleTick = async () => {
+  const handleTick = async (realtimeSnapshot = null) => {
     if (!gameId) return;
 
       // pull the entire board+game blob in one shot
-      const board = await GamePlayAPI.getBoard(gameId);
+      const board = realtimeSnapshot?.stateVersion != null
+        ? boardFromSnapshot(realtimeSnapshot)
+        : await GamePlayAPI.getBoard(gameId);
+
+      // A slower polling response may be rejected after a newer socket snapshot.
+      if (!board?.length) return;
 
       // 0) mark which properties each player owns
       updateProperties(board);
@@ -569,8 +575,6 @@ const Board = () => {
 
       // console.log("🏷️ getBoard returned:", all);
       
-      if (!board.length) return;
-
       const { gameStatus: status, playerTurn, winner, ...me } = board[0];
 
 
@@ -682,6 +686,8 @@ const Board = () => {
         }
       });
   };
+
+  useGameRealtime(gameId, handleTick);
 
 
   // subscribe to turn-by-turn AND end-of-game events
@@ -976,10 +982,17 @@ const Board = () => {
       console.error("Board.jsx: missing or invalid gameId");
       return;
     }
-    handleTick();
+    let polling = false;
+    const poll = async () => {
+      if (polling) return;
+      polling = true;
+      try { await handleTick(); } finally { polling = false; }
+    };
+    void poll();
     
     
-    const id = setInterval(handleTick, 2000);
+    // STOMP drives normal updates; retain a bounded recovery poll for broker/socket loss.
+    const id = setInterval(poll, 15000);
     return () => clearInterval(id);
   }, [gameId, playerId, navigate]);
 

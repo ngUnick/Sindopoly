@@ -7,8 +7,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import com.example.Sindopoly_Java.realtime.GameEventPublisher;
+import com.example.Sindopoly_Java.realtime.GameEventReason;
+import com.example.Sindopoly_Java.realtime.GameEventType;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -27,17 +30,18 @@ public class GameLifecycleCommandService {
     private final GameFinalizationService finalization;
     private final GameTimingService timing;
     private final ObjectMapper mapper;
-    private final SimpMessagingTemplate broker;
+    private final GameEventPublisher events;
 
+    @Autowired
     public GameLifecycleCommandService(RedisGameTransitionStore store, SquareRepository squares,
                                        GameFinalizationService finalization, GameTimingService timing,
-                                       ObjectMapper mapper, SimpMessagingTemplate broker) {
+                                       ObjectMapper mapper, GameEventPublisher events) {
         this.store = store;
         this.squares = squares;
         this.finalization = finalization;
         this.timing = timing;
         this.mapper = mapper;
-        this.broker = broker;
+        this.events = events;
     }
 
     /** Returns true when this game was terminal, completed now, or needed a finalization retry. */
@@ -82,9 +86,8 @@ public class GameLifecycleCommandService {
             log.error("Stats finalization pending for game {} and finalization {}",
                     snapshot.gameId(), terminal.finalizationId(), exception);
         }
-        broker.convertAndSend("/topic/game/" + snapshot.gameId(), Map.of("event", "gameEnded",
-                "gameId", snapshot.gameId(), "winner", String.valueOf(winner),
-                "stateVersion", execution.stateVersion()));
+        events.publish(snapshot.gameId(), execution.stateVersion(),
+                GameEventType.GAME_COMPLETED, GameEventReason.GAME_COMPLETED);
     }
 
     private boolean terminal(GameSnapshot snapshot) {

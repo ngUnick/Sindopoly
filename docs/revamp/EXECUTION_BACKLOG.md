@@ -354,7 +354,7 @@ Two choices are especially important:
 
 ### REVAMP-021 — Define and implement WebSocket event synchronization and recovery
 
-- Status: `READY`; Priority: `P2`; Category: `WEBSOCKET`.
+- Status: `DONE`; Priority: `P2`; Category: `WEBSOCKET`.
 - Rationale / evidence: server broadcasts selected events through an in-memory broker, while frontend polls and commented STOMP code has no recovery contract.
 - Desired outcome: approved polling or WebSocket-plus-snapshot strategy with event envelope, subscription authorization, ordering/deduplication, reconnect, and multi-instance limits defined.
 - Dependencies: REVAMP-013, REVAMP-015, REVAMP-016, REVAMP-018, REVAMP-020. Blocks: REVAMP-022 and realtime-dependent UX changes.
@@ -369,7 +369,7 @@ Two choices are especially important:
 
 ### REVAMP-022 — Add WebSocket and critical end-to-end game-flow coverage
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `TESTING`.
+- Status: `READY`; Priority: `P1`; Category: `TESTING`.
 - Rationale / evidence: no WebSocket or E2E suite exists; functional repairs require cross-layer proof.
 - Desired outcome: focused integration tests for STOMP delivery/auth/recovery and E2E coverage for create→join→start→turn→action→end.
 - Dependencies: REVAMP-011, REVAMP-019, REVAMP-020, REVAMP-021. Blocks: final release verification.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-021 — Define and implement WebSocket
-event synchronization and recovery**. Later work remains blocked by the
-required synchronization prerequisites.
+The immediate `READY` item is **REVAMP-022 — Add WebSocket and critical
+end-to-end game-flow coverage**. Later work remains blocked by the required
+cross-layer verification prerequisites.
 
 ## Planning review
 
