@@ -7,10 +7,14 @@ import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.exception.GameTransitionConflictException;
 import com.example.Sindopoly_Java.service.transition.CommandMetadata;
 import com.example.Sindopoly_Java.service.transition.GameTransitionPlan;
+import com.example.Sindopoly_Java.service.transition.GameCommandService;
 import com.example.Sindopoly_Java.service.transition.RedisGameTransitionStore;
 import com.example.Sindopoly_Java.service.transition.TransitionExecution;
 import com.example.Sindopoly_Java.service.transition.TurnCommandService;
+import com.example.Sindopoly_Java.service.core.DiceService;
+import com.example.Sindopoly_Java.service.core.CardDataCompatibilityService;
 import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
+import com.example.Sindopoly_Java.model.dto.ActionResultDto;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +26,8 @@ import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -35,12 +41,16 @@ import org.testcontainers.utility.MountableFile;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -110,7 +120,16 @@ class IntegrationInfrastructureIT {
     private TurnCommandService turnCommands;
 
     @Autowired
+    private GameCommandService gameCommands;
+
+    @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
+    private CardDataCompatibilityService cardDataCompatibility;
 
     @BeforeEach
     @AfterEach
@@ -244,6 +263,232 @@ class IntegrationInfrastructureIT {
                         .session(memberSession)
                         .with(csrf()))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void turnOrderTracksCreateJoinReplayStaleKickAndStartAtomically() throws Exception {
+        PlayerSession host = createPlayer("OrderHost");
+        PlayerSession second = createPlayer("OrderSecond");
+        PlayerSession third = createPlayer("OrderThird");
+
+        mockMvc.perform(post("/api/game-state/create")
+                        .header("X-Sindopoly-Command-Id", UUID.randomUUID())
+                        .header("X-Sindopoly-Expected-Version", "-1")
+                        .session(host.session()).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ownerId\":" + host.id() + ",\"visibility\":\"public\"}"))
+                .andExpect(status().isOk());
+        assertThat(redis.opsForHash().get("game:" + host.id(), "turnOrder"))
+                .isEqualTo("[" + host.id() + "]");
+        mockMvc.perform(get("/api/game-state/public-lobby"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].turnOrder").doesNotExist());
+
+        UUID joinId = UUID.randomUUID();
+        var join = post("/api/game-state/add/" + host.id() + "/" + second.id())
+                .header("X-Sindopoly-Command-Id", joinId)
+                .header("X-Sindopoly-Expected-Version", "0")
+                .session(second.session()).with(csrf());
+        mockMvc.perform(join).andExpect(status().isOk());
+        mockMvc.perform(post("/api/game-state/add/" + host.id() + "/" + second.id())
+                        .header("X-Sindopoly-Command-Id", joinId)
+                        .header("X-Sindopoly-Expected-Version", "0")
+                        .session(second.session()).with(csrf()))
+                .andExpect(status().isOk());
+        assertThat(redis.opsForHash().get("game:" + host.id(), "turnOrder"))
+                .isEqualTo("[" + host.id() + "," + second.id() + "]");
+        assertThat(redis.opsForHash().get("game:" + host.id(), "stateVersion")).isEqualTo("1");
+
+        mockMvc.perform(post("/api/game-state/add/" + host.id() + "/" + third.id())
+                        .header("X-Sindopoly-Command-Id", UUID.randomUUID())
+                        .header("X-Sindopoly-Expected-Version", "0")
+                        .session(third.session()).with(csrf()))
+                .andExpect(status().isConflict());
+        assertThat(redis.opsForSet().isMember("game:" + host.id() + ":players", String.valueOf(third.id()))).isFalse();
+        assertThat(redis.opsForHash().get("game:" + host.id(), "turnOrder"))
+                .isEqualTo("[" + host.id() + "," + second.id() + "]");
+
+        mockMvc.perform(post("/api/game-state/add/" + host.id() + "/" + third.id())
+                        .header("X-Sindopoly-Command-Id", UUID.randomUUID())
+                        .header("X-Sindopoly-Expected-Version", "1")
+                        .session(third.session()).with(csrf()))
+                .andExpect(status().isOk());
+        assertThat(redis.opsForHash().get("game:" + host.id(), "turnOrder"))
+                .isEqualTo("[" + host.id() + "," + second.id() + "," + third.id() + "]");
+
+        mockMvc.perform(post("/api/game-state/" + host.id() + "/players/" + second.id() + "/kick")
+                        .header("X-Sindopoly-Command-Id", UUID.randomUUID())
+                        .header("X-Sindopoly-Expected-Version", "2")
+                        .session(host.session()).with(csrf()))
+                .andExpect(status().isOk());
+        assertThat(redis.opsForHash().get("game:" + host.id(), "turnOrder"))
+                .isEqualTo("[" + host.id() + "," + third.id() + "]");
+
+        mockMvc.perform(post("/api/game-state/" + host.id() + "/start")
+                        .header("X-Sindopoly-Command-Id", UUID.randomUUID())
+                        .header("X-Sindopoly-Expected-Version", "3")
+                        .session(host.session()).with(csrf())
+                        .param("playerId", String.valueOf(host.id())))
+                .andExpect(status().isOk());
+        assertThat(redis.opsForHash().get("game:" + host.id(), "playerTurn"))
+                .isEqualTo(String.valueOf(host.id()));
+        assertThat(redis.opsForHash().get("game:" + host.id(), "turnOrder"))
+                .isEqualTo("[" + host.id() + "," + third.id() + "]");
+    }
+
+    @Test
+    void ambiguousLegacyTurnOrderFailsClosedWithoutFabrication() throws Exception {
+        PlayerSession host = createPlayer("LegacyHost");
+        PlayerSession member = createPlayer("LegacyMember");
+        redis.opsForHash().putAll("game:" + host.id(), java.util.Map.of(
+                "status", "lobby", "visibility", "public", "stateVersion", "0"));
+        redis.opsForSet().add("game:" + host.id() + ":players", String.valueOf(host.id()), String.valueOf(member.id()));
+
+        mockMvc.perform(post("/api/game-state/" + host.id() + "/start")
+                        .header("X-Sindopoly-Command-Id", UUID.randomUUID())
+                        .header("X-Sindopoly-Expected-Version", "0")
+                        .session(host.session()).with(csrf())
+                        .param("playerId", String.valueOf(host.id())))
+                .andExpect(status().isConflict());
+
+        assertThat(redis.opsForHash().get("game:" + host.id(), "turnOrder")).isNull();
+        assertThat(redis.opsForHash().get("game:" + host.id(), "stateVersion")).isEqualTo("0");
+    }
+
+    @Test
+    void singleHostLegacyLobbySafelyInitializesOrderWhenNextPlayerJoins() throws Exception {
+        PlayerSession host = createPlayer("LegacySingleHost");
+        PlayerSession member = createPlayer("LegacySingleMember");
+        redis.opsForHash().putAll("game:" + host.id(), java.util.Map.of(
+                "status", "lobby", "visibility", "public", "stateVersion", "0"));
+        redis.opsForSet().add("game:" + host.id() + ":players", String.valueOf(host.id()));
+
+        mockMvc.perform(post("/api/game-state/add/" + host.id() + "/" + member.id())
+                        .header("X-Sindopoly-Command-Id", UUID.randomUUID())
+                        .header("X-Sindopoly-Expected-Version", "0")
+                        .session(member.session()).with(csrf()))
+                .andExpect(status().isOk());
+
+        assertThat(redis.opsForHash().get("game:" + host.id(), "turnOrder"))
+                .isEqualTo("[" + host.id() + "," + member.id() + "]");
+        assertThat(redis.opsForSet().members("game:" + host.id() + ":players"))
+                .containsExactlyInAnyOrder(String.valueOf(host.id()), String.valueOf(member.id()));
+        assertThat(redis.opsForHash().get("game:" + host.id(), "stateVersion")).isEqualTo("1");
+    }
+
+    @Test
+    void inProgressDeparturePreservesRelativeOrderAndAdvancesFromDepartingActivePlayer() {
+        int gameId = 741;
+        int secondId = 707;
+        int thirdId = 799;
+        redis.opsForHash().putAll("game:" + gameId, java.util.Map.of(
+                "status", "inProgress", "playerTurn", String.valueOf(gameId), "stateVersion", "0",
+                "turnOrder", "[" + gameId + "," + secondId + "," + thirdId + "]",
+                "optionalAction", "{\"type\":\"PURCHASE_PROPERTY\",\"gameId\":" + gameId
+                        + ",\"playerId\":" + gameId
+                        + ",\"stateVersion\":0,\"squareId\":1,\"cost\":60,\"declinable\":true}"));
+        redis.opsForSet().add("game:" + gameId + ":players",
+                String.valueOf(gameId), String.valueOf(secondId), String.valueOf(thirdId));
+        redis.opsForHash().putAll("player:" + thirdId, java.util.Map.of(
+                "position", "10", "money", "1500", "jail", "true", "jailTime", "2",
+                "bankrupt", "false", "properties", "[]", "afk", "false"));
+
+        gameCommands.leave(gameId, secondId, metadata(0));
+        assertThat(redis.opsForHash().get("game:" + gameId, "turnOrder"))
+                .isEqualTo("[" + gameId + "," + thirdId + "]");
+        assertThat(redis.opsForHash().get("game:" + gameId, "playerTurn"))
+                .isEqualTo(String.valueOf(gameId));
+        assertThat(redis.opsForHash().get("game:" + gameId, "optionalAction").toString())
+                .contains("PURCHASE_PROPERTY").contains("\"stateVersion\":1");
+
+        gameCommands.leave(gameId, gameId, metadata(1));
+        assertThat(redis.opsForHash().get("game:" + gameId, "turnOrder"))
+                .isEqualTo("[" + thirdId + "]");
+        assertThat(redis.opsForHash().get("game:" + gameId, "playerTurn"))
+                .isEqualTo(String.valueOf(thirdId));
+        String pending = (String) redis.opsForHash().get("game:" + gameId, "optionalAction");
+        assertThat(pending).contains("PAY_JAIL_EXIT").contains("\"playerId\":" + thirdId)
+                .contains("\"stateVersion\":2");
+    }
+
+    @Test
+    void realRedisRollCommitsRentTaxStartAndPurchaseEffectsOnce() {
+        int gameId = 720;
+        int otherId = 721;
+
+        seedActiveGame(gameId, otherId, 1, "[]", "[3]");
+        TurnCommandService rentService = deterministicTurnService(1, 1);
+        CommandMetadata rentCommand = metadata(0);
+        ThrowResultDto rent = rentService.throwDice(gameId, gameId, rentCommand);
+        assertThat(rent.data()).isEqualTo(4);
+        assertThat(redis.opsForHash().get("player:720", "money")).isEqualTo("1496");
+        assertThat(redis.opsForHash().get("player:721", "money")).isEqualTo("1504");
+        ThrowResultDto rentReplay = rentService.throwDice(gameId, gameId, rentCommand);
+        assertThat(rentReplay.replayed()).isTrue();
+        assertThat(redis.opsForHash().get("player:720", "money")).isEqualTo("1496");
+        assertThat(redis.opsForHash().get("game:720", "stateVersion")).isEqualTo("1");
+
+        clearDedicatedRedisContainer();
+        seedActiveGame(gameId, otherId, 2, "[]", "[]");
+        deterministicTurnService(1, 1).throwDice(gameId, gameId, metadata(0));
+        assertThat(redis.opsForHash().get("player:720", "money")).isEqualTo("1300");
+
+        clearDedicatedRedisContainer();
+        seedActiveGame(gameId, otherId, 38, "[]", "[]");
+        ThrowResultDto start = deterministicTurnService(1, 1).throwDice(gameId, gameId, metadata(0));
+        assertThat(start.newPosition()).isZero();
+        assertThat(redis.opsForHash().get("player:720", "money")).isEqualTo("1700");
+
+        clearDedicatedRedisContainer();
+        seedActiveGame(gameId, otherId, 1, "[]", "[]");
+        TurnCommandService purchaseService = deterministicTurnService(1, 1);
+        purchaseService.throwDice(gameId, gameId, metadata(0));
+        assertThatThrownBy(() -> purchaseService.action(gameId, gameId, true, metadata(0)))
+                .isInstanceOf(GameTransitionConflictException.class)
+                .extracting("reason").isEqualTo("STALE_STATE");
+        assertThat(redis.opsForHash().get("player:720", "money")).isEqualTo("1500");
+        assertThat(redis.opsForHash().get("player:720", "properties")).isEqualTo("[]");
+        assertThat(redis.opsForHash().get("game:720", "stateVersion")).isEqualTo("1");
+        CommandMetadata purchaseCommand = metadata(1);
+        ActionResultDto purchase = purchaseService.action(gameId, gameId, true, purchaseCommand);
+        assertThat(purchase.newBalance()).isEqualTo(1440);
+        assertThat(redis.opsForHash().get("player:720", "properties")).isEqualTo("[3]");
+        assertThat(redis.opsForHash().get("game:720", "stateVersion")).isEqualTo("2");
+        assertThat(purchaseService.action(gameId, gameId, true, purchaseCommand).replayed()).isTrue();
+        assertThat(redis.opsForHash().get("player:720", "money")).isEqualTo("1440");
+    }
+
+    @Test
+    void cardDeckRotationIsAtomicAndIsolatedPerGame() {
+        int firstGame = 760;
+        int secondGame = 770;
+        seedActiveGame(firstGame);
+        seedActiveGame(secondGame);
+        List<String> cardIds = cardRepository.findAll().stream().limit(2)
+                .map(card -> String.valueOf(card.getId())).toList();
+        assertThat(cardIds).hasSize(2);
+        redis.opsForList().rightPushAll("game:" + firstGame + ":deck", cardIds);
+        redis.opsForList().rightPushAll("game:" + secondGame + ":deck", cardIds);
+
+        deterministicTurnService(1, 1).throwDice(firstGame, firstGame, metadata(0));
+
+        assertThat(redis.opsForList().range("game:" + firstGame + ":deck", 0, -1))
+                .containsExactly(cardIds.get(1), cardIds.get(0));
+        assertThat(redis.opsForList().range("game:" + secondGame + ":deck", 0, -1))
+                .containsExactlyElementsOf(cardIds);
+    }
+
+    @Test
+    void historicalPositivePayTwentyCardIsCorrectedIdempotently() {
+        int changed = jdbc.update("UPDATE card SET amount = 20 WHERE type = 'money' AND description = ?",
+                "Πρέπει να αγοράσεις εξαρτήματα για εργαστήριο ηλεκτρονικής. Πλήρωσε $20.");
+        assertThat(changed).isEqualTo(1);
+
+        assertThat(cardDataCompatibility.correctKnownSignedAmount()).isEqualTo(1);
+        assertThat(cardDataCompatibility.correctKnownSignedAmount()).isZero();
+        Float amount = jdbc.queryForObject("SELECT amount FROM card WHERE type = 'money' AND description = ?",
+                Float.class,
+                "Πρέπει να αγοράσεις εξαρτήματα για εργαστήριο ηλεκτρονικής. Πλήρωσε $20.");
+        assertThat(amount).isEqualTo(-20f);
     }
 
     @Test
@@ -578,14 +823,48 @@ class IntegrationInfrastructureIT {
 
     private void seedActiveGame(int gameId) {
         redis.opsForHash().putAll("game:" + gameId, java.util.Map.of(
-                "status", "inProgress", "playerTurn", String.valueOf(gameId), "stateVersion", "0"));
+                "status", "inProgress", "playerTurn", String.valueOf(gameId), "stateVersion", "0",
+                "turnOrder", "[" + gameId + "]"));
         redis.opsForSet().add("game:" + gameId + ":players", String.valueOf(gameId));
         redis.opsForHash().putAll("player:" + gameId, java.util.Map.of(
                 "position", "0", "money", "1500", "jail", "false", "jailTime", "0",
                 "bankrupt", "false", "properties", "[]", "afk", "false"));
     }
 
+    private void seedActiveGame(int gameId, int otherId, int position,
+                                String actorProperties, String otherProperties) {
+        redis.opsForHash().putAll("game:" + gameId, java.util.Map.of(
+                "status", "inProgress", "playerTurn", String.valueOf(gameId), "stateVersion", "0",
+                "turnOrder", "[" + gameId + "," + otherId + "]"));
+        redis.opsForSet().add("game:" + gameId + ":players", String.valueOf(gameId), String.valueOf(otherId));
+        redis.opsForHash().putAll("player:" + gameId, java.util.Map.of(
+                "position", String.valueOf(position), "money", "1500", "jail", "false", "jailTime", "0",
+                "bankrupt", "false", "properties", actorProperties, "afk", "false"));
+        redis.opsForHash().putAll("player:" + otherId, java.util.Map.of(
+                "position", "0", "money", "1500", "jail", "false", "jailTime", "0",
+                "bankrupt", "false", "properties", otherProperties, "afk", "false"));
+    }
+
+    private TurnCommandService deterministicTurnService(int... dieValues) {
+        Deque<Integer> values = new ArrayDeque<>();
+        for (int value : dieValues) values.add(value);
+        return new TurnCommandService(transitions, new DiceService(values::removeFirst), squareRepository,
+                cardRepository, objectMapper, mock(SimpMessagingTemplate.class));
+    }
+
+    private PlayerSession createPlayer(String prefix) throws Exception {
+        String nickname = "P" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        MvcResult result = mockMvc.perform(post("/api/player-state/create")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"" + nickname + "\"}"))
+                .andExpect(status().isOk()).andReturn();
+        return new PlayerSession(Integer.parseInt(result.getResponse().getContentAsString()),
+                (MockHttpSession) result.getRequest().getSession(false));
+    }
+
     private CommandMetadata metadata(long version) {
         return new CommandMetadata(UUID.randomUUID().toString(), version);
     }
+
+    private record PlayerSession(int id, MockHttpSession session) { }
 }

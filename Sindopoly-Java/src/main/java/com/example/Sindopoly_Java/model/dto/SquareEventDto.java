@@ -11,7 +11,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 public class SquareEventDto {
     private String type;         // e.g. "buyOffer","rentDue","card","jailOffer","tax","start",…
     private String message;      // text to display
-    private int    amount;       // Δ money (negative = pay) or new position
+    private int    amount;       // signed card effect, positive domain cost, or destination
     private String ownerId;      // for rentDue
     private Integer squareId;    // for buyOffer
     private Integer price;       // for buyOffer
@@ -63,7 +63,7 @@ public class SquareEventDto {
             null, sqId, price, null, null);
     }
     public static SquareEventDto rentDue(String owner, int rent) {
-        return new SquareEventDto("rentDue", "Pay rent €" + rent, -rent,
+        return new SquareEventDto("rentDue", "Pay rent €" + rent, rent,
             owner, null, null, null, null);
     }
     public static SquareEventDto jailOffer(int fee) {
@@ -71,6 +71,6 @@ public class SquareEventDto {
             0, null, null, null, fee, null);
     }
     public static SquareEventDto card(String title, String cardType, int amt) {
-        return new SquareEventDto("card", title, 0, null, null, null, null, cardType);
+        return new SquareEventDto("card", title, amt, null, null, null, null, cardType);
     }
 }

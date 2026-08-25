@@ -65,7 +65,7 @@ Redis continues to be authoritative for active-game authorization:
 
 | Key | Type and serialization | Facts read | TTL/lifecycle | Owner |
 | --- | --- | --- | --- | --- |
-| `game:{gameId}` | HASH; string keys/fields/values via `StringRedisSerializer` | `status`, `playerTurn`, presence of `optionalAction`; creator/host is currently inferred from `gameId` because no owner field exists | 24 hours at lobby creation; shortened to 30 seconds after current end flow | `GameStateService` |
+| `game:{gameId}` | HASH; string keys/fields/values via `StringRedisSerializer` | `status`, `playerTurn`, typed `optionalAction`, and private `turnOrder`; creator/host is inferred from `gameId` because no owner field exists | 24 hours at lobby creation; shortened to 30 seconds after current end flow | Transition command/store boundary |
 | `game:{gameId}:players` | SET of decimal player-ID strings via `StringRedisSerializer` | Current active-game membership and kick target membership | 24 hours at lobby creation; shortened to 30 seconds after current end flow | `GameStateService` |
 
 One authorization decision performs one game-hash load and one membership-set
@@ -73,9 +73,11 @@ load, then reuses that snapshot for its membership, host, active-player, and
 phase checks. There is no authorization cache because stale authorization is
 more dangerous than the bounded Redis reads.
 
-REVAMP-018 adds `stateVersion` to the existing game hash and the bounded
-`game:{gameId}:commands` retry hash. It does not rename existing keys, change
-serializers, or add a session/role cache.
+REVAMP-018 adds `stateVersion` and the bounded `game:{gameId}:commands` retry
+hash. REVAMP-019 adds private `turnOrder` to the existing game hash. Ordered
+state must exactly match membership and is never inferred from SET iteration;
+ambiguous legacy state fails closed. Neither change renames keys, changes
+serializers, or adds a session/role cache.
 
 MariaDB schema/entity changes: **NONE**. Durable `Player` existence continues
 to be checked by the established actor resolver; active membership and roles

@@ -2,7 +2,7 @@
 
 Serializer: `RedisConfig` sets `StringRedisSerializer` for keys, values, hash keys, and hash values.
 
-REVAMP-018 update: normal game commands now write through the centralized Lua
+REVAMP-018/019 update: normal game commands now write through the centralized Lua
 compare-and-commit store described in
 `docs/architecture/AUTHORITATIVE_GAME_TRANSITIONS.md`. The game hash adds
 `stateVersion`; the new `game:{gameId}:commands` HASH stores
@@ -22,13 +22,22 @@ retain pre-revamp audit provenance where explicitly labeled as risks.
 - Read by: controllers, `TurnService`, `GameLoopScheduler`, frontend through REST.
 - Deleted by: `GameStateService#deleteGame`, `deleteGameAndPlayers`.
 - TTL: 24h at lobby creation; 30s after `endGame`; startGame leaves earlier TTL in place.
-- Fields observed: `status`, `creationTime`, `visibility`, `inviteCode`, `playerTurn`, `timer`, `startTime`, `maxTime`, `maxMoney`, `winner`, `lastDice`, `optionalAction`, `optionalDeadline`.
+- Fields observed: `status`, `creationTime`, `visibility`, `inviteCode`, `playerTurn`, `turnOrder`, `timer`, `startTime`, `maxTime`, `maxMoney`, `winner`, `lastDice`, `optionalAction`, `optionalDeadline`, `stateVersion`.
 - Purpose: authoritative active game metadata.
-- Risks: no atomic transitions; no owner field despite owner being inferred from game ID; optional action has two incompatible formats in code (JSON DTO and colon-delimited string).
+- `optionalAction` is server-created typed JSON bound to the active player and
+  committed `stateVersion`; a concurrent surviving-player membership change
+  rebinds it in the same CAS while invalidating intent from the older snapshot.
+- Risks: no owner field despite owner being inferred from game ID; deprecated raw helpers still contain legacy optional-action formats but are not live transport paths.
 
-Implemented field: `stateVersion` is a base-10 integer. Normal migrated commands
-are atomic; owner inference, numeric turn ordering, and legacy optional-action
-helpers remain compatibility/refactor concerns.
+`stateVersion` is a base-10 integer. `turnOrder` is a JSON array of one to four
+unique positive decimal player IDs, for example `[41,7,103]`; it is created as
+`[ownerId]`, appended in accepted join order, frozen at start, and filtered on
+leave/kick. It must exactly match membership when an order-dependent command
+runs. A missing legacy order may be initialized only for a one-member lobby
+whose sole member is its host; multi-member lobbies and all in-progress games
+fail closed rather than infer order from the membership SET. Completed state is
+never reconstructed. The field uses the game hash's serializer and TTL, is
+private authoritative state, and is removed from public-lobby projections.
 
 ### `game:{gameId}:players`
 
@@ -36,11 +45,11 @@ helpers remain compatibility/refactor concerns.
 - Example: `game:1:players`.
 - Created by: `GameStateService#createGame`.
 - Updated by: `addPlayerToGame`, `addPlayerToGameWithInviteCode`, `removePlayerFromGame`.
-- Read by: lobby/game details, turn rotation, end conditions, ownership scanning.
+- Read by: lobby/game details, membership authorization, and ownership scanning; never used as an ordering source.
 - Deleted by: `deleteGame`, `deleteGameAndPlayers`.
 - TTL: 24h at lobby creation; 30s after `endGame`.
 - Purpose: active game membership.
-- Risks: Redis Set order is undefined, but turn rotation sorts IDs and comments mention join order.
+- Ordering: Redis SET iteration and numeric player IDs have no turn-order semantics; `game:{gameId}.turnOrder` is authoritative.
 
 ### `player:{playerId}`
 
@@ -60,15 +69,19 @@ helpers remain compatibility/refactor concerns.
 - Type: LIST.
 - Example: `game:1:deck`.
 - Created by: `CardService#initialiseDeck`.
-- Updated/read by: `CardService#drawCard`.
-- TTL: none set directly.
+- Updated/read by: the authoritative `TurnCommandService`; deprecated `CardService` remains an unwired compatibility helper.
+- TTL: aligned with the game by the transition store; completion shortens it to 30 seconds.
 - Stored value: card IDs as strings.
-- Purpose: per-game shuffled card deck.
-- Risks: not deleted explicitly unless covered by `deleteGameAndPlayers`? Current deletion deletes only game hash, players set, and player hashes. Deck key can remain.
+- Purpose: isolated per-game cycling card order. A draw removes the head and appends that card to the tail in the same atomic transition as its effect.
+- Static effect contract: MariaDB money-card amount is signed (positive credit,
+  negative cost); transport amount is an absolute board destination. Redis
+  stores only the ordered card IDs, not client-supplied effect values.
+- Risks: final cleanup ownership remains REVAMP-020 scope.
 
 The migrated roll path consumes and replaces this list within the same Lua
-commit as player/game state and aligns its TTL with the game. Its current
-exhaust-and-reshuffle behavior is intentionally preserved for REVAMP-019.
+commit as player/game state and aligns its TTL with the game. If absent or
+empty, all supported MariaDB card IDs are shuffled once to initialize it; used
+cards then cycle rather than disappear.
 
 ### `game:{gameId}:commands`
 

@@ -28,6 +28,16 @@ Runtime JPA schema setting: `spring.jpa.hibernate.ddl-auto=update` in `Sindopoly
 - `square`: 40 board squares.
 - `card`: Chance and Community Chest cards.
 
+`Card.amount` is the canonical server-side effect value: money cards use a
+signed delta (positive credit, negative cost), while transport cards use an
+absolute board destination. MariaDB entrypoint SQL runs only while initializing
+a new container data directory, so changing `init.sql` alone does not repair a
+running container that already holds the historical positive `Pay 20` row.
+`CardDataCompatibilityService` therefore applies one bounded idempotent startup
+update identified by type, title, exact seed description, and old value `20`;
+it changes that row to `-20` and is a no-op for fresh or already-corrected data.
+No schema migration framework or schema change is introduced.
+
 Risk: `trg_player_after_insert` inserts stats rows, then `init.sql` also inserts stats rows for players 1 and 2. Because `stats.player` in raw SQL has no unique constraint, seed may produce duplicate stats rows even though JPA maps the relationship as unique.
 
 ## Indexes and constraints
@@ -62,4 +72,3 @@ Duplication:
 ## Transaction boundaries
 
 No explicit `@Transactional` annotations were found in current main source during audit search. JPA repository operations use default repository transactions, but cross-resource Redis + MariaDB updates are not transactional as a unit.
-

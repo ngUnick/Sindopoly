@@ -42,10 +42,10 @@ rename or Redis Cluster migration.
 
 | Key | Type / format | Ownership and purpose | Lifecycle |
 | --- | --- | --- | --- |
-| `game:<gameId>` | HASH of string fields | Authoritative game state. `stateVersion` is a base-10 non-negative safe integer. | 24 hours from lobby creation, retained on start, 30 seconds after completion. |
+| `game:<gameId>` | HASH of string fields | Authoritative game state. `stateVersion` is a base-10 non-negative safe integer; `turnOrder` is a JSON array of 1-4 unique positive IDs in accepted join order. | 24 hours from lobby creation, retained on start, 30 seconds after completion. |
 | `game:<gameId>:players` | SET of decimal player IDs | Authoritative membership. | Same transition-managed TTL as the game. |
 | `player:<playerId>` | HASH of string fields | Authoritative active player state. | Initialized at start with a 2-hour TTL; completion uses 30 seconds. |
-| `game:<gameId>:deck` | LIST of decimal card IDs | Per-game shuffled remaining-card order; current exhaust-and-reshuffle lifecycle is preserved. | Same TTL as the game when present. |
+| `game:<gameId>:deck` | LIST of decimal card IDs | Per-game isolated cycling card order; an atomic draw moves the head to the tail while applying its effect. | Same TTL as the game when present. |
 | `game:<gameId>:commands` | HASH; field is normalized command UUID, value is `{"fingerprint":string,"stateVersion":number,"result":JSON}` | Idempotency fingerprint, committed version, and structurally bounded semantic result. This is active-state retry data, not an audit log. | Same remaining TTL as the game; retained for 30 seconds when owner-leave deletes lobby state. Maximum 4096 accepted IDs; new IDs fail closed at capacity. |
 
 For an active game created before REVAMP-018, a missing `stateVersion` is read as
@@ -155,14 +155,18 @@ MariaDB schema or migration changed in REVAMP-018.
 
 ## Compatibility and known deferrals
 
-Responses for roll/action include `stateVersion` and `replayed`; lobby mutation
-responses now use JSON consistently. The frontend owns a monotonic per-game
-version tracker and generates a new UUID only for a new user intent. Numeric-ID
-turn ordering remains unchanged for REVAMP-019.
+Responses for roll/action/pass include `stateVersion` and `replayed`; lobby
+mutation responses use JSON consistently. The frontend owns a monotonic
+per-game version tracker and generates a new UUID only for a new user intent.
+Only affordable unowned property and jailed pre-roll payment create typed,
+server-owned optional actions; informational/automatic square results require
+no follow-up mutation.
 
-REVAMP-018 deliberately preserves the documented rent, tax, card amount/deck
-lifecycle, Jail/Go-To-Jail, numeric turn-order, and doubles defects for
-REVAMP-019. Timer ownership, cleanup races,
+REVAMP-019 repairs the approved rent, tax, card, Jail/Go-To-Jail, Start reward,
+purchase/decline, frozen join-order, and no-doubles behavior inside this same
+transition path. A missing `turnOrder` is initialized only for an unambiguous
+single-host lobby; ambiguous lobbies and in-progress legacy games fail closed.
+No membership SET iteration or numeric sorting reconstructs order. Timer ownership, cleanup races,
 durable event delivery, multi-instance recovery, and exactly-once MariaDB stats
 finalization remain explicit follow-up work rather than hidden guarantees.
 
@@ -176,10 +180,12 @@ commands, deck, and current player keys to 30 seconds.
 ## Verification
 
 - Fast tests cover command metadata, UUID/version validation, fingerprint
-  binding, result publication semantics, and thin-controller delegation.
+  binding, result publication semantics, thin-controller delegation, and the
+  approved dice/movement/square/optional-action/jail/order rule matrix.
 - Real Redis Testcontainers tests cover first apply, exact replay, stale
   commands, command-ID collision, concurrent competing commands, concurrent
   duplicates, validation-before-write/no partial mutation, absent creation, and
-  TTL alignment.
+  TTL alignment, frozen-order lifecycle, atomic rent/tax/purchase effects, and
+  per-game deck isolation/cycling.
 - The existing Redis/MariaDB REST integration flow uses the public command
   contract, and the frontend production build verifies the client migration.

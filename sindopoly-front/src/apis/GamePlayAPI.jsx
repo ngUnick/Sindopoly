@@ -39,6 +39,7 @@ async function assembleBoard(gameId) {
       playerTurn: gameHash.playerTurn,
       winner:     gameHash.winner,
       stateVersion: gameHash.stateVersion,
+      optionalAction: gameHash.optionalAction,
     },
     ...normalized.slice(1),
   ];

@@ -324,7 +324,7 @@ Two choices are especially important:
 
 ### REVAMP-019 — Repair approved dice, turn, and square-action behavior
 
-- Status: `READY`; Priority: `P1`; Category: `GAME_FLOW`.
+- Status: `DONE`; Priority: `P1`; Category: `GAME_FLOW`.
 - Rationale / evidence: rent direction likely corrupts balances; jail mapping conflicts; turn order is not join order; doubles are undefined.
 - Desired outcome: state-machine-approved dice, movement, optional action, rent/tax/card/jail, and turn-order behavior with explicit rule decisions.
 - Dependencies: REVAMP-010, REVAMP-014, REVAMP-018. Blocks: REVAMP-023 and later cleanup.
@@ -339,7 +339,7 @@ Two choices are especially important:
 
 ### REVAMP-020 — Make timer, cleanup, and end-game processing transition-safe
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `GAME_FLOW`.
+- Status: `READY`; Priority: `P1`; Category: `GAME_FLOW`.
 - Rationale / evidence: scheduler and turn flow independently end/cleanup games and publish inconsistent end events.
 - Desired outcome: timers submit the same versioned commands as players; end/cleanup is idempotent with defined ownership and lifecycle.
 - Dependencies: REVAMP-014, REVAMP-018, REVAMP-019. Blocks: REVAMP-021, REVAMP-023, REVAMP-030.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-019 — Repair approved dice, turn, and
-square-action behavior**. Later work remains blocked by the required rule,
-timer, and synchronization prerequisites.
+The immediate `READY` item is **REVAMP-020 — Make timer, cleanup, and end-game
+processing transition-safe**. Later work remains blocked by the required timer
+and synchronization prerequisites.
 
 ## Planning review
 

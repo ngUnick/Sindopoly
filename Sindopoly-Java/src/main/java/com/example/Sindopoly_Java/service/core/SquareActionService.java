@@ -64,8 +64,8 @@ public class SquareActionService {
                 return SquareEventDto.justInfo("parking", "Free Parking", 0);
 
             case TAX:
-                int tax = Optional.ofNullable(sq.getPrice()).orElse(0);
-                return SquareEventDto.justInfo("tax", "Pay tax: €" + tax, -tax);
+                int tax = Math.abs(Optional.ofNullable(sq.getPrice()).orElse(0));
+                return SquareEventDto.justInfo("tax", "Pay tax: €" + tax, tax);
 
             case CARD:
                 Card c = cardSvc.drawCard(gameId);
@@ -76,9 +76,10 @@ public class SquareActionService {
                 );
 
             case JAIL:
+                return SquareEventDto.justInfo("jail", "Just visiting", 0);
+
             case GOJAIL:
-                int fee = 50;  // or sq.getFee()
-                return SquareEventDto.jailOffer(fee);
+                return SquareEventDto.justInfo("goToJail", "Go to Jail", 0);
 
             default:
                 return peekProperty(playerId, sq, gameId);
@@ -268,11 +269,10 @@ public class SquareActionService {
         int bal = readMoney(playerId);
         if (bal < fee) throw new IllegalStateException("Insufficient funds");
         writeMoney(playerId, bal - fee);
-        // send to jail square 10
+        // This compatibility helper now mirrors the approved pay-to-exit rule.
         hashOps.putAll("player:" + playerId, Map.of(
-          "position", "10",
-          "jail",     "true",
-          "jailTime", "3"
+          "jail",     "false",
+          "jailTime", "0"
         ));
     }
 
@@ -281,7 +281,7 @@ public class SquareActionService {
         switch (ev.getType()) {
           case "rentDue" -> {
             int rent = ev.getAmount();
-            writeMoney(playerId, readMoney(playerId) + rent);
+            writeMoney(playerId, readMoney(playerId) - rent);
             int owner = Integer.parseInt(ev.getOwnerId());
             writeMoney(owner, readMoney(owner) + rent);
           }
@@ -290,7 +290,7 @@ public class SquareActionService {
             hashOps.put("player:" + playerId,
                         "position",
                         String.valueOf(ev.getAmount()));
-          case "tax" -> writeMoney(playerId, readMoney(playerId) - ev.getAmount());
+          case "tax" -> writeMoney(playerId, readMoney(playerId) - Math.abs(ev.getAmount()));
           case "goToJail" -> {
             hashOps.putAll("player:" + playerId, Map.of(
               "position", "10",

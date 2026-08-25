@@ -98,7 +98,7 @@ class TurnCommandServiceTest {
 
     private GameSnapshot snapshot() {
         return new GameSnapshot(1,
-                Map.of("status", "inProgress", "playerTurn", "1", "stateVersion", "0"),
+                Map.of("status", "inProgress", "playerTurn", "1", "stateVersion", "0", "turnOrder", "[1]"),
                 Set.of("1"),
                 Map.of(1, Map.of("position", "0", "money", "1500", "jail", "false", "jailTime", "0",
                         "bankrupt", "false", "properties", "[]", "afk", "false")),

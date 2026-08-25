@@ -125,19 +125,31 @@ Landing on Jail is just visiting. Go To Jail immediately places the player at
 10, marks them jailed, and assigns three jail turns. The pre-roll payment
 option uses the existing optional-action phase; passing skips/decrements/rotates
 and a third skipped turn releases the player for their next normal turn.
+Whenever rotation selects a still-jailed player, that same transition creates
+the version-bound `PAY_JAIL_EXIT` option. Paying clears jail and leaves that
+player active in `AWAITING_ROLL`; it does not roll automatically. Poll/reconnect
+recovery projects the existing option, so no extra mutation is needed to reveal
+the choice.
 
-Join order is frozen at game start. It is an explicit ordered state distinct
-from membership; removal preserves remaining relative order and rotation picks
-the next active player. Numeric player-ID sorting is legacy behavior, not a
-target ordering rule.
+Join order is persisted in `game:{gameId}.turnOrder` as players join and frozen
+at game start. It is explicit ordered state distinct from membership; removal
+preserves remaining relative order and rotation picks the next active player.
+Numeric player-ID sorting survives only in unwired deprecated helpers, not the
+authoritative command path.
 
-CURRENT legacy representations requiring migration:
+Implemented migration state and remaining legacy representations:
 
-- JSON `SquareEventDto` in `game:{gameId}.optionalAction`;
-- colon-delimited `playerId:type:arg` helpers in `GameStateService`;
-- `/action` body IDs that can disagree with path IDs;
+- authoritative `optionalAction` is typed JSON bound to game, actor, committed
+  version, action type, arguments/cost, and declinability;
+- an unrelated in-progress membership change preserves a surviving active
+  player's option but rebinds it to the newly committed version atomically, so
+  intent submitted against the prior snapshot is stale;
+- deprecated `SquareEventDto` and colon-delimited helpers remain unwired cleanup
+  candidates;
+- `/action` path/body identity agreement is enforced and server session identity
+  remains authoritative;
 - selected events `actionCompleted`, `turnFinished`, `gameOver`, `gameEnded`;
-- no broker notification for current dice throw.
+- notifications remain non-durable and snapshot recovery remains required.
 
 ## Redis and durable-data mapping
 
@@ -145,14 +157,14 @@ CURRENT legacy representations requiring migration:
 | --- | --- | --- | --- |
 | `game:{id}.status` (`lobby`, `inProgress`, `ended`) | Lifecycle approximation | `LOBBY`, `IN_PROGRESS`, `COMPLETED` | REVAMP-018/020 |
 | `game:{id}.playerTurn` | Active player | Server-owned active player | REVAMP-018 |
-| presence of `optionalAction` | Implicit phase | `AWAITING_OPTIONAL_ACTION`; absence during active game implies `AWAITING_ROLL` after migration | REVAMP-018/019 |
-| `lastDice` | Last total | Roll result metadata, never client authority | REVAMP-018/019 |
+| presence of typed `optionalAction` | Implemented phase marker bound to actor/version/type | `AWAITING_OPTIONAL_ACTION`; absence during active game implies `AWAITING_ROLL` | REVAMP-018/019 |
+| `lastDice` | Last server total | Roll result metadata, never client authority | REVAMP-018/019 |
 | `timer`, `startTime`, `maxTime`, `maxMoney` | Current terminal/time inputs | Version-guarded lifecycle/timeout policy | REVAMP-020 |
 | `winner` | Current result | Committed terminal result | REVAMP-020 |
 | `optionalDeadline` | Partial timeout metadata | Timer references turn/phase/version | REVAMP-020 |
-| `game:{id}:players` | Membership set | Membership plus separately persisted frozen turn order; numeric-ID sorting must be removed | REVAMP-018 |
+| `game:{id}:players` plus `game:{id}.turnOrder` | Membership SET plus explicit JSON join order | Membership and separately persisted frozen turn order | REVAMP-019 |
 | `player:{id}` hashes | Active money/position/jail/properties | Active player state, including jailed flag and remaining jail turns | REVAMP-018/019 |
-| current per-game card list | Incomplete Redis-backed deck | Isolated cycling game deck retaining money/transport effect data | REVAMP-019/020 |
+| `game:{id}:deck` | Isolated cycling Redis LIST | Money/transport card order; atomic head-to-tail draw | REVAMP-019; cleanup REVAMP-020 |
 | no field | No version/command marker | `stateVersion` and bounded idempotency result | REVAMP-018 |
 
 No key/field is renamed by this document. Redis remains authoritative for
@@ -212,22 +224,23 @@ deck, command markers, and timer metadata. A late/duplicate cleanup is safe.
 | --- | --- | --- | --- |
 | `GameStateControllerCharacterizationTest` create/join/start | Current adapter responses/prechecks | `CreateGame`, `JoinGame`, `StartGame` | Partial match; actor authorization missing |
 | same remove plus removed check-end | Authenticated self-leave remains; public completion adapter removed | `LeaveGame`, internal completion | Partial match; leave atomicity/version pending |
-| `TurnControllerCharacterizationTest` throw | Path IDs forwarded | `RollDice` adapter | Actor/command/version guards missing |
-| same action mismatch | Body identity wins | Optional-action command | DEFECT |
-| same pass | Clears option and finishes turn | `PassOptionalAction` | Partial match; auth/version missing |
-| `TurnServiceCharacterizationTest` active throw | State changes; no broker event | Atomic roll transition | Partial match; event/atomicity missing |
-| same wrong-player throw | Current turn check rejects | Roll active-player guard | Matches target guard, actor trust incomplete |
-| same optional buy | Clears option, rotates, publishes | Optional resolution | Partial match; legacy shape/event |
-| `MovementServiceRuleTest` | Modulo movement/pass flag | Internal movement rule | Continues unchanged; add Start reward coverage later |
-| `DiceServiceRuleTest` | Two server-source values summed | Server-authoritative roll | Continues unchanged; add no-doubles-flow coverage later |
-| `SquareActionServiceRuleTest` buy offer | Affordable unowned property offers buy | Optional action | Current matching evidence continues; add stale/decline coverage later |
-| same rent/tax/card/jail | Double debit, sign increase, lost card amount, contradictory jail offer | Square resolution | Existing characterizations expected to change as target defects are repaired |
+| `TurnControllerCharacterizationTest` throw | Server actor plus command/version headers | `RollDice` adapter | Matches implemented entry guards |
+| same action mismatch | Mismatched body/path actor is rejected | Optional-action command | Matches target guard |
+| same pass | Typed choice clears/decrements and rotates | `PassOptionalAction` | Matches implemented entry guards |
+| `TurnCommandGameplayRuleTest` roll cases | One transition applies movement and automatic square effect or creates one typed choice | Atomic roll transition | Matches implemented rule/atomicity boundary |
+| same wrong-player/stale cases | Reject before commit | Roll/action guards | Matches target guards |
+| same optional buy/pass cases | Typed option clears and rotates exactly once | Optional resolution | Matches target behavior |
+| `MovementServiceRuleTest` plus gameplay tests | Modulo movement/pass flag and authoritative reward | Internal movement rule | Covers ordinary/pass/exact Start behavior |
+| `DiceServiceRuleTest` plus gameplay tests | Two server-source values summed | Server-authoritative roll | Covers normal and equal-die/no-doubles flow |
+| `SquareActionServiceRuleTest` plus gameplay tests | Affordable unowned property offers buy | Optional action | Covers affordability, ownership, stale, accept, and decline |
+| gameplay and real-Redis integration tests | Positive rent/tax, retained/cycling cards, distinct Jail behavior | Square resolution | Repaired behavior covered atomically |
 
-Later tests must cover Start passing/exact landing reward; rent transfer and
+REVAMP-019 tests cover Start passing/exact landing reward; rent transfer and
 self-owner/no-rent; positive-cost tax; money/transport effects and per-game deck
-cycling; Jail visiting, Go To Jail, payment, three skipped turns/release;
-frozen order and leave preservation; completion trigger, total assets, and both
-tie-breaks. REVAMP-011 should test lifecycle/phase snapshots, adapter error
+cycling; Jail visiting, Go To Jail, payment, three skipped turns/release; and
+frozen order/leave preservation. REVAMP-020 must finish completion trigger,
+total assets, both tie-breaks, cleanup, and timer interaction. Integration tests
+cover lifecycle/phase snapshots, adapter error
 categories, Redis isolation, and durable metadata boundaries without treating
 the listed defects as target contracts. REVAMP-021/022 cover subscription
 authorization, post-commit versioned events, duplicates/gaps, and snapshot

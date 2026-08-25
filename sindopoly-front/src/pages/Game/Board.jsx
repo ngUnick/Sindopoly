@@ -288,6 +288,7 @@ const Board = () => {
   // holds the event data (buyOffer, rentDue, card, jailOffer…)
   // holds the raw ThrowResultDto: { dice,newPosition,passedGo,squareType,data }
   const [turnResult,  setTurnResult]   = useState(null);
+  const optionalPromptKeyRef = useRef(null);
   // whether to show the modal overlay
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -602,6 +603,28 @@ const Board = () => {
       setPlayersAmount(board.length);
       setIsMyTurn(playerTurn == playerId);
       playerTurn === playerId ? enableDice() : disableDice();
+
+      // Reconnect/poll recovery for server-created choices, including a jailed
+      // player selected by the previous player's atomic turn completion.
+      if (playerTurn == playerId && board[0].optionalAction) {
+        try {
+          const pending = JSON.parse(board[0].optionalAction);
+          const promptKey = `${pending.type}:${pending.stateVersion}`;
+          if (String(pending.playerId) === String(playerId) && optionalPromptKeyRef.current !== promptKey) {
+            optionalPromptKeyRef.current = promptKey;
+            setTurnResult({
+              squareType: pending.type === "PAY_JAIL_EXIT" ? 10 : 5,
+              data: pending.cost,
+              newPosition: pending.squareId
+            });
+            setModalVisible(true);
+          }
+        } catch (error) {
+          console.error("Invalid server optional-action projection", error);
+        }
+      } else if (!board[0].optionalAction) {
+        optionalPromptKeyRef.current = null;
+      }
 
       // completed?
       if (status === "ended") {
@@ -999,8 +1022,7 @@ const Board = () => {
         newPosition,
         passedGo,
         squareType,
-        data,
-        cardMessage     // ← new field
+        data
       } = tr;
 
       // disable UI & show dice
@@ -1013,7 +1035,7 @@ const Board = () => {
       console.log("💥 raw throwDice()", tr);
 
       // 2️⃣ always show modal with the raw result
-      setTurnResult({ ...tr, cardMessage }); // ensure we pass it through
+      setTurnResult(tr);
       setModalVisible(true);
       // your modal will read squareType/data to show Yes/No or just OK
 
@@ -1021,7 +1043,6 @@ const Board = () => {
         console.error("Turn failed:", e);
         // optionally re-sync
         await handleTick();
-        setIsMyTurn(true);
       }
   };
 
@@ -1029,17 +1050,21 @@ const Board = () => {
   const handleModalChoice = async (choice) => {
     if (!turnResult) return;
     try {
-      const { type, squareId } = turnResult;
-
-      // 1️⃣ call /action with yes=true|false
-      await TurnAPI.doAction(gameId, playerId, choice);
+      // Automatic square effects were already committed with RollDice. Only
+      // genuine server-created choices submit a second command.
+      if (isYesNo()) {
+        if (choice) {
+          await TurnAPI.doAction(gameId, playerId, true);
+        } else {
+          await TurnAPI.pass(gameId, playerId);
+        }
+      }
 
       setModalVisible(false);
       setTurnResult(null);
 
       // 3️⃣ refresh & re-enable
        await handleTick();
-       setIsMyTurn(true);
      } catch (e) {
        console.error("Action failed:", e);
      }
@@ -1055,11 +1080,9 @@ const Board = () => {
 
     switch (squareType) {
       case 1: // transport
-        if (cardMessage) return cardMessage
         return `Μεταφέρθηκες στο τετράγωνο #${sqName}.`;
 
       case 2: // money card
-        if (cardMessage) return cardMessage
         return data >= 0
           ? `Έλαβες €${data}!`
           : `Πλήρωσε €${-data}.`;
@@ -1082,6 +1105,9 @@ const Board = () => {
       case 8: // just visiting
         return `Έπεσες στη ΦΥΛΑΚΗ, αλλά είσαι μόνο για επίσκεψη.`;
 
+      case 10: // jailed player's pre-roll payment option
+        return `Θες να πληρώσεις €${data} για να βγεις από τη ΦΥΛΑΚΗ και να ρίξεις ζάρια;`;
+
       case 9: // free parking
         return `Έπεσες στη ΝΑΥΤΙΛΟ. Χαλάρωσε και περίμενε ξανά τον γύρο σου.`;
 
@@ -1092,8 +1118,7 @@ const Board = () => {
 
 
   const isYesNo = () => {
-    // we want Yes/No for buyOffer (5) and jailOffer (8)
-    return turnResult.squareType === 5 || turnResult.squareType === 8;
+    return turnResult.squareType === 5 || turnResult.squareType === 10;
   };
 
 

@@ -69,7 +69,7 @@ public class GameLifecycleCommandService {
     }
 
     private String winner(GameSnapshot snapshot) {
-        List<Integer> order = snapshot.members().stream().map(Integer::parseInt).sorted().toList();
+        List<Integer> order = TurnOrder.parseRequired(mapper, snapshot);
         return snapshot.members().stream().map(Integer::parseInt)
                 .max(Comparator.comparingInt((Integer id) -> assetValue(snapshot.players().get(id)))
                         .thenComparingInt(id -> money(snapshot.players().get(id)))

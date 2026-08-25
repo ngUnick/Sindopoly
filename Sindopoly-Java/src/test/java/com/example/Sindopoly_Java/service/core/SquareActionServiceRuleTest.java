@@ -68,36 +68,34 @@ class SquareActionServiceRuleTest {
     }
 
     @Test
-    void taxSquareProducesNegativePaymentAmountFromStaticSquareFixture() {
+    void taxSquareNormalizesStaticNegativeSeedToPositiveCost() {
         Square tax = square(Square.SquareType.TAX, 200, null);
         when(squareRepository.findById(4)).thenReturn(Optional.of(tax));
 
         SquareEventDto event = service.peekSquare(1, 4, 7);
 
         assertEquals("tax", event.getType());
-        assertEquals(-200, event.getAmount());
+        assertEquals(200, event.getAmount());
     }
 
     @Test
-    void currentTaxApplicationAddsMoneyWhenGivenPeekTaxAmount() {
+    void taxApplicationSubtractsPositiveCost() {
         money(1, 1000);
 
-        service.applyAutomatic(SquareEventDto.justInfo("tax", "Pay tax", -200), 1, 7);
+        service.applyAutomatic(SquareEventDto.justInfo("tax", "Pay tax", 200), 1, 7);
 
-        // Characterization only: REVAMP-019 decides/fixes tax semantics.
-        assertEquals("1200", field("player:1", "money"));
+        assertEquals("800", field("player:1", "money"));
     }
 
     @Test
-    void currentRentApplicationDebitsBothPayerAndOwner() {
+    void rentApplicationTransfersPositiveAmountFromPayerToOwner() {
         money(1, 1000);
         money(2, 500);
 
         service.applyAutomatic(SquareEventDto.rentDue("2", 200), 1, 7);
 
-        // Characterization only: current amount is negative and is added to both balances.
         assertEquals("800", field("player:1", "money"));
-        assertEquals("300", field("player:2", "money"));
+        assertEquals("700", field("player:2", "money"));
     }
 
     @Test
@@ -114,7 +112,7 @@ class SquareActionServiceRuleTest {
     }
 
     @Test
-    void cardSquareMapsStaticCardMetadataButCurrentEventCarriesNoAmount() {
+    void cardSquareRetainsStaticCardEffectAmount() {
         Square cardSquare = square(Square.SquareType.CARD, null, null);
         Card card = org.mockito.Mockito.mock(Card.class);
         when(card.getTitle()).thenReturn("Scholarship");
@@ -127,31 +125,33 @@ class SquareActionServiceRuleTest {
 
         assertEquals("card", event.getType());
         assertEquals("money", event.getCardType());
-        assertEquals(0, event.getAmount());
-    }
-
-    @ParameterizedTest
-    @EnumSource(value = Square.SquareType.class, names = {"JAIL", "GOJAIL"})
-    void currentJailSquaresBothProduceSameJailOffer(Square.SquareType type) {
-        Square square = square(type, null, null);
-        when(squareRepository.findById(10)).thenReturn(Optional.of(square));
-
-        SquareEventDto event = service.peekSquare(1, 10, 7);
-
-        assertEquals("jailOffer", event.getType());
-        assertEquals(50, event.getFee());
+        assertEquals(250, event.getAmount());
     }
 
     @Test
-    void optionalJailPaymentDeductsFeeAndSetsCurrentJailState() {
+    void jailIsVisitingAndGoToJailIsAnImmediateOutcome() {
+        Square jail = square(Square.SquareType.JAIL, null, null);
+        when(squareRepository.findById(10)).thenReturn(Optional.of(jail));
+        assertEquals("jail", service.peekSquare(1, 10, 7).getType());
+
+        Square goToJail = square(Square.SquareType.GOJAIL, null, null);
+        when(squareRepository.findById(30)).thenReturn(Optional.of(goToJail));
+        assertEquals("goToJail", service.peekSquare(1, 30, 7).getType());
+    }
+
+    @Test
+    void optionalJailPaymentDeductsFeeAndReleasesPlayer() {
         money(1, 100);
+        redisState.get("player:1").put("position", "10");
+        redisState.get("player:1").put("jail", "true");
+        redisState.get("player:1").put("jailTime", "3");
 
         service.completeOptionalJail(7, 1, 50);
 
         assertEquals("50", field("player:1", "money"));
         assertEquals("10", field("player:1", "position"));
-        assertEquals("true", field("player:1", "jail"));
-        assertEquals("3", field("player:1", "jailTime"));
+        assertEquals("false", field("player:1", "jail"));
+        assertEquals("0", field("player:1", "jailTime"));
     }
 
     private Square square(Square.SquareType type, Integer price, Integer rent) {

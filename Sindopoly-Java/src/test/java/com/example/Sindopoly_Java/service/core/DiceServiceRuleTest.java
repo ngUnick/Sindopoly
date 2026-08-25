@@ -35,6 +35,13 @@ class DiceServiceRuleTest {
         assertEquals(0, values.size());
     }
 
+    @Test
+    void doubleValuesRemainOnlyAnOrdinaryServerGeneratedTotal() {
+        DiceService dice = new DiceService(sequence(4, 4));
+
+        assertEquals(8, dice.roll());
+    }
+
     private static RandomIntGenerator sequence(int... values) {
         Deque<Integer> results = new ArrayDeque<>();
         for (int value : values) {

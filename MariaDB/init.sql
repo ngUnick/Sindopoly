@@ -239,7 +239,7 @@ VALUES ('Community Chest', 'Πέρασες επιτέλους τη «Σύνθε�
 
 -- Example 7
 INSERT INTO card (title, description, type, amount)
-VALUES ('Community Chest', 'Πρέπει να αγοράσεις εξαρτήματα για εργαστήριο ηλεκτρονικής. Πλήρωσε $20.', 'money', 20);
+VALUES ('Community Chest', 'Πρέπει να αγοράσεις εξαρτήματα για εργαστήριο ηλεκτρονικής. Πλήρωσε $20.', 'money', -20);
 
 
 -- Example 8

@@ -34,4 +34,13 @@ export const TurnAPI = {
     // { newBalance, acquiredProperties, nextPlayerId }
     return await readCommandResponse(res, gameId);
   },
+
+  /** Decline the server-owned purchase or jail-payment option. */
+  pass: async (gameId, playerId) => {
+    const res = await apiFetch(
+      `${API_BASE_URL}/api/turn/${gameId}/${playerId}/pass`,
+      { method: "POST", headers: commandHeaders(gameId) }
+    );
+    return await readCommandResponse(res, gameId);
+  },
 };

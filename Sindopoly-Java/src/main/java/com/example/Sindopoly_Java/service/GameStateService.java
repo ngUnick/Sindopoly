@@ -214,6 +214,8 @@ public class GameStateService {
                     String gameId = key.replace("game:", "");
 
                     Map<String, String> gameData = hashOps.entries(key);
+                    // Canonical turn order is private active-game state, not public discovery metadata.
+                    gameData.remove("turnOrder");
                     /* creator is the owner → same as gameId */
                     String creatorIdStr = gameId;
                     String creatorName  = playerRepo.findById(Integer.parseInt(creatorIdStr))

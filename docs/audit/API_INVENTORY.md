@@ -85,11 +85,32 @@ Evidence: `sindopoly-front/src/apis/GamePlayAPI.jsx`; no matching mappings found
 
 | Method | Path | Controller method | Request | Response | State/effects | Main concerns |
 | --- | --- | --- | --- | --- | --- | --- |
-| POST | `/{gameId}/{playerId}/throw` | `throwDice` | path + command headers | `ThrowResultDto` with version/replay metadata | Snapshot calculation plus atomic Redis transition; post-commit notification | Exact retry is returned before dice generation; stale/competing command is `409`. |
-| POST | `/{gameId}/{playerId}/action` | `doAction` | path + `ActionRequestDto` choice + command headers | `ActionResultDto` with version/replay metadata | Snapshot calculation, atomic optional-action/player/turn transition, post-commit notification | Session/path/body identity agree; fingerprint binds the semantic choice. |
-| POST | `/{gameId}/{playerId}/pass` | `passOptional` | path + command headers | `ActionResultDto` with version/replay metadata | Atomically clears option and advances frozen order | Membership/active/pending phase and expected version enforced. |
+| POST | `/{gameId}/{playerId}/throw` | `throwDice` | path + command headers | `ThrowResultDto` with authoritative square result plus version/replay metadata | One atomic roll/movement/automatic-square transition, or a typed purchase/jail-payment option | Exact retry precedes dice/card draw; stale/competing command is `409`; doubles have no special flow. |
+| POST | `/{gameId}/{playerId}/action` | `doAction` | path + `ActionRequestDto` choice + command headers | `ActionResultDto` with version/replay metadata | Atomically accepts typed `PURCHASE_PROPERTY` or `PAY_JAIL_EXIT` | Session/path/body identity, active actor, option actor/version/type, current price/ownership/funds, and fingerprint are checked. |
+| POST | `/{gameId}/{playerId}/pass` | `passOptional` | path + command headers | `ActionResultDto` with version/replay metadata | Declines purchase and rotates, or skips/decrements a jailed turn and rotates | Membership/active/pending phase, typed option, and expected version enforced. |
 
 Commented obsolete endpoints remain in `TurnController`.
+For bounded backward compatibility, `POST .../action` with `yes=false` enters
+the same typed pass calculation and validation as `/pass`; new clients use the
+explicit `/pass` endpoint. It is not a separate rule path.
+
+Authenticated curl/Postman requests preserve the `JSESSIONID` cookie and CSRF
+header described in `docs/security/GAME_COMMAND_AUTHORIZATION.md`, then add a
+new UUID and the latest snapshot version for each new intent:
+
+```bash
+curl -b player.cookies -H "$CSRF_HEADER: $CSRF_TOKEN" \
+  -H "X-Sindopoly-Command-Id: $COMMAND_UUID" \
+  -H "X-Sindopoly-Expected-Version: $STATE_VERSION" -X POST \
+  http://localhost:8080/api/turn/GAME_ID/PLAYER_ID/throw
+
+# Use /action with JSON {"gameId":GAME_ID,"playerId":PLAYER_ID,"yes":true} to accept a typed
+# purchase/jail option, or /pass with no body to decline/skip it.
+```
+
+Automatic rent, tax, Start, card, Jail/Go-To-Jail, owned-property, and
+unaffordable-property outcomes are already committed by `/throw`; clients must
+not call `/action` for those informational results.
 
 ## Statistics API: `/api/statistics`
 
