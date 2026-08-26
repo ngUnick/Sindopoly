@@ -20,22 +20,26 @@ import com.example.Sindopoly_Java.service.transition.GameFinalizationService;
 import com.example.Sindopoly_Java.service.transition.GameLifecycleCommandService;
 import com.example.Sindopoly_Java.service.transition.GameLifecycleProperties;
 import com.example.Sindopoly_Java.service.transition.TerminalGameResult;
+import com.example.Sindopoly_Java.service.GameLoopScheduler;
 import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.model.dto.ActionResultDto;
 import com.example.Sindopoly_Java.realtime.GameEventEnvelope;
 import com.example.Sindopoly_Java.realtime.GameEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.user.SimpUserRegistry;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -51,6 +55,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.MountableFile;
 
 import java.nio.file.Path;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.WebSocketHandshakeException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayDeque;
@@ -68,6 +77,7 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doReturn;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -80,11 +90,14 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
  * repository's existing initialization SQL, while Redis is emptied only through
  * its container connection before and after each test.
  */
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("integration")
 @Testcontainers
 class IntegrationInfrastructureIT {
+
+    @LocalServerPort
+    private int serverPort;
 
     private static final int REDIS_PORT = 6379;
 
@@ -163,17 +176,297 @@ class IntegrationInfrastructureIT {
     @MockBean
     private FinalizationFailureProbe finalizationFailureProbe;
 
+    @MockBean
+    private GameLoopScheduler gameLoopScheduler;
+
     @SpyBean
     private SimpMessagingTemplate broker;
+
+    @SpyBean
+    private DiceService applicationDice;
+
+    @Autowired
+    private SimpUserRegistry simpUsers;
 
     @BeforeEach
     @AfterEach
     void clearDedicatedRedisContainer() {
+        reset(applicationDice);
         // Dynamic properties above make this safe: this never targets localhost
         // or a developer/shared Redis instance.
         try (RedisConnection connection = redis.getConnectionFactory().getConnection()) {
             connection.serverCommands().flushDb();
         }
+    }
+
+    @Test
+    void realWebSocketHandshakeRequiresAnAuthenticatedHttpSession() {
+        URI endpoint = URI.create("ws://127.0.0.1:" + serverPort + "/ws/websocket");
+
+        assertThatThrownBy(() -> HttpClient.newHttpClient().newWebSocketBuilder()
+                .buildAsync(endpoint, new java.net.http.WebSocket.Listener() { }).join())
+                .hasCauseInstanceOf(WebSocketHandshakeException.class);
+    }
+
+    @Test
+    void realStompRejectsNonMemberMalformedSubscriptionsAndClientSends() throws Exception {
+        URI base = baseUri();
+        try (GameBoundaryClient host = GameBoundaryClient.create(base, objectMapper, uniqueName("WsHost"));
+             GameBoundaryClient outsider = GameBoundaryClient.create(base, objectMapper, uniqueName("WsOut"));
+             GameBoundaryClient stale = GameBoundaryClient.create(base, objectMapper, uniqueName("WsStale"))) {
+            assertThat(host.post("/api/game-state/create",
+                    "{\"ownerId\":" + host.playerId() + ",\"visibility\":\"public\"}",
+                    UUID.randomUUID(), -1).status()).isEqualTo(200);
+
+            try (GameBoundaryClient.RealtimeConnection denied = outsider.connect()) {
+                denied.subscribeUnchecked("/topic/game/" + host.playerId());
+                assertThat(denied.awaitFailure()).isNotNull();
+            }
+            for (String destination : List.of(
+                    "/topic/game/not-a-number", "/topic/game/7/private", "/topic/game/0")) {
+                try (GameBoundaryClient.RealtimeConnection malformed = host.connect()) {
+                    malformed.subscribeUnchecked(destination);
+                    assertThat(malformed.awaitFailure()).isNotNull();
+                }
+            }
+            try (GameBoundaryClient.RealtimeConnection sender = host.connect()) {
+                sender.send("/app/game/" + host.playerId());
+                assertThat(sender.awaitFailure()).isNotNull();
+            }
+
+            jdbc.update("DELETE FROM stats WHERE player = ?", stale.playerId());
+            jdbc.update("DELETE FROM player WHERE id = ?", stale.playerId());
+            assertThatThrownBy(stale::connect)
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class);
+        }
+    }
+
+    @Test
+    void revokedMembershipStopsOutboundDeliveryAndSnapshotAccess() throws Exception {
+        URI base = baseUri();
+        try (GameBoundaryClient host = GameBoundaryClient.create(base, objectMapper, uniqueName("RevokeHost"));
+             GameBoundaryClient member = GameBoundaryClient.create(base, objectMapper, uniqueName("RevokeMember"))) {
+            int gameId = host.playerId();
+            assertThat(host.post("/api/game-state/create",
+                    "{\"ownerId\":" + gameId + ",\"visibility\":\"public\"}",
+                    UUID.randomUUID(), -1).status()).isEqualTo(200);
+            assertThat(member.post("/api/game-state/add/" + gameId + "/" + member.playerId(), null,
+                    UUID.randomUUID(), 0).status()).isEqualTo(200);
+
+            try (GameBoundaryClient.RealtimeConnection hostEvents = host.connect();
+                 GameBoundaryClient.RealtimeConnection memberEvents = member.connect()) {
+                hostEvents.subscribe("/topic/game/" + gameId);
+                awaitSubscriptions("/topic/game/" + gameId, 1);
+                memberEvents.subscribe("/topic/game/" + gameId);
+                awaitSubscriptions("/topic/game/" + gameId, 2);
+                hostEvents.clearEvents();
+                memberEvents.clearEvents();
+
+                assertThat(member.post("/api/game-state/" + gameId + "/remove-player?playerId="
+                        + member.playerId(), null, UUID.randomUUID(), 1).status()).isEqualTo(200);
+                assertThat(hostEvents.await(event -> event.stateVersion() == 2
+                        && event.payload().reason().name().equals("PLAYER_LEFT"))).isNotNull();
+                assertThat(memberEvents.receivesAny(Duration.ofMillis(750))).isFalse();
+                assertThat(member.get("/api/game-state/" + gameId + "/snapshot").status()).isEqualTo(403);
+            }
+        }
+    }
+
+    @Test
+    void realHttpStompAndStoresCoverCriticalFlowReplayRecoveryAndCompletion() throws Exception {
+        URI base = baseUri();
+        try (GameBoundaryClient host = GameBoundaryClient.create(base, objectMapper, uniqueName("FlowHost"));
+             GameBoundaryClient member = GameBoundaryClient.create(base, objectMapper, uniqueName("FlowMember"));
+             GameBoundaryClient outsider = GameBoundaryClient.create(base, objectMapper, uniqueName("FlowOut"))) {
+            int gameId = host.playerId();
+            var anonymousMutation = HttpClient.newHttpClient().send(
+                    HttpRequest.newBuilder(base.resolve("/api/game-state/create"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(
+                                    "{\"ownerId\":" + gameId + ",\"visibility\":\"public\"}"))
+                            .build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+            assertThat(anonymousMutation.statusCode()).isIn(401, 403);
+            assertThat(host.post("/api/game-state/create",
+                    "{\"ownerId\":" + member.playerId() + ",\"visibility\":\"public\"}",
+                    UUID.randomUUID(), -1).status()).isEqualTo(403);
+
+            assertThat(host.post("/api/game-state/create",
+                    "{\"ownerId\":" + gameId + ",\"visibility\":\"public\"}",
+                    UUID.randomUUID(), -1).status()).isEqualTo(200);
+            var anonymousSnapshot = HttpClient.newHttpClient().send(
+                    HttpRequest.newBuilder(base.resolve("/api/game-state/" + gameId + "/snapshot"))
+                            .GET().build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+            assertThat(anonymousSnapshot.statusCode()).isIn(401, 403);
+            assertThat(outsider.get("/api/game-state/" + gameId + "/snapshot").status()).isEqualTo(403);
+
+            try (GameBoundaryClient.RealtimeConnection hostEvents = host.connect()) {
+                hostEvents.subscribe("/topic/game/" + gameId);
+                awaitSubscriptions("/topic/game/" + gameId, 1);
+                assertThat(member.post("/api/game-state/add/" + gameId + "/" + member.playerId(), null,
+                        UUID.randomUUID(), 0).status()).isEqualTo(200);
+                assertThat(hostEvents.await(event -> event.stateVersion() == 1
+                        && event.payload().reason().name().equals("PLAYER_JOINED"))).isNotNull();
+
+                try (GameBoundaryClient.RealtimeConnection memberEvents = member.connect()) {
+                    memberEvents.subscribe("/topic/game/" + gameId);
+                    awaitSubscriptions("/topic/game/" + gameId, 2);
+                    hostEvents.clearEvents();
+                    memberEvents.clearEvents();
+
+                    assertThat(member.post("/api/game-state/" + gameId + "/start?playerId="
+                            + member.playerId(), null, UUID.randomUUID(), 1).status()).isEqualTo(403);
+                    assertNoEvents(hostEvents, memberEvents);
+
+                    assertThat(host.post("/api/game-state/" + gameId + "/start?playerId=" + gameId,
+                            null, UUID.randomUUID(), 1).status()).isEqualTo(200);
+                    assertEventOnBoth(hostEvents, memberEvents, gameId, 2, "GAME_STARTED", "GAME_STARTED");
+                    JsonNode started = host.get("/api/game-state/" + gameId + "/snapshot").json();
+                    assertThat(started.path("stateVersion").asLong()).isEqualTo(2);
+                    assertThat(started.path("status").asText()).isEqualTo("inProgress");
+                    assertThat(started.path("playerTurn").asInt()).isEqualTo(gameId);
+                    assertThat(started.path("players").get(0).path("playerId").asInt()).isEqualTo(gameId);
+                    assertThat(started.path("players").get(1).path("playerId").asInt()).isEqualTo(member.playerId());
+
+                    assertThat(member.post("/api/turn/" + gameId + "/" + member.playerId() + "/throw",
+                            null, UUID.randomUUID(), 2).status()).isEqualTo(403);
+                    assertNoEvents(hostEvents, memberEvents);
+
+                    doReturn(3).when(applicationDice).roll();
+                    UUID rollId = UUID.randomUUID();
+                    var executor = Executors.newFixedThreadPool(2);
+                    List<GameBoundaryClient.ApiResponse> duplicateRolls;
+                    try {
+                        var requests = List.<Callable<GameBoundaryClient.ApiResponse>>of(
+                                () -> host.post("/api/turn/" + gameId + "/" + gameId + "/throw",
+                                        null, rollId, 2),
+                                () -> host.post("/api/turn/" + gameId + "/" + gameId + "/throw",
+                                        null, rollId, 2));
+                        duplicateRolls = executor.invokeAll(requests).stream().map(future -> {
+                            try { return future.get(); }
+                            catch (Exception exception) { throw new RuntimeException(exception); }
+                        }).toList();
+                    } finally {
+                        executor.shutdownNow();
+                    }
+                    assertThat(duplicateRolls).allMatch(response -> response.status() == 200);
+                    assertThat(duplicateRolls.stream().filter(response -> response.json().path("replayed").asBoolean()).count())
+                            .isEqualTo(1);
+                    assertEventOnBoth(hostEvents, memberEvents, gameId, 3, "TURN_UPDATED", "ROLL_COMPLETED");
+                    JsonNode purchase = host.get("/api/game-state/" + gameId + "/snapshot").json();
+                    assertThat(purchase.path("stateVersion").asLong()).isEqualTo(3);
+                    assertThat(purchase.path("optionalAction").path("type").asText())
+                            .isEqualTo("PURCHASE_PROPERTY");
+                    assertThat(purchase.path("optionalAction").path("playerId").asInt()).isEqualTo(gameId);
+                    assertNoEvents(hostEvents, memberEvents);
+
+                    assertThat(host.post("/api/turn/" + gameId + "/" + gameId + "/pass",
+                            null, UUID.randomUUID(), 2).status()).isEqualTo(409);
+                    assertThat(host.post("/api/turn/" + gameId + "/" + gameId + "/pass",
+                            null, rollId, 3).status()).isEqualTo(409);
+                    assertNoEvents(hostEvents, memberEvents);
+
+                    assertThat(host.post("/api/turn/" + gameId + "/" + gameId + "/pass",
+                            null, UUID.randomUUID(), 3).status()).isEqualTo(200);
+                    assertEventOnBoth(hostEvents, memberEvents, gameId, 4, "TURN_UPDATED", "ACTION_RESOLVED");
+                    JsonNode declined = member.get("/api/game-state/" + gameId + "/snapshot").json();
+                    assertThat(declined.path("stateVersion").asLong()).isEqualTo(4);
+                    assertThat(declined.path("playerTurn").asInt()).isEqualTo(member.playerId());
+                    assertThat(declined.path("optionalAction").isNull()).isTrue();
+                    assertThat(declined.path("players").get(0).path("properties").isEmpty()).isTrue();
+
+                    memberEvents.close();
+                    awaitSubscriptions("/topic/game/" + gameId, 1);
+                    assertThat(member.post("/api/turn/" + gameId + "/" + member.playerId() + "/throw",
+                            null, UUID.randomUUID(), 4).status()).isEqualTo(200);
+                    assertEvent(hostEvents, gameId, 5, "TURN_UPDATED", "ROLL_COMPLETED");
+                    hostEvents.clearEvents();
+
+                    try (GameBoundaryClient.RealtimeConnection recovered = member.connect()) {
+                        recovered.subscribe("/topic/game/" + gameId);
+                        awaitSubscriptions("/topic/game/" + gameId, 2);
+                        assertThat(member.get("/api/game-state/" + gameId + "/snapshot").json()
+                                .path("stateVersion").asLong()).isEqualTo(5);
+                        hostEvents.clearEvents();
+                        recovered.clearEvents();
+
+                        assertThat(member.post("/api/turn/" + gameId + "/" + member.playerId() + "/pass",
+                                null, UUID.randomUUID(), 5).status()).isEqualTo(200);
+                        assertEventOnBoth(hostEvents, recovered, gameId, 6, "TURN_UPDATED", "ACTION_RESOLVED");
+
+                        // The scheduler is the production end-game trigger; only its threshold precondition is seeded.
+                        redis.opsForHash().put("player:" + gameId, "money", "5000");
+                        assertThat(gameLifecycle.processScheduledGame(gameId)).isTrue();
+                        assertEventOnBoth(hostEvents, recovered, gameId, 7, "GAME_COMPLETED", "GAME_COMPLETED");
+                        // Terminal games report handled while retrying durable finalization, but never republish.
+                        assertThat(gameLifecycle.processScheduledGame(gameId)).isTrue();
+                        assertNoEvents(hostEvents, recovered);
+                        JsonNode terminal = host.get("/api/game-state/" + gameId + "/snapshot").json();
+                        assertThat(terminal.path("stateVersion").asLong()).isEqualTo(7);
+                        assertThat(terminal.path("status").asText()).isEqualTo("ended");
+                        assertThat(terminal.path("winner").asInt()).isEqualTo(gameId);
+                        assertThat(jdbc.queryForObject(
+                                "SELECT COUNT(*) FROM game_finalization WHERE game_id = ?",
+                                Integer.class, gameId)).isEqualTo(1);
+                        assertThat(jdbc.queryForObject(
+                                "SELECT total_games FROM stats WHERE player = ?",
+                                Integer.class, gameId)).isEqualTo(1);
+                        assertThat(jdbc.queryForObject(
+                                "SELECT total_wins FROM stats WHERE player = ?",
+                                Integer.class, gameId)).isEqualTo(1);
+                        assertThat(jdbc.queryForObject(
+                                "SELECT total_losses FROM stats WHERE player = ?",
+                                Integer.class, member.playerId())).isEqualTo(1);
+                    }
+                }
+            }
+        }
+    }
+
+    private URI baseUri() {
+        return URI.create("http://127.0.0.1:" + serverPort);
+    }
+
+    private String uniqueName(String prefix) {
+        String boundedPrefix = prefix.substring(0, Math.min(prefix.length(), 6));
+        return boundedPrefix + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+    }
+
+    private void assertEventOnBoth(GameBoundaryClient.RealtimeConnection first,
+                                   GameBoundaryClient.RealtimeConnection second,
+                                   int gameId, long version, String eventType,
+                                   String reason) throws Exception {
+        assertEvent(first, gameId, version, eventType, reason);
+        assertEvent(second, gameId, version, eventType, reason);
+    }
+
+    private void assertEvent(GameBoundaryClient.RealtimeConnection connection, int gameId,
+                             long version, String eventType, String reason) throws Exception {
+        GameEventEnvelope event = connection.await(candidate -> candidate.stateVersion() == version
+                && candidate.payload().reason().name().equals(reason));
+        assertThat(event.gameId()).isEqualTo(gameId);
+        assertThat(event.eventType().name()).isEqualTo(eventType);
+        assertThat(event.eventId()).isNotNull();
+        assertThat(event.occurredAt()).isNotNull();
+    }
+
+    private void assertNoEvents(GameBoundaryClient.RealtimeConnection... connections) throws Exception {
+        for (GameBoundaryClient.RealtimeConnection connection : connections) {
+            assertThat(connection.receivesAny(Duration.ofMillis(350))).isFalse();
+        }
+    }
+
+    private void awaitSubscriptions(String destination, long expected) throws Exception {
+        long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+        while (System.nanoTime() < deadline) {
+            long current = simpUsers.getUsers().stream()
+                    .flatMap(user -> user.getSessions().stream())
+                    .flatMap(session -> session.getSubscriptions().stream())
+                    .filter(subscription -> destination.equals(subscription.getDestination()))
+                    .count();
+            if (current == expected) return;
+            Thread.sleep(10);
+        }
+        throw new AssertionError("Expected " + expected + " registered subscriptions for " + destination);
     }
 
     @Test

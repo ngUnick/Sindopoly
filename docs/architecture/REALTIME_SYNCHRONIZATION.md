@@ -58,6 +58,22 @@ server-side membership authorization. Client SEND frames are rejected because
 commands remain REST-only. `/ws` uses the configured origin allow-list. Errors do
 not disclose membership.
 
+An authorized subscription records the server-derived player ID against its
+STOMP session/subscription IDs. Outbound broker frames do not reliably retain the
+authenticated `Principal`, so delivery resolves that server-owned record and
+rechecks current membership. UNSUBSCRIBE and DISCONNECT remove the record. This
+closes the defect found by the real transport suite where valid notifications
+were dropped while preserving post-subscription revocation checks.
+
+Records are keyed by `(STOMP session ID, subscription ID)` and contain only game
+and player IDs. Reused subscription IDs fail closed while the replacement is
+authorized; session-scoped disconnect cleanup cannot remove a reconnecting
+session's records. An abrupt transport loss may retain a small process-local
+record until Spring dispatches disconnect cleanup, but that record cannot
+authorize a new session. Revocation is evaluated at the outbound membership
+check: a frame already authorized just before removal may be in flight, while
+frames checked after committed removal are dropped.
+
 The Spring simple broker is process-local and non-durable. There is no Redis
 Pub/Sub, Stream, event key, or event history and no cross-instance delivery claim.
 A multi-instance deployment therefore needs a future broker decision; snapshot
@@ -70,8 +86,15 @@ destinations, typed committed-version publication, and publication failure.
 Frontend tests cover malformed/cross-game validation, duplicate/stale/out-of-order
 handling, gap recovery, burst coalescing, late and in-flight read races, reconnect,
 and command-response versus snapshot versions. The CI frontend job runs this
-Node-based suite before its production build. REVAMP-022 owns broker-backed STOMP
-and full critical end-to-end coverage.
+Node-based suite before its production build.
+
+REVAMP-022 adds real-port HTTP/session/CSRF and `/ws` SockJS-over-WebSocket STOMP
+coverage to the existing Testcontainers integration tier. It verifies authorized
+delivery, denied subscriptions/SEND, membership revocation, one notification for
+concurrent idempotent retries, no notification for rejected stale/reused commands,
+disconnect/reconnect snapshot recovery, and the critical flow through scheduler
+completion and MariaDB finalization. This is server-transport coverage, not a
+browser-rendering or cross-instance broker claim; those limits above remain.
 
 ## Manual Windows verification
 

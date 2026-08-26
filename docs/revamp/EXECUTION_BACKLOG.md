@@ -369,7 +369,7 @@ Two choices are especially important:
 
 ### REVAMP-022 — Add WebSocket and critical end-to-end game-flow coverage
 
-- Status: `READY`; Priority: `P1`; Category: `TESTING`.
+- Status: `DONE`; Priority: `P1`; Category: `TESTING`.
 - Rationale / evidence: no WebSocket or E2E suite exists; functional repairs require cross-layer proof.
 - Desired outcome: focused integration tests for STOMP delivery/auth/recovery and E2E coverage for create→join→start→turn→action→end.
 - Dependencies: REVAMP-011, REVAMP-019, REVAMP-020, REVAMP-021. Blocks: final release verification.
@@ -384,7 +384,7 @@ Two choices are especially important:
 
 ### REVAMP-023 — Refactor toward explicit boundaries and consolidate state infrastructure
 
-- Status: `BLOCKED`; Priority: `P3`; Category: `REFACTOR`.
+- Status: `READY`; Priority: `P3`; Category: `REFACTOR`.
 - Rationale / evidence: rule services mutate Redis directly; key construction/optional-action formats are duplicated; controller/service responsibility is porous.
 - Desired outcome: incremental extraction of command/domain/store/event responsibilities and centralized Redis keys/models without broad rewrite.
 - Dependencies: REVAMP-018 through REVAMP-022. Blocks: REVAMP-024 and selected hardening work.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-022 — Add WebSocket and critical
-end-to-end game-flow coverage**. Later work remains blocked by the required
-cross-layer verification prerequisites.
+The immediate `READY` item is **REVAMP-023 — Refactor toward explicit boundaries
+and consolidate state infrastructure**. Later work remains blocked by the
+required structural and data-lifecycle prerequisites.
 
 ## Planning review
 
