@@ -384,7 +384,7 @@ Two choices are especially important:
 
 ### REVAMP-023 — Refactor toward explicit boundaries and consolidate state infrastructure
 
-- Status: `READY`; Priority: `P3`; Category: `REFACTOR`.
+- Status: `DONE`; Priority: `P3`; Category: `REFACTOR`.
 - Rationale / evidence: rule services mutate Redis directly; key construction/optional-action formats are duplicated; controller/service responsibility is porous.
 - Desired outcome: incremental extraction of command/domain/store/event responsibilities and centralized Redis keys/models without broad rewrite.
 - Dependencies: REVAMP-018 through REVAMP-022. Blocks: REVAMP-024 and selected hardening work.
@@ -400,7 +400,7 @@ Two choices are especially important:
 
 ### REVAMP-024 — Resolve database schema ownership and migration strategy
 
-- Status: `BLOCKED`; Priority: `P2`; Category: `DATABASE`.
+- Status: `READY`; Priority: `P2`; Category: `DATABASE`.
 - Rationale / evidence: JPA `ddl-auto=update`, seed trigger, explicit stats rows, and missing SQL unique constraint can conflict.
 - Desired outcome: explicit schema owner/migration approach, corrected stats uniqueness/seed behavior, and reproducible test initialization.
 - Dependencies: REVAMP-011, REVAMP-023. Blocks: clean-environment release verification.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-023 — Refactor toward explicit boundaries
-and consolidate state infrastructure**. Later work remains blocked by the
-required structural and data-lifecycle prerequisites.
+The immediate `READY` item is **REVAMP-024 — Resolve database schema ownership
+and migration strategy**. Later work remains blocked by the required data-
+lifecycle and release prerequisites.
 
 ## Planning review
 

@@ -2,11 +2,9 @@ package com.example.Sindopoly_Java.service.transition;
 
 import com.example.Sindopoly_Java.exception.GameNotFoundException;
 import com.example.Sindopoly_Java.exception.GameStateConflictException;
-import com.example.Sindopoly_Java.service.GameStateService;
 import com.example.Sindopoly_Java.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -21,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /** Calculates lobby commands from snapshots and delegates every write to the CAS store. */
 @Service
@@ -31,22 +30,20 @@ public class GameCommandService {
     private static final String CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
     private final RedisGameTransitionStore store;
-    private final RedisTemplate<String, String> redis;
+    private final RedisGameDiscovery discovery;
     private final ValidationUtils validation;
-    private final GameStateService legacyReads;
     private final ObjectMapper mapper;
     private final GameTimingService timing;
     private final GameEventPublisher events;
     private final SecureRandom random = new SecureRandom();
 
     @Autowired
-    public GameCommandService(RedisGameTransitionStore store, RedisTemplate<String, String> redis,
-                              ValidationUtils validation, GameStateService legacyReads, ObjectMapper mapper,
+    public GameCommandService(RedisGameTransitionStore store, RedisGameDiscovery discovery,
+                              ValidationUtils validation, ObjectMapper mapper,
                               GameTimingService timing, GameEventPublisher events) {
         this.store = store;
-        this.redis = redis;
+        this.discovery = discovery;
         this.validation = validation;
-        this.legacyReads = legacyReads;
         this.mapper = mapper;
         this.timing = timing;
         this.events = events;
@@ -67,7 +64,7 @@ public class GameCommandService {
             requireMember(current, ownerId);
             return replay.get();
         }
-        if (legacyReads.isPlayerInAnyGame(ownerId)) {
+        if (discovery.isPlayerInAnyGame(ownerId)) {
             throw new GameStateConflictException("Player is already in another game");
         }
         Map<String, String> game = new LinkedHashMap<>();
@@ -256,7 +253,7 @@ public class GameCommandService {
     }
 
     private void requireJoinCapacity(int actorId, GameSnapshot snapshot) {
-        if (legacyReads.isPlayerInAnyGame(actorId)) throw new GameStateConflictException("Player is already in another game");
+        if (discovery.isPlayerInAnyGame(actorId)) throw new GameStateConflictException("Player is already in another game");
         if (snapshot.members().size() >= TurnOrder.MAX_PLAYERS) throw new GameStateConflictException("Game is full (4 players)");
     }
 
@@ -302,16 +299,10 @@ public class GameCommandService {
     }
 
     private InviteMetadata resolveInvite(String inviteCode) {
-        Set<String> keys = redis.keys("game:*");
-        if (keys != null) for (String key : keys) {
-            String suffix = key.substring("game:".length());
-            if (!suffix.chars().allMatch(Character::isDigit)) continue;
-            Object stored = redis.opsForHash().get(key, "inviteCode");
-            if (stored != null && inviteCode.equalsIgnoreCase(stored.toString())) {
-                int gameId = Integer.parseInt(suffix);
-                GameSnapshot snapshot = requireGame(gameId);
-                return new InviteMetadata(gameId, snapshot.stateVersion());
-            }
+        OptionalInt gameId = discovery.findByInviteCode(inviteCode);
+        if (gameId.isPresent()) {
+            GameSnapshot snapshot = requireGame(gameId.getAsInt());
+            return new InviteMetadata(gameId.getAsInt(), snapshot.stateVersion());
         }
         throw new IllegalArgumentException("Invalid invite code");
     }

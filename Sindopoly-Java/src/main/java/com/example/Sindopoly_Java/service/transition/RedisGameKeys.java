@@ -6,6 +6,14 @@ public final class RedisGameKeys {
     private RedisGameKeys() {
     }
 
+    public static String gamePattern() {
+        return "game:*";
+    }
+
+    public static String membersPattern() {
+        return "game:*:players";
+    }
+
     public static String game(int gameId) {
         return "game:" + gameId;
     }
