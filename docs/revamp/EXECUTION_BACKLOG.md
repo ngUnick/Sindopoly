@@ -400,7 +400,7 @@ Two choices are especially important:
 
 ### REVAMP-024 — Resolve database schema ownership and migration strategy
 
-- Status: `READY`; Priority: `P2`; Category: `DATABASE`.
+- Status: `DONE`; Priority: `P2`; Category: `DATABASE`.
 - Rationale / evidence: JPA `ddl-auto=update`, seed trigger, explicit stats rows, and missing SQL unique constraint can conflict.
 - Desired outcome: explicit schema owner/migration approach, corrected stats uniqueness/seed behavior, and reproducible test initialization.
 - Dependencies: REVAMP-011, REVAMP-023. Blocks: clean-environment release verification.
@@ -415,7 +415,7 @@ Two choices are especially important:
 
 ### REVAMP-025 — Remove confirmed obsolete code and local artifacts
 
-- Status: `BLOCKED`; Priority: `P4`; Category: `CLEANUP`.
+- Status: `READY`; Priority: `P4`; Category: `CLEANUP`.
 - Rationale / evidence: commented legacy turn handlers, stale frontend wrappers, duplicate optional-action paths, crash logs, and Redis dump are candidates only.
 - Desired outcome: remove only code/artifacts proven unused after compatible contracts and regression coverage exist.
 - Dependencies: REVAMP-022, REVAMP-023, REVAMP-024. Blocks: none.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-024 — Resolve database schema ownership
-and migration strategy**. Later work remains blocked by the required data-
-lifecycle and release prerequisites.
+The immediate `READY` item is **REVAMP-025 — Remove confirmed obsolete code and
+local artifacts**. Later work remains blocked by the structural-cleanup exit
+criteria and release prerequisites.
 
 ## Planning review
 

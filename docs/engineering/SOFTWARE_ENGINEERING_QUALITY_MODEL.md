@@ -15,7 +15,7 @@ The current code organizes concerns roughly as follows:
 - Domain/game-rule logic: `service/core/DiceService.java`, `MovementService.java`, `SquareActionService.java`, `CardService.java`, `BankruptcyService.java`.
 - Redis state access: `GameStateService`, `PlayerStateService`, `SquareActionService`, `CardService`, `StatsService`, `DiceEntropyRefillJob`, `RandomOrgGenerator`.
 - Redis Pub/Sub: no confirmed Redis Pub/Sub implementation; current game event delivery uses Spring `SimpMessagingTemplate`.
-- MariaDB persistence: `model/*`, `repository/*`, and `MariaDB/init.sql`.
+- MariaDB persistence: `model/*`, `repository/*`, and versioned Flyway migrations under `src/main/resources/db/migration`.
 - Event publication/WebSocket broadcasting: `TurnService#applyAction`, `TurnService#finishTurn`, `GameLoopScheduler#pollEndConditions`.
 - Authentication/authorization: no effective backend auth; `WebSecurityConfig` permits all requests.
 - Timers/scheduled processing: `GameLoopScheduler`, `StatsService#refreshLeaderboard`, `DiceEntropyRefillJob`.
@@ -620,4 +620,3 @@ This model explicitly rejects:
 - Public contract changes without migration planning.
 
 The preferred path is small, evidence-backed changes with tests around the behavior being protected.
-

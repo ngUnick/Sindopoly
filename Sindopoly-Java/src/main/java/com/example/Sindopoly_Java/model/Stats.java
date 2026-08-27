@@ -11,8 +11,8 @@ public class Stats {
     private int id;
 
     @OneToOne
-    // Explicit pre-Hibernate compatibility owns NOT NULL/UNIQUE enforcement.
-    @JoinColumn(name = "player", referencedColumnName = "id")
+    // Flyway owns the matching NOT NULL/UNIQUE database invariant.
+    @JoinColumn(name = "player", referencedColumnName = "id", nullable = false, unique = true)
     private Player player;
 
     @Column(name = "total_wins")

@@ -1,5 +1,9 @@
 
--- This file is used to initialize the database for the game.
+-- Historical pre-Flyway Sindopoly schema fixture.
+--
+-- This file is no longer mounted by Docker Compose and is not a current schema
+-- owner. It is retained temporarily as evidence for legacy-upgrade tests. The
+-- canonical fresh schema is db/migration/V1__create_sindopoly_schema.sql.
 
 
 

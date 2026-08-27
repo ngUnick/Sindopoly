@@ -1,83 +1,74 @@
 # Database schema current
 
-## Schema source
+## Schema ownership
 
-Primary schema/seed source: `MariaDB/init.sql`.
+Flyway is the sole forward MariaDB schema and stable reference-data owner. Its
+versioned migrations live in
+`Sindopoly-Java/src/main/resources/db/migration`; V1 is
+`V1__create_sindopoly_schema.sql`. `flyway_schema_history` records applied or
+baselined versions and checksums. Released migrations are immutable; future
+changes require a new version.
 
-Runtime JPA schema setting: `spring.jpa.hibernate.ddl-auto=update` in `Sindopoly-Java/src/main/resources/application.properties`.
+Hibernate uses `spring.jpa.hibernate.ddl-auto=validate` for MariaDB application
+and integration profiles. Fast H2 tests use `create-drop` with Flyway disabled
+and are not schema-migration proof. `MariaDB/init.sql` is an inactive historical
+pre-Flyway test fixture, not current schema truth or Compose initialization.
 
-## Tables and entities
+See `docs/architecture/DATABASE_MIGRATION_OWNERSHIP.md` and ADR-0005 for startup,
+baseline, locking, failure, and rollback policy.
 
-| Table | Entity | Key fields | Evidence |
+## V1 tables and mappings
+
+| Object | Current shape and invariants | Owner/version | JPA/application relationship |
 | --- | --- | --- | --- |
-| `player` | `Player` | `id`, `p_name`, `created_at` | `MariaDB/init.sql`; `Player.java` |
-| `card` | `Card` | `id`, `title`, `description`, `type`, `amount` | `MariaDB/init.sql`; `Card.java` |
-| `square` | `Square` | `id`, `s_type`, `price`, `rent` | `MariaDB/init.sql`; `Square.java` |
-| `stats` | `Stats` | `id`, `player`, counters | `MariaDB/init.sql`; `Stats.java` |
-| `game_finalization` | JDBC boundary | deterministic finalization/game identity and completion fields | `MariaDB/init.sql`; `GameFinalizationService.java` |
+| `player` | `id INT` identity PK; nullable `p_name VARCHAR(255)`; nullable `created_at TIMESTAMP` defaulting to current time | Flyway V1 | `Player` entity |
+| `stats` | `id INT` identity PK; `player INT NOT NULL`; counters; FK to `player.id`; `UNIQUE KEY uq_stats_player (player)` | Flyway V1 | `Stats` one-to-one entity and `StatsRepository` |
+| `card` | `id SMALLINT` identity PK; title, description, `money`/`transport` enum, signed/destination `FLOAT` amount | Flyway V1 | `Card` entity; immutable gameplay reference rows |
+| `square` | `id TINYINT` PK; board-type enum; nullable `SMALLINT` price/rent | Flyway V1 | `Square` entity; immutable gameplay reference rows |
+| `game_finalization` | UUID-like `CHAR(36)` PK; game identity, winner, completion fields; unique `(game_id, game_created_at_epoch_ms)` | Flyway V1 | JDBC transaction boundary in `GameFinalizationService` |
+| `trg_player_after_insert` | After each Player insert, creates exactly one zero-valued Stats row | Flyway V1 | Database-level Stats initialization owner; not duplicated in application services |
+| `flyway_schema_history` | Applied/baselined version, checksum, state, and execution metadata | Flyway | Migration authority; not an application entity |
 
-## Relationships and repositories
+Constraint names are required only where they are part of the accepted contract:
+`uq_stats_player`, `uq_game_finalization_instance`, and
+`trg_player_after_insert`. The historical Stats foreign-key name is not treated
+as semantic identity; its `stats.player → player.id` relationship is validated.
 
-- `Stats` maps one player; explicit pre-Hibernate compatibility owns SQL enforcement.
-- `StatsRepository#findByPlayer(Player player)` supports stats lookup.
-- `SquareRepository#findIdsByColour(SquareType type)` queries square IDs by type.
+## Reference and mutable data ownership
 
-## Seed data
+V1 installs exactly 40 board Squares and 40 Cards. Card money amounts are signed
+server effects; the canonical Pay-20 row is `-20`. Future required Card/Square
+changes use a new Flyway migration and application startup does not overwrite
+them repeatedly.
 
-- `player`: Bob and Alice.
-- `stats`: the player trigger creates one row; seed history updates those rows.
-- `square`: 40 board squares.
-- `card`: Chance and Community Chest cards.
+Players and accumulated Stats are mutable application data. Fresh V1 installs
+no Bob/Alice or other demo Players and no historical demo Stats totals. A
+recognized legacy baseline preserves existing Players, Stats, and other
+legitimate mutable data, including historical demo rows.
 
-`Card.amount` is the canonical server-side effect value: money cards use a
-signed delta (positive credit, negative cost), while transport cards use an
-absolute board destination. MariaDB entrypoint SQL runs only while initializing
-a new container data directory, so changing `init.sql` alone does not repair a
-running container that already holds the historical positive `Pay 20` row.
-`CardDataCompatibilityService` therefore applies one bounded idempotent startup
-update identified by type, title, exact seed description, and old value `20`;
-it changes that row to `-20` and is a no-op for fresh or already-corrected data.
-No schema migration framework or schema change is introduced.
+## Existing database compatibility
 
-The former duplicate root cause was trigger creation followed by explicit seed
-INSERTs. Fresh SQL now uses UPDATE and enforces `stats.player INT NOT NULL` plus
-`UNIQUE KEY uq_stats_player (player)`. The trigger is the sole live creation
-owner; services fail if its row is unexpectedly missing.
+`SindopolyFlywayMigrationStrategy` runs the temporary
+`LegacyDatabaseBootstrapService` only for a non-empty database without Flyway
+history. The bridge validates a recognized historical schema and canonical
+reference data, performs only approved Stats/`game_finalization`/Pay-20 repairs,
+then baselines at V1. Unknown schemas, unexpected required reference metadata,
+multiple populated Stats rows, NULL Stats owners, and orphan owners fail startup
+without a false history record.
 
-## Indexes and constraints
+The named lock `sindopoly:database-compatibility` serializes only this one-time
+bootstrap. After history exists, Flyway alone validates and migrates. The bridge
+can be removed after all supported installations are expected to have valid
+history at V1 or later.
 
-Confirmed:
+## Persistent and transient boundary
 
-- Primary keys on all tables.
-- Foreign key from `stats.player` to `player.id`.
-- `stats.player` is `NOT NULL` and uniquely indexed as `uq_stats_player`.
-- `game_finalization` has a primary finalization ID and unique game-instance identity.
+MariaDB persists Players, accumulated Stats, board/Card reference data, and
+idempotent finalization markers. Redis remains authoritative for active games,
+turns, positions, money, ownership, decks, command replay, and terminal snapshots.
+Game finalization commits its MariaDB marker and bounded Stats updates in one
+transaction after the Redis transition; Redis and MariaDB are not one atomic
+resource transaction.
 
-Missing/questionable:
-
-- No unique constraint on `player.p_name`.
-- No indexes visible for leaderboard ordering fields.
-- No migration tool (Flyway/Liquibase) found.
-
-## Persistent vs transient data
-
-Persistent MariaDB:
-
-- Players, cards, board squares, accumulated stats.
-
-Transient Redis:
-
-- Active game lifecycle, turn, positions, money, ownership, deck state.
-
-Duplication:
-
-- Player existence/nickname lives in MariaDB; active money/properties/position lives in Redis.
-- Stats are finalized from Redis into MariaDB at end/leave.
-
-## Transaction boundaries
-
-`GameFinalizationService` uses one MariaDB transaction for the marker and all
-bounded Stats updates. Duplicate markers change no Stats, and failures roll back
-the marker and every update. Redis commits first and is not atomic with MariaDB;
-retained terminal JSON supports retry. Existing-volume compatibility runs before
-Hibernate schema update and fails closed on unsafe durable data.
+No Redis key, field, TTL, serializer, REST DTO, or STOMP contract changes are
+introduced by this schema-ownership decision.

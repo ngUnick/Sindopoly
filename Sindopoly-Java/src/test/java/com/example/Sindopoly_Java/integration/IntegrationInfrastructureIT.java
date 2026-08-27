@@ -13,8 +13,6 @@ import com.example.Sindopoly_Java.service.transition.RedisGameTransitionStore;
 import com.example.Sindopoly_Java.service.transition.TransitionExecution;
 import com.example.Sindopoly_Java.service.transition.TurnCommandService;
 import com.example.Sindopoly_Java.service.core.DiceService;
-import com.example.Sindopoly_Java.service.core.CardDataCompatibilityService;
-import com.example.Sindopoly_Java.service.core.DatabaseCompatibilityService;
 import com.example.Sindopoly_Java.service.transition.FinalizationFailureProbe;
 import com.example.Sindopoly_Java.service.transition.GameFinalizationService;
 import com.example.Sindopoly_Java.service.transition.GameLifecycleCommandService;
@@ -27,6 +25,7 @@ import com.example.Sindopoly_Java.realtime.GameEventEnvelope;
 import com.example.Sindopoly_Java.realtime.GameEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -159,10 +158,7 @@ class IntegrationInfrastructureIT {
     private JdbcTemplate jdbc;
 
     @Autowired
-    private CardDataCompatibilityService cardDataCompatibility;
-
-    @Autowired
-    private DatabaseCompatibilityService databaseCompatibility;
+    private Flyway flyway;
 
     @Autowired
     private GameFinalizationService gameFinalization;
@@ -479,14 +475,16 @@ class IntegrationInfrastructureIT {
     }
 
     @Test
-    void mariaDbContainerUsesCurrentSchemaAndSeedData() {
+    void recognizedLegacyMariaDbPreservesMutableDataAndReferenceData() {
         assertThat(playerRepository.count()).isGreaterThanOrEqualTo(2);
         assertThat(squareRepository.count()).isEqualTo(40);
-        assertThat(cardRepository.count()).isGreaterThan(0);
+        assertThat(cardRepository.count()).isEqualTo(40);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version = '1' AND type = 'BASELINE' AND success = 1",
+                Integer.class)).isEqualTo(1);
     }
 
     @Test
-    void freshMariaDbEnforcesSingleTriggerOwnedStatsRow() {
+    void recognizedLegacyMariaDbEnforcesSingleTriggerOwnedStatsRow() {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM stats WHERE player IS NULL", Integer.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM (SELECT player FROM stats GROUP BY player HAVING COUNT(*) > 1) d",
                 Integer.class)).isZero();
@@ -505,59 +503,18 @@ class IntegrationInfrastructureIT {
     }
 
     @Test
-    void compatibilityRepairsOnlyUnambiguousLegacyDuplicatesAndIsIdempotent() {
-        int populated = insertPlayer("LegacyPopulated");
-        int allZero = insertPlayer("LegacyZero");
-        dropStatsInvariant();
-        try {
-            jdbc.update("UPDATE stats SET total_wins = 3 WHERE player = ?", populated);
-            jdbc.update("INSERT INTO stats (player) VALUES (?)", populated);
-            jdbc.update("INSERT INTO stats (player) VALUES (?)", allZero);
-            int retainedZeroId = jdbc.queryForObject(
-                    "SELECT MIN(id) FROM stats WHERE player = ?", Integer.class, allZero);
+    void secondFlywayMigrationIsIdempotentForManagedDatabase() {
+        int cards = jdbc.queryForObject("SELECT COUNT(*) FROM card", Integer.class);
+        int squares = jdbc.queryForObject("SELECT COUNT(*) FROM square", Integer.class);
+        int players = jdbc.queryForObject("SELECT COUNT(*) FROM player", Integer.class);
 
-            databaseCompatibility.ensureCompatibility();
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM stats WHERE player = ?", Integer.class, populated)).isEqualTo(1);
-            assertThat(jdbc.queryForObject("SELECT total_wins FROM stats WHERE player = ?", Integer.class, populated)).isEqualTo(3);
-            assertThat(jdbc.queryForObject("SELECT id FROM stats WHERE player = ?", Integer.class, allZero)).isEqualTo(retainedZeroId);
-            databaseCompatibility.ensureCompatibility();
-            assertStatsInvariant();
-        } finally {
-            restoreStatsInvariant();
-        }
-    }
+        flyway.migrate();
 
-    @Test
-    void compatibilityRejectsAmbiguousPopulatedDuplicatesWithoutMerging() {
-        int player = insertPlayer("LegacyAmbiguous");
-        dropStatsInvariant();
-        jdbc.update("UPDATE stats SET total_wins = 2 WHERE player = ?", player);
-        jdbc.update("INSERT INTO stats (player, total_losses) VALUES (?, 4)", player);
-        try {
-            assertThatThrownBy(databaseCompatibility::ensureCompatibility)
-                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
-                    .hasMessageContaining("multiple populated rows")
-                    .hasMessageContaining(String.valueOf(player));
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM stats WHERE player = ?", Integer.class, player)).isEqualTo(2);
-        } finally {
-            jdbc.update("DELETE FROM stats WHERE player = ? AND total_losses = 4", player);
-            restoreStatsInvariant();
-        }
-    }
-
-    @Test
-    void compatibilityRejectsNullOwnerWithoutDeletingIt() {
-        dropStatsInvariant();
-        jdbc.update("INSERT INTO stats (player) VALUES (NULL)");
-        try {
-            assertThatThrownBy(databaseCompatibility::ensureCompatibility)
-                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
-                    .hasMessageContaining("NULL player ownership");
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM stats WHERE player IS NULL", Integer.class)).isEqualTo(1);
-        } finally {
-            jdbc.update("DELETE FROM stats WHERE player IS NULL");
-            restoreStatsInvariant();
-        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM card", Integer.class)).isEqualTo(cards);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM square", Integer.class)).isEqualTo(squares);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM player", Integer.class)).isEqualTo(players);
     }
 
     @Test
@@ -1120,20 +1077,6 @@ class IntegrationInfrastructureIT {
     }
 
     @Test
-    void historicalPositivePayTwentyCardIsCorrectedIdempotently() {
-        int changed = jdbc.update("UPDATE card SET amount = 20 WHERE type = 'money' AND description = ?",
-                "Πρέπει να αγοράσεις εξαρτήματα για εργαστήριο ηλεκτρονικής. Πλήρωσε $20.");
-        assertThat(changed).isEqualTo(1);
-
-        assertThat(cardDataCompatibility.correctKnownSignedAmount()).isEqualTo(1);
-        assertThat(cardDataCompatibility.correctKnownSignedAmount()).isZero();
-        Float amount = jdbc.queryForObject("SELECT amount FROM card WHERE type = 'money' AND description = ?",
-                Float.class,
-                "Πρέπει να αγοράσεις εξαρτήματα για εργαστήριο ηλεκτρονικής. Πλήρωσε $20.");
-        assertThat(amount).isEqualTo(-20f);
-    }
-
-    @Test
     void privateInviteCannotAddAPlayerWhoAlreadyOwnsAnotherGame() throws Exception {
         MvcResult hostCreation = mockMvc.perform(post("/api/player-state/create")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -1451,37 +1394,6 @@ class IntegrationInfrastructureIT {
     private int insertPlayer(String prefix) {
         jdbc.update("INSERT INTO player (p_name) VALUES (?)", prefix + UUID.randomUUID());
         return jdbc.queryForObject("SELECT LAST_INSERT_ID()", Integer.class);
-    }
-
-    private void dropStatsInvariant() {
-        if (!statsIndexExists("idx_stats_player_legacy")) {
-            // Historical MariaDB kept a non-unique player index to support the FK.
-            // The canonical unique index cannot be dropped until that support exists.
-            jdbc.execute("CREATE INDEX idx_stats_player_legacy ON stats (player)");
-        }
-        if (statsIndexExists("uq_stats_player")) {
-            jdbc.execute("ALTER TABLE stats DROP INDEX uq_stats_player");
-        }
-        String type = jdbc.queryForObject("""
-                SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stats' AND COLUMN_NAME = 'player'
-                """, String.class);
-        jdbc.execute("ALTER TABLE stats MODIFY COLUMN player " + type + " NULL");
-    }
-
-    private void restoreStatsInvariant() {
-        databaseCompatibility.ensureCompatibility();
-        if (statsIndexExists("idx_stats_player_legacy")) {
-            jdbc.execute("ALTER TABLE stats DROP INDEX idx_stats_player_legacy");
-        }
-        assertStatsInvariant();
-    }
-
-    private boolean statsIndexExists(String indexName) {
-        return jdbc.queryForObject("""
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stats' AND INDEX_NAME = ?
-                """, Integer.class, indexName) > 0;
     }
 
     private void assertStatsInvariant() {

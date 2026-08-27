@@ -34,25 +34,31 @@ This is a troubleshooting compatibility flag for that Docker Desktop 29.4.3
 environment only. It is not baked into production configuration, and the
 Testcontainers version and Docker settings remain unchanged.
 
-## Isolation and initialization
+## Isolation and migration initialization
 
 - Redis uses a fresh `redis:7.0-alpine` Testcontainers instance with its mapped
   host/port supplied by Spring's dynamic properties. Test setup and teardown
   issue `FLUSHDB` only through that container connection; no localhost or
   developer Redis is used.
-- MariaDB uses a fresh `mariadb:10.11` Testcontainers instance with synthetic
-  test-only credentials and dynamic JDBC properties. The test mounts the
-  repository's existing `MariaDB/init.sql` into the container initialization
-  directory, so the current schema and static player/square/card seed model are
-  exercised without changing production schema ownership.
+- MariaDB uses `mariadb:10.11` Testcontainers instances with synthetic test-only
+  credentials and dynamic JDBC properties. `FreshDatabaseMigrationIT` starts
+  from a truly empty database and proves Flyway V1 plus Hibernate `validate`.
+  `IntegrationInfrastructureIT` starts from the historical pre-Flyway
+  `MariaDB/init.sql` fixture and proves actual Spring Boot baseline ordering.
+  `LegacyDatabaseMigrationIT` independently recreates that repository-history
+  fixture for repairable, ambiguous, NULL/orphan, unknown, managed, and
+  concurrent-bootstrap cases. H2 is not migration evidence.
 - Containers are owned by the test JVM and are removed at normal test lifecycle
   completion. Tests create no external state and do not rely on test order.
 
 ## Current integration and end-to-end scope
 
 The lower-level integration coverage proves Redis wiring/cleanup and atomic
-version behavior, MariaDB connectivity/schema/finalization behavior, and Spring
-REST command contracts. The REVAMP-022 boundary coverage additionally uses:
+version behavior, Flyway schema/baseline/finalization behavior, and Spring REST
+command contracts. Migration coverage asserts successful V1 history, repeat
+idempotency, exact required reference data, Stats trigger/uniqueness, safe legacy
+repairs, fail-closed unknown or ambiguous schemas, and named-lock coordination.
+The REVAMP-022 boundary coverage additionally uses:
 
 - separate HTTP cookie jars for independent player identities;
 - real session and CSRF propagation over a random local TCP port;
@@ -93,7 +99,7 @@ failures. Do not substitute local Redis/MariaDB or disable the container tests.
 The suite uses synthetic container credentials and seed data only; do not add
 production credentials, dumps, or secrets.
 
-REVAMP-022 acceptance passed 88 fast and 40 integration tests with zero failures,
+REVAMP-024 acceptance passes 92 fast and 46 integration tests with zero failures,
 errors, or skips on Docker Engine 29.4.3, Java 21.0.11, Redis 7, and MariaDB
 10.11. The real transport coverage exposed and now protects a server defect in
 which valid outbound STOMP notifications were dropped because broker MESSAGE

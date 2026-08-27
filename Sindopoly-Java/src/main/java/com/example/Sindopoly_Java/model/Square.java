@@ -8,13 +8,17 @@ public class Square {
 
     @Id
     // @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(columnDefinition = "TINYINT")
     private int id;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "s_type")
     private SquareType type;
 
+    @Column(columnDefinition = "SMALLINT")
     private Integer price;
+
+    @Column(columnDefinition = "SMALLINT")
     private Integer rent;
 
     /* ── getters ─────────────────────────────────────────────── */

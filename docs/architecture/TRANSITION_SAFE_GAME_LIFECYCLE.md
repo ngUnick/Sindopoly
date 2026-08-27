@@ -49,19 +49,22 @@ and all Stats. Redis and MariaDB are not one atomic transaction.
 
 ## Existing-volume compatibility
 
-Before Hibernate schema update, `DatabaseCompatibilityService` takes the
-startup-only MariaDB named lock `sindopoly:database-compatibility`, creates the
-finalization table, and establishes `stats.player NOT NULL` plus `UNIQUE KEY
-uq_stats_player (player)`. It discovers actual `COLUMN_TYPE` and already-applied
-constraints through `INFORMATION_SCHEMA`.
+Flyway V1 owns `game_finalization`, the Stats invariant, and the player-insert
+trigger. Hibernate validates rather than updates MariaDB. For a recognized
+non-empty database without Flyway history, `SindopolyFlywayMigrationStrategy`
+runs the temporary `LegacyDatabaseBootstrapService` before Flyway migration.
+The bridge holds `sindopoly:database-compatibility` only while it validates and
+repairs the legacy schema, then baselines at V1 and releases the lock. A
+Flyway-managed database never runs legacy repair.
 
-The player-insert trigger is the only live Stats-row creation owner. Fresh seed
-history updates trigger-created rows. For legacy duplicates, one populated row
-plus zero rows retains the populated row; all-zero duplicates retain the lowest
-Stats ID. Values are never summed. Multiple populated rows, NULL owners, and
-missing-player references fail startup with bounded IDs and no guessed
-deletion. Cleanup and DDL are resumable, but MariaDB DDL implicit commits mean
-the whole operation is not claimed to be rollbackable.
+The player-insert trigger is the only live Stats-row creation owner. For legacy
+duplicates, one populated row plus zero rows retains the populated row; all-zero
+duplicates retain the lowest Stats ID. Values are never summed. Multiple
+populated rows, NULL owners, missing-player references, unknown schemas, and
+unexpected reference data fail startup with bounded diagnostics and no guessed
+deletion. MariaDB DDL implicit commits mean the bootstrap is not claimed to be
+rollbackable. Full lifecycle and removal policy are documented in
+`DATABASE_MIGRATION_OWNERSHIP.md` and ADR-0005.
 
 ## Contract effects
 

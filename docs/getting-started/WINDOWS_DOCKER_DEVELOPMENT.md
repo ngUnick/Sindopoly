@@ -36,7 +36,7 @@ developer path.
 - Frontend: `sindopoly-front/` (React/Vite).
 - Orchestration: root `docker-compose.yml`.
 - Container builds: `Sindopoly-Java/Dockerfile` and `sindopoly-front/Dockerfile`.
-- MariaDB initialization: `MariaDB/init.sql`.
+- MariaDB migrations: `Sindopoly-Java/src/main/resources/db/migration/`.
 - Backend configuration: `Sindopoly-Java/src/main/resources/application.properties`.
 - Maven wrappers: root and `Sindopoly-Java/` (`mvnw`, `mvnw.cmd`).
 - No `.env.example`, `scripts/dev-up.ps1`, or `scripts/verify-dev.ps1` exists today.
@@ -79,10 +79,12 @@ Do not present any unverified command as a clean startup guarantee.
 | `frontend` / `sindopoly-frontend` | `sindopoly-front/Dockerfile` | 80 | Nginx-served React build |
 
 MariaDB and Redis have healthchecks. The backend waits for both services to be
-healthy; the frontend depends only on backend service start. The only declared
-bind mount is `./MariaDB/init.sql` to the MariaDB init directory, read-only.
-No persistent named volumes are declared, and clean initialization behavior is
-unverified.
+healthy; the frontend depends only on backend service start. Compose no longer
+mounts `MariaDB/init.sql`: the backend runs Flyway V1 against an empty database
+before Hibernate validation. No persistent named volumes are currently
+declared, so `docker compose down` followed by container recreation is not a
+durable-data guarantee; back up any important local database before recreating
+the MariaDB container.
 
 Compose sets `SPRING_PROFILES_ACTIVE=docker`, datasource variables, and
 `SPRING_DATA_REDIS_HOST=redis` / `SPRING_DATA_REDIS_PORT=6379`. The backend and
@@ -113,11 +115,21 @@ optional dice entropy. MariaDB holds persistent players, squares, cards, and
 aggregated stats. Stats are finalized from Redis into MariaDB at game end/leave;
 there is no verified cross-resource transaction.
 
-Compose is the expected way to start both services. MariaDB runs `MariaDB/init.sql`
-when its database is initialized. The audit identified possible trigger/seed
-duplication and JPA/SQL uniqueness mismatch; clean schema startup is therefore
-not fully verified. Mixed native-backend/Docker-infrastructure mode is also
-unverified because of the MariaDB hostname and Redis variable issues.
+Compose is the expected way to start both services. On a fresh database, backend
+startup applies Flyway V1, installs the Stats trigger and Card/Square reference
+data, and then Hibernate validates the mappings. Fresh migration is verified by
+MariaDB 10.11 Testcontainers coverage; no demo Players are required.
+
+On the first startup against a pre-Flyway database, the temporary legacy bridge
+recognizes the historical schema, performs only approved Stats,
+`game_finalization`, and Pay-20 repairs, preserves existing Players/Stats, and
+baselines Flyway at V1. Later starts use Flyway alone. Unknown or ambiguous
+legacy data fails startup rather than being silently blessed. Do not delete the
+database merely to obtain Flyway history; diagnose the fail-closed message and
+follow `docs/architecture/DATABASE_MIGRATION_OWNERSHIP.md`.
+
+Mixed native-backend/Docker-infrastructure mode remains sensitive to the
+MariaDB hostname and Redis variable issues documented above.
 
 ## Environment variables and secrets
 
@@ -146,7 +158,8 @@ These prevent claiming a clean `clone → configure → start → verify` workfl
    critical game-flow E2E coverage remain REVAMP-022.
 6. Frontend localhost API calls versus container networking are unverified
    (REVAMP-007, REVAMP-021, REVAMP-028).
-7. MariaDB trigger/seed/uniqueness behavior is not characterized (REVAMP-011, REVAMP-024).
+7. Compose does not yet declare a durable MariaDB named volume; preserve or back
+   up local data before container recreation (REVAMP-030 operations verification).
 8. Local and CI verification contracts exist; clean-checkout verification remains
    REVAMP-030.
 

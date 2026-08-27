@@ -8,14 +8,15 @@ repository contents permission.
 
 | Job | GitHub command | Local equivalent | Scope |
 | --- | --- | --- | --- |
-| Backend fast verification | `mvn clean verify` | `Sindopoly-Java`; `mvn clean verify` | Compile, package, and the fast 88-test tier on Java 21. |
-| Backend integration verification | `mvn verify -Pintegration-tests` | `Sindopoly-Java`; same command | Fast tier plus Testcontainers Redis/MariaDB and all `*IT` coverage. REVAMP-022 increases the tier from 36 to 40 tests with four real HTTP and SockJS/STOMP boundary tests. |
+| Backend fast verification | `mvn clean verify` | `Sindopoly-Java`; `mvn clean verify` | Compile, package, and the fast 92-test tier on Java 21. |
+| Backend integration verification | `mvn verify -Pintegration-tests` | `Sindopoly-Java`; same command | Fast tier plus Testcontainers Redis/MariaDB and all `*IT` coverage. REVAMP-024 runs 46 integration tests, including empty Flyway V1, legacy baseline/repair/fail-closed/concurrency, and the existing HTTP/STOMP game-flow tests. |
 | Frontend build verification | `npm ci`, `npm test`, `npm run build` | `sindopoly-front`; same commands | Clean lockfile installation, seven Node realtime tests, and the Vite production build on Node 20. |
 
 The integration job deliberately uses no Actions service containers. Testcontainers
 creates disposable `redis:7.0-alpine`, `mariadb:10.11`, and Ryuk resources with
-dynamic ports, synthetic credentials, the current `MariaDB/init.sql`, and normal
-test cleanup. It does not use developer or production Redis/MariaDB values.
+dynamic ports, synthetic credentials, Flyway V1 or the explicitly historical
+legacy fixture as appropriate, and normal test cleanup. It does not use
+developer or production Redis/MariaDB values.
 
 ## Failure policy and current exclusions
 
@@ -28,8 +29,8 @@ Frontend lint is intentionally not a baseline job because the documented
 repository lint baseline has real failures. It is not hidden with a passing or
 allowed-to-fail step; a future approved lint repair should add it as a required
 command. The existing backend-integration job automatically enforces the
-REVAMP-022 real HTTP/STOMP flow because Failsafe selects every `*IT` test; no
-second container stack or developer-local Docker dependency is introduced.
+REVAMP-022 real HTTP/STOMP flow and REVAMP-024 migration matrix because Failsafe
+selects every `*IT` test; no separate CI-only schema path is introduced.
 
 The Windows Docker Desktop 29.4.3 `-Dapi.version=1.44` Testcontainers discovery
 workaround is local troubleshooting evidence only. Linux GitHub runners use the

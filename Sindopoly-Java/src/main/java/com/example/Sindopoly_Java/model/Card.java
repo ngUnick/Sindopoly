@@ -8,9 +8,12 @@ public class Card {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(columnDefinition = "SMALLINT")
     private int id;
 
+    @Column(length = 200)
     private String  title;
+    @Column(length = 1000)
     private String  description;
 
     @Enumerated(EnumType.STRING)
