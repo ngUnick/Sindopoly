@@ -1,0 +1,10 @@
+# Machine-local editor configuration; shared tasks/launch/extensions remain eligible for version control
+.vscode/settings.json
+
+# Runtime crash and local Redis persistence artifacts
+hs_err_pid*.log
+replay_pid*.log
+dump.rdb
+
+# Maven Versions Plugin backup files
+*.versionsBackup

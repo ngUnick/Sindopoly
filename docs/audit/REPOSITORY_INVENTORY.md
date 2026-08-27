@@ -2,6 +2,12 @@
 
 Status: current as of the audit run on 2026-07-13.
 
+REVAMP-025 update (2026-08-27): the inventory below preserves the audit-time
+snapshot. The production-unwired `TurnService` and `BankruptcyService`, tracked
+machine/generated artifacts, and confirmed stale frontend/commented paths were
+removed after replacement coverage and call-site verification. See
+`docs/revamp/REVAMP_025_CLEANUP_DECISIONS.md` for current disposition.
+
 ## Modules and entry points
 
 | Area | Location | Evidence | Notes |
@@ -58,8 +64,10 @@ These are ignored by existing ignore rules or not shown by `git status --short` 
 
 ## Notable repository artifacts
 
+The following were present during the audit and were removed/ignored by
+REVAMP-025 as generated local/runtime artifacts:
+
 - Root JVM crash logs: `hs_err_pid1674.log`, `hs_err_pid1873.log`, `hs_err_pid882.log`.
 - Root Redis dump: `dump.rdb`.
 - Root replay log: `replay_pid1674.log`.
 - Mojibake/encoding corruption appears in comments and seed text in `README.md`, Java comments, and `MariaDB/init.sql`.
-

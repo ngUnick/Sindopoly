@@ -21,17 +21,18 @@ retain pre-revamp audit provenance where explicitly labeled as risks.
 
 - Type: HASH.
 - Example: `game:1`.
-- Created by: `GameStateService#createGame`.
-- Updated by: `GameStateService#startGame`, `setGameField`, `updateGameFields`, `endGame`; `TurnService` via `GameStateService`.
-- Read by: controllers, `TurnService`, `GameLoopScheduler`, frontend through REST.
-- Deleted by: `GameStateService#deleteGame`, `deleteGameAndPlayers`.
+- Created/updated/deleted by: application command services through
+  `RedisGameTransitionStore`.
+- Read by: command/snapshot services and the read-only `GameStateService`
+  discovery/authorization facade; frontend consumers read through REST.
 - TTL: 24h at lobby creation; configurable 300s default after authoritative completion; start leaves the earlier lobby TTL in place.
 - Fields observed: `status`, `creationTime`, `visibility`, `inviteCode`, `playerTurn`, `turnOrder`, `timer`, `startTime`, `maxTime`, `maxMoney`, `winner`, `lastDice`, `optionalAction`, `optionalDeadline`, `stateVersion`, `turnDeadlineEpochMs`, `terminalResult`.
 - Purpose: authoritative active game metadata.
 - `optionalAction` is server-created typed JSON bound to the active player and
   committed `stateVersion`; a concurrent surviving-player membership change
   rebinds it in the same CAS while invalidating intent from the older snapshot.
-- Risks: no owner field despite owner being inferred from game ID; deprecated raw helpers still contain legacy optional-action formats but are not live transport paths.
+- Risks: no owner field despite owner being inferred from game ID; the legacy
+  optional-action helper was removed by REVAMP-025.
 
 `turnDeadlineEpochMs` is the server-owned deadline for the current actionable
 phase. `terminalResult` is bounded JSON containing all durable finalization
@@ -52,10 +53,9 @@ private authoritative state, and is removed from public-lobby projections.
 
 - Type: SET.
 - Example: `game:1:players`.
-- Created by: `GameStateService#createGame`.
-- Updated by: `addPlayerToGame`, `addPlayerToGameWithInviteCode`, `removePlayerFromGame`.
+- Created/updated/deleted by: application command services through
+  `RedisGameTransitionStore`.
 - Read by: lobby/game details, membership authorization, and ownership scanning; never used as an ordering source.
-- Deleted by: `deleteGame`, `deleteGameAndPlayers`.
 - TTL: 24h at lobby creation; configurable 300s default after completion.
 - Purpose: active game membership.
 - Ordering: Redis SET iteration and numeric player IDs have no turn-order semantics; `game:{gameId}.turnOrder` is authoritative.
@@ -64,15 +64,16 @@ private authoritative state, and is removed from public-lobby projections.
 
 - Type: HASH.
 - Example: `player:1`.
-- Created by: `PlayerStateService#initializePlayer` at game start.
-- Updated by: `PlayerStateService#savePlayerState`, `grantMoney`, `payToExitJail`; `TurnService`; `SquareActionService`.
-- Read by: game details, turn flow, end conditions, winner calculation.
+- Created/updated by: authoritative application transitions through
+  `RedisGameTransitionStore`.
+- Read by: command/snapshot services and the read-only `PlayerStateService`
+  projection facade.
 - Deleted by: explicit player lifecycle only; game completion/abandonment does not own this shared key.
 - TTL: 2h at initialization; never shortened by old-game terminal cleanup.
 - Fields observed: `position`, `money`, `jail`, `jailTime`, `bankrupt`, `properties`, `afk`.
 - Purpose: authoritative active player state.
-- Risks: the former arbitrary client-write routes were removed by REVAMP-017,
-  but deprecated internal raw helpers remain; the key is not game-namespaced, so
+- Risks: the former arbitrary client-write routes were removed by REVAMP-017
+  and unused raw projection-service mutators by REVAMP-025; the key is not game-namespaced, so
   one player in multiple games would still collide if cross-game membership
   exclusion races.
 
@@ -80,8 +81,9 @@ private authoritative state, and is removed from public-lobby projections.
 
 - Type: LIST.
 - Example: `game:1:deck`.
-- Created by: `CardService#initialiseDeck`.
-- Updated/read by: the authoritative `TurnCommandService`; deprecated `CardService` remains an unwired compatibility helper.
+- Created/updated by: authoritative card transitions through
+  `RedisGameTransitionStore`; `TurnCommandService` selects the deterministic
+  cycling order. `CardService` remains an unwired test-oriented helper.
 - TTL: aligned with the game by the transition store; completion uses the configurable terminal TTL (300s default).
 - Stored value: card IDs as strings.
 - Purpose: isolated per-game cycling card order. A draw removes the head and appends that card to the tail in the same atomic transition as its effect.

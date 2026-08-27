@@ -2,6 +2,12 @@
 
 This is a lightweight, repository-specific threat model for Sindopoly. It is intended to guide future feature reviews, not to replace implementation-specific security analysis.
 
+The initial evidence below is the pre-revamp threat baseline. Current identity,
+authorization, CAS, realtime, and migration controls are documented in the
+canonical security and architecture references; REVAMP-025 removes the
+production-unwired `TurnService` and raw projection-service mutators without
+removing those controls.
+
 Current evidence baseline:
 
 - REST controllers live under `Sindopoly-Java/src/main/java/com/example/Sindopoly_Java/controller`.
@@ -80,8 +86,8 @@ Failure risks:
 Current evidence after REVAMP-017:
 
 - Arbitrary player-state overwrite/deletion and direct money-grant routes are
-  removed; `PlayerStateService#savePlayerState` remains an internal persistence
-  primitive for server-owned transitions.
+  removed; REVAMP-025 also removes the unused raw `PlayerStateService` mutation
+  helpers. Server-owned writes use the authoritative transition store.
 - Client-triggered game deletion and `check-end` completion evaluation are
   removed. Authenticated self-leave and explicit lobby-host kick remain bounded
   membership commands.

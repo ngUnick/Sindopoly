@@ -2,6 +2,11 @@
 
 Do not delete based on this file alone. Spring, Jackson, JPA, and frontend routing can hide usage. Classifications are candidates with evidence.
 
+REVAMP-025 resolved the confirmed candidates after repository-wide call-site,
+wiring, route, and replacement-test verification. See
+`docs/revamp/REVAMP_025_CLEANUP_DECISIONS.md` for the removal record. Rows below
+remain the original audit inventory rather than being erased from history.
+
 | Candidate | Classification | Evidence | Notes |
 | --- | --- | --- | --- |
 | Commented old turn endpoint in `TurnController` | CONFIRMED_UNUSED | Entire `@PostMapping("/{gameId}/{playerId}")` block commented out. | Safe future cleanup after compatibility decision. |
@@ -16,5 +21,4 @@ Do not delete based on this file alone. Spring, Jackson, JPA, and frontend routi
 | `CorsConfig` and `WebSecurityConfig` both configure CORS | DUPLICATE_IMPLEMENTATION | Two CORS sources with different origins/scopes. | Not dead; redundant/conflicting. |
 | `RandomOrgGenerator.web` field | PROBABLY_UNUSED | Constructed but not used in `RandomOrgGenerator`; refill job has its own `WebClient`. | Verify before cleanup. |
 | `sendPlayerToJail`, `payJailFee`, `applyCardEvent` in `SquareActionService` | PROBABLY_UNUSED | No active references found in file search. | Could be intended helpers. |
-| Root JVM crash logs and Redis dump | UNKNOWN / cleanup candidate | `hs_err_pid*.log`, `dump.rdb`, `replay_pid1674.log` at repo root. | Do not remove in audit; decide whether they are intentional diagnostics. |
-
+| Root JVM crash logs and Redis dump | REMOVED_BY_REVAMP_025 | `hs_err_pid*.log`, `dump.rdb`, `replay_pid1674.log` were generated local/runtime artifacts with no build or source reference. | Removed and covered by root ignore rules; historical evidence remains in this audit. |

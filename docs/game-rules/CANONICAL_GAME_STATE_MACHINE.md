@@ -138,8 +138,8 @@ the choice.
 Join order is persisted in `game:{gameId}.turnOrder` as players join and frozen
 at game start. It is explicit ordered state distinct from membership; removal
 preserves remaining relative order and rotation picks the next active player.
-Numeric player-ID sorting survives only in unwired deprecated helpers, not the
-authoritative command path.
+Numeric player-ID sorting was removed with the unwired deprecated turn helper;
+it is not part of the authoritative command path.
 
 Implemented migration state and remaining legacy representations:
 
@@ -148,12 +148,13 @@ Implemented migration state and remaining legacy representations:
 - an unrelated in-progress membership change preserves a surviving active
   player's option but rebinds it to the newly committed version atomically, so
   intent submitted against the prior snapshot is stale;
-- deprecated `SquareEventDto` and colon-delimited helpers remain unwired cleanup
-  candidates;
+- `SquareEventDto` remains only with isolated square-rule coverage; the
+  colon-delimited optional-action helper was removed and is not a supported
+  alternate persistence format;
 - `/action` path/body identity agreement is enforced and server session identity
   remains authoritative;
 - active notifications use `LOBBY_UPDATED`, `GAME_STARTED`, `TURN_UPDATED`, and
-  `GAME_COMPLETED`; legacy event names remain only in an unwired deprecated fixture;
+  `GAME_COMPLETED`; the unwired legacy event publisher was removed;
 - notifications remain non-durable and snapshot recovery remains required.
 
 ## Redis and durable-data mapping

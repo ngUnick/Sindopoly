@@ -1,26 +1,15 @@
-import { useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTrophy } from "@fortawesome/free-solid-svg-icons";
 import { Button } from "antd";
-import { GamePlayAPI } from "../../apis/GamePlayAPI";
 import bgImg from "../../assets/images/monopoly_bg.png";
 
 const EndGame = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // grab winner, gameId, playerId from the URL (or fallback to localStorage)
   const winnerName = searchParams.get("winner") || "Unknown"
   const capital    = searchParams.get("capital") || ""
-  const gameId   = searchParams.get("game");
-  const playerId = searchParams.get("player") || localStorage.getItem("player_id");
-
-  useEffect(() => {
-    // only call once, and only if we have both IDs
-    if (!gameId || !playerId) return;
-    GamePlayAPI.endGame(gameId, playerId).catch(console.error);
-  }, [gameId, playerId]);
 
   return (
     <div className="flex-grow flex justify-center items-center bg-cover bg-no-repeat" style={{ backgroundImage: `url(${bgImg})` }}>

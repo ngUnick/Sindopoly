@@ -415,7 +415,7 @@ Two choices are especially important:
 
 ### REVAMP-025 — Remove confirmed obsolete code and local artifacts
 
-- Status: `READY`; Priority: `P4`; Category: `CLEANUP`.
+- Status: `DONE`; Priority: `P4`; Category: `CLEANUP`.
 - Rationale / evidence: commented legacy turn handlers, stale frontend wrappers, duplicate optional-action paths, crash logs, and Redis dump are candidates only.
 - Desired outcome: remove only code/artifacts proven unused after compatible contracts and regression coverage exist.
 - Dependencies: REVAMP-022, REVAMP-023, REVAMP-024. Blocks: none.
@@ -430,7 +430,7 @@ Two choices are especially important:
 
 ### REVAMP-026 — Apply remaining deployment security hardening
 
-- Status: `BLOCKED`; Priority: `P1`; Category: `SECURITY`.
+- Status: `READY`; Priority: `P1`; Category: `SECURITY`.
 - Rationale / evidence: committed defaults, exposed services, duplicate CORS, permissive WebSocket origins, ad hoc logs, and error taxonomy remain.
 - Desired outcome: environment-aware secrets/origin/logging/error/abuse posture consistent with the chosen authentication and realtime design.
 - Dependencies: REVAMP-015 through REVAMP-017, REVAMP-021, REVAMP-023. Blocks: release sign-off.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-025 — Remove confirmed obsolete code and
-local artifacts**. Later work remains blocked by the structural-cleanup exit
-criteria and release prerequisites.
+The immediate `READY` item is **REVAMP-026 — Apply remaining deployment security
+hardening**. Later work remains deferred or blocked by hardening, documentation,
+regression, and release prerequisites.
 
 ## Planning review
 

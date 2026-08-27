@@ -281,10 +281,6 @@ const Board = () => {
     { position: 39, type: "property", player: null, name: "ΗΛΕΚΤΡΟΝΙΚΗΣ" },
   ]);
 
-  // Example: Accessing a specific game position
-  // console.log(gamePositions[0]); // debug
-
-
   // ─── new state for our two-step turn modal ─────────────────────────
   // holds the event data (buyOffer, rentDue, card, jailOffer…)
   // holds the raw ThrowResultDto: { dice,newPosition,passedGo,squareType,data }
@@ -294,7 +290,6 @@ const Board = () => {
   const [modalVisible, setModalVisible] = useState(false);
 
   function filterAndDisplayNames() {
-    console.log(gamePositions);
     const filteredPositions = gamePositions.filter(
       (position) => position.type === "property" && position.player !== null
     );
@@ -351,8 +346,6 @@ const Board = () => {
   };
 
   const handleMove = (player) => {
-    // console.log(rHeight);
-
     let stepSize;
 
     if (player) {
@@ -361,7 +354,6 @@ const Board = () => {
         player.userData.stepCounter % 10 == 9
       ) {
         stepSize = 6;
-        // console.log("big step"); // debug
       } else {
         stepSize = 4.15;
       }
@@ -393,11 +385,10 @@ const Board = () => {
         break;
 
       default:
-        console.log("caseNumber doesn't have a correct value"); // debug
+        break;
     }
 
     player.userData.stepCounter++;
-    // console.log("step", player.userData.stepCounter); // debug
   };
 
   const handleTurn = (player) => {
@@ -412,7 +403,6 @@ const Board = () => {
       player.userData.caseNumber = 1;
     }
 
-    // console.log("caseNumber", player.userData.caseNumber); // debug
   };
 
   const getPos = (player) => {
@@ -435,7 +425,6 @@ const Board = () => {
     let yVel = -19;
     if (dresult == 3) {
       yVel = -18.2;
-      // console.log("wow");
     } else if (dresult == 4) {
       yVel = -19.9;
     }
@@ -485,9 +474,6 @@ const Board = () => {
 
       if (elapsed < duration) {
         requestAnimationFrame(animateRoll);
-      } else {
-        // Animation complete, perform actions after the roll
-        // console.log("Dice roll finished!");
       }
     };
 
@@ -573,8 +559,6 @@ const Board = () => {
       setSelfIdx(  myIndex);
       setTurnIdx( turnIndex);
 
-      // console.log("🏷️ getBoard returned:", all);
-      
       const { gameStatus: status, playerTurn, winner, ...me } = board[0];
 
 
@@ -688,46 +672,6 @@ const Board = () => {
   };
 
   useGameRealtime(gameId, handleTick);
-
-
-  // subscribe to turn-by-turn AND end-of-game events
-  // useEffect(() => {
-  //   if (!gameId) return;
-
-  //   // create SockJS-backed STOMP client
-  //   const socket = new SockJS('/ws');
-  //   const stompClient = Stomp.over(socket);
-
-  //   // optional: disable console.debug spam
-  //   stompClient.debug = () => {};
-
-  //   stompClient.connect(
-  //     {}, // headers
-  //     () => {
-  //       stompClient.subscribe(
-  //         `/topic/game/${gameId}`,
-  //         (msg) => {
-  //           const body = JSON.parse(msg.body);
-  //           if (body.event === 'gameEnded') {
-  //             navigate(`/endgame?winner=${body.winner}`, { replace: true });
-  //           }
-  //         }
-  //       );
-  //     },
-  //     (err) => {
-  //       console.error('STOMP error', err);
-  //     }
-  //   );
-
-  //   return () => {
-  //     stompClient.disconnect();
-  //   };
-  // }, [gameId, navigate]);
-
-
-
-
-
 
 
   useEffect(() => {
@@ -998,8 +942,6 @@ const Board = () => {
 
   // Add Responsiveness ------------------------------------------------------------------------------------------------
   window.addEventListener("resize", () => {
-    console.log("Window resized");
-
     // update display width and height
     let width = window.innerWidth;
     let height = window.innerHeight * 0.92;
@@ -1044,8 +986,6 @@ const Board = () => {
       // randomDiceThrow(dice1, dice);
       await new Promise(r => setTimeout(r, 1000));
       findSteps(sphereRef.current, newPosition);
-
-      console.log("💥 raw throwDice()", tr);
 
       // 2️⃣ always show modal with the raw result
       setTurnResult(tr);

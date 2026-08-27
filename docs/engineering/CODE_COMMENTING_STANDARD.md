@@ -1,5 +1,9 @@
 # Sindopoly code-commenting standard
 
+Examples naming `TurnService` or the commented controller/frontend blocks are
+audit-baseline examples. REVAMP-025 removes those confirmed obsolete sources;
+the commenting rules remain normative for current code.
+
 This standard defines how future Sindopoly code changes should use comments and technical documentation. It is tailored to the current Spring Boot, Redis, MariaDB, REST, WebSocket, scheduler, and React codebase.
 
 Guiding principle:
@@ -519,4 +523,3 @@ Prefer clearer names and one intent comment only if the branch protects a rule.
 | Is this a getter, setter, obvious DTO field, or simple constructor? | NOT_NEEDED |
 
 Future Codex tasks should apply this checklist before final response.
-

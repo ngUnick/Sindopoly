@@ -58,15 +58,6 @@ public class TurnController {
         return turnCommands.action(gameId, playerId, req.getYes(), commandMetadataResolver.resolve(commandId, expectedVersion));
     }
 
-    /** old endpoint left untouched, or remove it when you’re ready */
-    // @PostMapping("/{gameId}/{playerId}")
-    // public TurnService.TurnResponse playTurn(
-    //     @PathVariable int gameId,
-    //     @PathVariable int playerId
-    // ) {
-    //     return turnSvc.playTurn(gameId, playerId);
-    // }
-
     /** ② Decline optional (old “pass”). */
     @PostMapping("/{gameId}/{playerId}/pass")
     public ResponseEntity<?> passOptional(
@@ -79,15 +70,4 @@ public class TurnController {
         return ResponseEntity.ok(turnCommands.pass(gameId, playerId,
                 commandMetadataResolver.resolve(commandId, expectedVersion)));
     }
-
-    // /** ③ Apply the user’s choice (buy/pay/ok). */
-    // @PostMapping("/{gameId}/{playerId}/action")
-    // public ActionResultDto doAction(
-    //         @PathVariable int gameId,
-    //         @PathVariable int playerId,
-    //         @RequestBody ActionRequestDto req
-    // ) {
-    //     // you may want to validate req.gameId == gameId etc.
-    //     return turnSvc.handleAction(req);
-    // }
 }

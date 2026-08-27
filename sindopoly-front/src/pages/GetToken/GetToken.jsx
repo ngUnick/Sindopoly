@@ -13,7 +13,6 @@ const GetToken = () => {
 
     const loginFun = async (codeFromServer) => {
         const response = await AuthAPI.exchangeCodeWithToken({code : codeFromServer});
-        console.log(response);
         setToken(response);
         const response2 = await AuthAPI.login(response.access_token);
         login(response2);

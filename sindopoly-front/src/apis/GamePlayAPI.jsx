@@ -1,5 +1,4 @@
 import API_BASE_URL from "./apiConfig";
-import { TurnAPI }  from "./TurnAPI";
 import { apiFetch } from "./apiClient";
 import { acceptGameSnapshot, observeGameSnapshot } from "./gameCommandState";
 import { GameAPI } from "./GameAPI";
@@ -46,32 +45,6 @@ export const GamePlayAPI = {
   getBoard: assembleBoard,
 
 
-  /****** TWO-STEP TURN ******/
-
-  // /** Step 1: roll & peek */
-  // playTurn: async (gameId, playerId) => {
-  //   const r = await TurnAPI.throwDice(gameId, playerId);
-  //   if (!r) throw new Error("Roll failed");
-  //   return r;
-  // },
-
-  // /** Step 2: apply the modal decision */
-  // playAction: async (gameId, playerId, action, squareId = null) => {
-  //   const r = await TurnAPI.doAction(gameId, playerId, action, squareId);
-  //   if (!r) throw new Error("Action failed");
-  //   return r;
-  // },
-
-  // /****** legacy, you can delete these once React is updated ******/
-  // playTurn: async (gameId, playerId) => {
-  //   const data = await TurnAPI.throwDice(gameId, playerId);
-  //   return data;
-  // },
-  // passOptional: async (gameId, playerId) => {
-  //   return await TurnAPI.doAction(gameId, playerId, "pass", null);
-  // },
-
-  /****** other APIs unchanged ******/
   getInGameStatus: async playerId => {
     const r = await apiFetch(
       `${API_BASE_URL}/api/game-state/in-game/${playerId}`
@@ -80,23 +53,6 @@ export const GamePlayAPI = {
     return r.json();
   },
 
-  buyProperty: async (gameId, playerId, propertyId) => {
-    const r = await apiFetch(
-      `${API_BASE_URL}/api/player-state/${gameId}/${playerId}/buy?propertyId=${propertyId}`,
-      { method: "POST" }
-    );
-    if (!r.ok) throw new Error("Purchase failed");
-    return r.json();
-  },
-
-  payJailFine: async (gameId, playerId) => {
-    const r = await apiFetch(
-      `${API_BASE_URL}/api/player-state/${gameId}/${playerId}/pay-jail`,
-      { method: "POST" }
-    );
-    if (!r.ok) throw new Error("Jail payment failed");
-    return r.json();
-  },
 };
 
 export async function getGameState(gameId) {

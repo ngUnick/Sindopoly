@@ -79,12 +79,14 @@ Removed from the game-state API in REVAMP-017:
 - `POST /api/game-state/{gameId}/check-end`; completion evaluation remains an
   internal transition/scheduler concern.
 
-Frontend references but backend does not expose:
+Removed from the frontend in REVAMP-025 because the backend does not expose
+them and no supported client caller existed:
 
 - `POST /api/player-state/{gameId}/{playerId}/buy?propertyId=...`
 - `POST /api/player-state/{gameId}/{playerId}/pay-jail`
 
-Evidence: `sindopoly-front/src/apis/GamePlayAPI.jsx`; no matching mappings found in `PlayerStateController`.
+The supported purchase/jail choices use the authenticated authoritative turn
+action endpoints below.
 
 ## Turn API: `/api/turn`
 

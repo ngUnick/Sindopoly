@@ -41,11 +41,11 @@ generic `500`.
 | session logout | Invalidates only the server session; it does not write active game state. Retained. |
 
 No REST controller constructs Redis keys, receives arbitrary Redis fields, or
-calls raw `RedisTemplate` mutation. Low-level methods such as
-`PlayerStateService#savePlayerState`, `GameStateService#setGameField`, and
-`GameStateService#checkEndCondition` remain server-internal persistence or
-transition primitives. Their continued public Java visibility reflects current
-package boundaries, not transport exposure.
+calls raw `RedisTemplate` mutation. REVAMP-025 removed the unused raw mutation
+and legacy orchestration methods from `GameStateService`; it now provides only
+the discovery and authorization reads consumed by live callers.
+`PlayerStateService` likewise exposes only its live read projection. Active
+game and player writes are owned by the authoritative transition store.
 
 ## Replacement and lifecycle policy
 
@@ -55,20 +55,18 @@ package boundaries, not transport exposure.
   `POST /api/game-state/{gameId}/players/{targetPlayerId}/kick`.
 - There is no client replacement for arbitrary state writes, balance grants,
   active-state deletion, or manual completion evaluation.
-- `GameStateService#checkEndCondition` remains callable only by server-owned
-  transition/scheduler paths. REVAMP-020 owns the final unified completion and
-  timer design.
+- Completion evaluation and cleanup are owned by the transition-safe
+  lifecycle/scheduler path established in REVAMP-020.
 - Canonical cleanup remains a system responsibility after terminal
-  finalization/recovery. REVAMP-018 introduces the common atomic command path;
-  this task does not implement it.
+  finalization/recovery through the common transition path.
 
 ## Redis and MariaDB contracts
 
 | Key | Type and serialization | Affected fields/operation | Owner | TTL/lifecycle |
 | --- | --- | --- | --- | --- |
-| `player:{playerId}` | HASH; string keys/fields/values through `StringRedisSerializer` | Removed routes formerly overwrote arbitrary fields, changed `money`, or deleted the hash | `PlayerStateService` | Initialized for approximately two hours; current completion shortens it to approximately 30 seconds; game cleanup may delete it |
-| `game:{gameId}` | HASH; string fields/values | Removed delete route deleted the hash; removed check-end could set `status=ended`, `winner`, and terminal TTL | `GameStateService` | Approximately 24 hours at lobby creation; current completion shortens it to approximately 30 seconds |
-| `game:{gameId}:players` | SET of decimal player-ID strings | Removed delete route deleted membership; check-end read membership and shortened TTL on completion | `GameStateService` | Same lobby/terminal lifecycle as the game hash |
+| `player:{playerId}` | HASH; string keys/fields/values through `StringRedisSerializer` | Removed routes formerly overwrote arbitrary fields, changed `money`, or deleted the hash | `RedisGameTransitionStore` | Initialized for approximately two hours; completion/abandonment does not shorten this shared key |
+| `game:{gameId}` | HASH; string fields/values | Removed delete route deleted the hash; removed check-end could set `status=ended`, `winner`, and terminal TTL | `RedisGameTransitionStore` | Approximately 24 hours at lobby creation; configurable 300-second default after completion |
+| `game:{gameId}:players` | SET of decimal player-ID strings | Removed delete route deleted membership; check-end read membership and shortened TTL on completion | `RedisGameTransitionStore` | Same lobby/terminal lifecycle as the game hash |
 
 The removed check-end flow also read player `money`/`properties`, queried
 MariaDB `Square` metadata to value assets, and could update MariaDB `Stats` rows

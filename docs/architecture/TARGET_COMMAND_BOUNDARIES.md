@@ -61,11 +61,11 @@ The transport creates `CreateLobbyCommand`. The authenticated actor, not `GameCr
 
 ### Roll dice
 
-`RollCommand(gameId, actor, commandId?)` accepts no dice, position, balance, or active-player claim as authority. The application service verifies membership, active player, and phase; establishes the per-game idempotency/concurrency boundary; loads state; obtains server-generated randomness; and invokes deterministic rules. It persists movement and pending/automatic outcome as one accepted transition, then emits the resulting event. This corrects the current inconsistency where `TurnService#throwDice` mutates Redis but publishes no broker event. Doubles and jail rules remain for REVAMP-014.
+`RollCommand(gameId, actor, commandId?)` accepts no dice, position, balance, or active-player claim as authority. The application service verifies membership, active player, and phase; establishes the per-game idempotency/concurrency boundary; loads state; obtains server-generated randomness; and invokes deterministic rules. It persists movement and pending/automatic outcome as one accepted transition, then emits the resulting event. This corrected the audit-baseline inconsistency where `TurnService#throwDice` mutated Redis but published no broker event. Doubles and jail rules were resolved by REVAMP-014.
 
 ### Optional action / pass
 
-The transport creates `ResolveOptionalActionCommand(gameId, actor, choice, commandId?)` from the path/destination and choice. It rejects mismatched body identity; bodies should eventually carry no authority IDs. The command checks actor, phase, and pending-action ownership; applies the rule; persists cleared pending state and turn advancement; then emits one authoritative completion/turn event. This replaces `TurnController#doAction` passing body IDs directly to `TurnService#applyAction`.
+The transport creates `ResolveOptionalActionCommand(gameId, actor, choice, commandId?)` from the path/destination and choice. It rejects mismatched body identity; bodies should eventually carry no authority IDs. The command checks actor, phase, and pending-action ownership; applies the rule; persists cleared pending state and turn advancement; then emits one authoritative completion/turn event. This replaced the audit-baseline path where `TurnController#doAction` passed body IDs directly to `TurnService#applyAction`.
 
 ### Timeout, disconnect, reconnect, cleanup
 
@@ -73,7 +73,7 @@ The scheduler submits `TimeoutCommand` through the same application transition p
 
 ## Current-to-target corrections
 
-| Concern | Current owner(s) | Problem | Target owner | Relevant work |
+| Concern | Audit-baseline owner(s) | Problem | Target owner | Relevant work |
 | --- | --- | --- | --- | --- |
 | Lobby validation | `GameStateController` + `GameStateService` | Duplicate/capacity policy split | Lobby command service | REVAMP-015–018 |
 | Actor authority | Path/query/body IDs | Client IDs treated as proof | Actor resolver + command authorization | REVAMP-015, 016 |

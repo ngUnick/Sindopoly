@@ -1,5 +1,12 @@
 # Sindopoly software-engineering quality model
 
+Implementation examples that cite `TurnService`, raw `GameStateService`
+mutators, or direct legacy WebSocket publication describe the 2026-07-13 audit
+baseline. The authoritative command/store/event boundaries replaced those
+paths in REVAMP-018 through REVAMP-023, and REVAMP-025 removes the unwired
+legacy implementation after replacement coverage. The normative standards in
+this document remain current.
+
 This document defines the engineering model for future Sindopoly work. It is intentionally repository-specific: it uses the current Spring Boot backend, Redis active state, MariaDB persistence, REST APIs, WebSocket broker configuration, scheduled jobs, and React frontend as its reference point.
 
 This model is not a call for a broad rewrite. It is a standard for making each future change safer, easier to test, and easier to review.
@@ -11,12 +18,18 @@ The current code organizes concerns roughly as follows:
 - REST transport: `Sindopoly-Java/src/main/java/com/example/Sindopoly_Java/controller/*`.
 - WebSocket transport/broker setup: `config/WebSocketConfig.java`, endpoint `/ws`, broker `/topic`, application prefix `/app`.
 - Request validation: `utils/ValidationUtils.java`, plus ad hoc validation in controllers and services.
-- Application orchestration: mostly `service/orchestrator/TurnService.java` and parts of `service/GameStateService.java`.
-- Domain/game-rule logic: `service/core/DiceService.java`, `MovementService.java`, `SquareActionService.java`, `CardService.java`, `BankruptcyService.java`.
+- Audit-baseline application orchestration: formerly
+  `service/orchestrator/TurnService.java` and mutation methods in
+  `service/GameStateService.java`; current commands use the transition services
+  and `RedisGameTransitionStore`.
+- Domain/game-rule logic: `service/core/DiceService.java`,
+  `MovementService.java`, retained test-oriented `SquareActionService.java` and
+  `CardService.java`, plus the authoritative transition rule path.
 - Redis state access: `GameStateService`, `PlayerStateService`, `SquareActionService`, `CardService`, `StatsService`, `DiceEntropyRefillJob`, `RandomOrgGenerator`.
 - Redis Pub/Sub: no confirmed Redis Pub/Sub implementation; current game event delivery uses Spring `SimpMessagingTemplate`.
 - MariaDB persistence: `model/*`, `repository/*`, and versioned Flyway migrations under `src/main/resources/db/migration`.
-- Event publication/WebSocket broadcasting: `TurnService#applyAction`, `TurnService#finishTurn`, `GameLoopScheduler#pollEndConditions`.
+- Event publication/WebSocket broadcasting: application transitions publish
+  through `GameEventPublisher` and `StompGameEventPublisher`.
 - Authentication/authorization: no effective backend auth; `WebSecurityConfig` permits all requests.
 - Timers/scheduled processing: `GameLoopScheduler`, `StatsService#refreshLeaderboard`, `DiceEntropyRefillJob`.
 - Frontend API communication: `sindopoly-front/src/apis/*`, plus direct `fetch("http://localhost:8080/...")` calls in pages.
@@ -75,7 +88,8 @@ Should not:
 
 Current evidence:
 
-- `TurnService#throwDice` is the closest current application command handler.
+- The audit-baseline `TurnService#throwDice` was the closest application command
+  handler; current turn intent is owned by `TurnCommandService`.
 - `GameStateService` mixes application commands, Redis access, stats finalization, and some rule decisions.
 
 Quality standard:
@@ -154,7 +168,9 @@ Should not:
 
 Current evidence:
 
-- `TurnService` and `GameLoopScheduler` call `broker.convertAndSend("/topic/game/" + gameId, ...)`.
+- The audit baseline published directly from `TurnService` and
+  `GameLoopScheduler`; current publication is centralized behind
+  `GameEventPublisher`.
 - Event names include `actionCompleted`, `turnFinished`, `gameOver`, and `gameEnded`.
 
 Quality standard:
@@ -300,8 +316,9 @@ Current positive evidence:
 
 Current gap evidence:
 
-- `TurnService` constructs `new MovementService()` instead of injecting it.
-- `TurnService` directly publishes WebSocket events through `SimpMessagingTemplate`.
+- The removed audit-baseline `TurnService` constructed `MovementService`
+  directly and published through `SimpMessagingTemplate`; current transition
+  services inject collaborators and publish through `GameEventPublisher`.
 - Scheduled jobs call services and infrastructure directly without a shared command envelope.
 
 ## 4. Encapsulation
@@ -390,8 +407,9 @@ Required interactions to cover:
 
 Current evidence:
 
-- `TurnService#throwDice` rejects non-`inProgress`, wrong player, and pending `optionalAction`.
-- `TurnService#applyAction` reads `optionalAction`, applies it, clears it, and rotates.
+- The audit-baseline `TurnService` performed these checks and mutations inline;
+  current authorization and typed optional-action transitions are enforced by
+  the application command/transition path.
 - `GameLoopScheduler` can end games independently of player commands.
 
 Expected standard:
@@ -471,7 +489,9 @@ Standards:
 
 Current evidence:
 
-- `TurnService#throwDice` performs several reads/writes without a lock/version.
+- The removed audit-baseline `TurnService#throwDice` performed several
+  reads/writes without a lock/version; current commands use Lua CAS and state
+  versions.
 - `GameLoopScheduler` can run while player commands execute.
 - `WebSocketConfig` uses an in-memory simple broker, which is not cross-instance event delivery.
 
@@ -556,7 +576,9 @@ Current evidence:
 
 - `Board.jsx` is a large component mixing rendering, polling, game UI state, and animation.
 - `CorsConfig` and `WebSecurityConfig` both configure CORS.
-- Several old/commented implementations remain in `TurnController`, `TurnService`, `SquareActionService`, and frontend API wrappers.
+- REVAMP-025 removed the confirmed obsolete commented controller/frontend and
+  turn implementations; meaningful square-rule comments remain with retained
+  test-oriented code.
 
 ## 12. Observability
 
@@ -583,7 +605,8 @@ Logging standards:
 
 Current evidence:
 
-- `TurnService#applyAction` prints pending event JSON.
+- The removed audit-baseline `TurnService#applyAction` printed pending event
+  JSON; current command publication does not retain that debug output.
 - Several classes use `System.out.println` or `e.printStackTrace()`.
 - `GlobalExceptionHandler` logs generic unhandled exceptions server-side.
 

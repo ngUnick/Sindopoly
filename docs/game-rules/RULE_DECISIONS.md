@@ -118,12 +118,12 @@ it.
 ### RULE-012 — Typed optional action
 
 - Status: `APPROVED` and implemented on the authoritative turn path.
-- Current behavior: authoritative purchase/jail choices use one typed JSON value; incompatible forms remain only in unwired deprecated helpers, and body identity cannot override session/path identity.
+- Current behavior: authoritative purchase/jail choices use one typed JSON value; the incompatible colon-delimited helper was removed, and body identity cannot override session/path identity.
 - Target decision: one server-created typed option bound to game, active actor, turn/version, action type, allowed choices, typed arguments, and declinability. A choice never supplies authoritative identity/state.
 - Rationale: required by the command boundary, security model, and state-version ADRs.
 - Tests: stale/mismatched actor/type/version, duplicate choice, decline policy, atomic clear-and-transition.
 - Migration: read legacy shapes only during a bounded migration; write one new representation and reject mismatched IDs.
-- Follow-up: implemented by REVAMP-018/019; deprecated helper removal remains REVAMP-025.
+- Follow-up: implemented by REVAMP-018/019; obsolete helper removal is implemented by REVAMP-025 pending its Docker-backed acceptance gate.
 
 ### RULE-013 — Free Parking and unsupported classic mechanics
 

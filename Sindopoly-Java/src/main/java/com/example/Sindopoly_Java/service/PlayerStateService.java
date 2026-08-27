@@ -1,126 +1,24 @@
 package com.example.Sindopoly_Java.service;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import com.example.Sindopoly_Java.utils.ValidationUtils;
-
-import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
 
+/** Read-only projection access for player state stored by authoritative transitions. */
 @Service
 public class PlayerStateService {
     private static final String PLAYER_PREFIX = "player:";
 
-    private final RedisTemplate<String, String> redisTemplate;
     private final HashOperations<String, String, Object> hashOps;
-    private final ValidationUtils validationUtils;
 
-    @Autowired
-    public PlayerStateService(RedisTemplate<String, String> redisTemplate,
-                              ValidationUtils validationUtils) {
-        this.redisTemplate    = redisTemplate;
-        this.hashOps          = redisTemplate.opsForHash();
-        this.validationUtils  = validationUtils;
+    public PlayerStateService(RedisTemplate<String, String> redisTemplate) {
+        this.hashOps = redisTemplate.opsForHash();
     }
 
-    /**
-     * Seed a brand-new player state in Redis:
-     *   position=0, money=1500, jail=false, jailTime=0,
-     *   bankrupt=false, properties=[], afk=false
-     * Call this once when a player is created or joins a game.
-     */
-    public void initializePlayer(int playerId) {
-        String key = PLAYER_PREFIX + playerId;
-
-        // (Optional) guard against re-initializing an existing player:
-        // if (redisTemplate.hasKey(key)) throw new IllegalStateException("Already initialized");
-
-        Map<String,String> init = Map.of(
-        "position",  "0",
-        "money",     "1500",
-        "jail",      "false",
-        "jailTime",  "0",
-        "bankrupt",  "false",
-        "properties","[]",
-        "afk",       "false"
-        );
-
-        // write everything atomically
-        hashOps.putAll(key, init);
-
-        // optionally expire stale player-hashes after 2 hours
-        redisTemplate.expire(key, Duration.ofHours(2));
-    }
-
-    /**
-     * Mark a player as AFK=true in Redis.
-     * Use when you detect a timeout.
-     */
-    public void markAfk(int playerId) {
-        validationUtils.validatePlayerExists(playerId);
-        String key = PLAYER_PREFIX + playerId;
-        hashOps.put(key, "afk", true);
-    }
-
-    /**
-     * Clear the AFK flag (set afk=false).
-     * Call at the start of each new turn for that player.
-     */
-    public void clearAfk(int playerId) {
-        validationUtils.validatePlayerExists(playerId);
-        String key = PLAYER_PREFIX + playerId;
-        hashOps.put(key, "afk", false);
-    }
-
-    /**
-     * Persists server-computed updates to a player state hash.
-     * All values are converted to String to satisfy Redis’s StringRedisSerializer.
-     * This low-level primitive must remain behind authenticated game commands;
-     * transport adapters must never pass client-authored state maps to it.
-     */
-    public void savePlayerState(int playerId, Map<String, Object> playerData) {
-        validationUtils.validatePlayerExists(playerId);
-        String playerKey = PLAYER_PREFIX + playerId;
-
-        // Coerce every value to String
-        Map<String, String> stringData = playerData.entrySet().stream()
-            .collect(Collectors.toMap(
-                Map.Entry::getKey,
-                e -> e.getValue() == null
-                        ? ""                         // or null-safe default
-                        : e.getValue().toString()
-            ));
-
-        hashOps.putAll(playerKey, stringData);
-    }
-
-
-    /**
-     * Fetch the full Redis hash of a player.
-     */
+    /** Fetches the current Redis player-state projection. */
     public Map<String, Object> getPlayerState(int playerId) {
-        String playerKey = PLAYER_PREFIX + playerId;
-        return hashOps.entries(playerKey);
+        return hashOps.entries(PLAYER_PREFIX + playerId);
     }
-
-    /**
-     * Pay to get out of jail: deduct fee, clear jail flags.
-     */
-    public void payToExitJail(int playerId, int fee) {
-        Map<String, Object> p = getPlayerState(playerId);
-        int money = Integer.parseInt(p.get("money").toString());
-        if (money < fee) {
-            throw new IllegalStateException("Insufficient funds");
-        }
-        p.put("money",    money - fee);
-        p.put("jail",     false);
-        p.put("jailTime", 0);
-        savePlayerState(playerId, p);
-    }
-
 }

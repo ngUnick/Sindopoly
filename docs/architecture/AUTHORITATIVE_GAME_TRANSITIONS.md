@@ -111,9 +111,9 @@ claimed as a solved authorization race.
 Normal create, public/invite join, start, leave, kick, roll, action, pass, and
 scheduler completion paths use the transition store. Authorization-relevant
 membership, host/lobby, active-player, and phase state is checked against the
-same snapshot whose version is compared at commit. Legacy low-level mutation
-helpers remain internal compatibility candidates and are not transport entry
-points.
+same snapshot whose version is compared at commit. The retained
+`SquareActionService` and `CardService` helpers are isolated rule-test
+collaborators, not transport entry points or authoritative command writers.
 
 The release write-path audit classifies production Redis writers as follows:
 
@@ -121,13 +121,13 @@ The release write-path audit classifies production Redis writers as follows:
   `RedisGameTransitionStore`;
 - leaderboard caching, dice-entropy refill, and post-commit MariaDB statistics
   are category B infrastructure outside authoritative active-game mutation;
-- raw mutators retained in `GameStateService`, `PlayerStateService`,
-  `SquareActionService`, `CardService`, and `BankruptcyService` are category C:
-  repository-wide caller/wiring search found no controller, scheduler, listener,
-  or live Spring service invoking them. The only orchestration caller is the
-  deprecated `TurnService`, which has no Spring stereotype, `@Bean`, reflection
-  lookup, or production instantiation; characterization tests instantiate it
-  directly. Their removal/consolidation remains REVAMP-023/025.
+- REVAMP-025 removed the production-unwired `TurnService`, its sole
+  `BankruptcyService` collaborator, and the duplicate raw mutation/orchestration
+  surface from `GameStateService`. `GameStateService` now exposes only the
+  discovery and authorization reads used by live callers. Test-oriented
+  `SquareActionService` and `CardService` remain category C because their
+  deterministic rule coverage is still useful; they are not authoritative
+  command-path writers.
 
 No category D live authoritative mutation bypass was found. Redis writes for
 the leaderboard and random-entropy pool are not game state and do not advance a
