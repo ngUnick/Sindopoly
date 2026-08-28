@@ -82,8 +82,9 @@ it.
 - Target decision: retain and repair only the implemented money/transport subset. Each game owns an isolated, server-authoritative deck; draws retain required money/destination effect data; used cards cycle back into the playable deck; reconnect recovery is consistent; cleanup removes game-specific deck state. Ordering/shuffle and exact Redis keys remain implementation details.
 - Rationale: repairs current intent without introducing a full classic card system.
 - Tests: money/transport effects, retained effect data, per-game isolation, exhaustion/cycling, cleanup, missing-card handling, and versioned atomic effects.
-- Migration: introduce no new classic card category; align the eventual state-store representation with the Redis ADR.
-- Follow-up: rule behavior implemented by REVAMP-019; cleanup remains REVAMP-020.
+- Migration: no new classic card category was introduced; the per-game cycling
+  deck and cleanup follow the Redis lifecycle contract.
+- Follow-up: implemented by REVAMP-019/020.
 
 ### RULE-009 — Jail and Go To Jail
 
@@ -93,27 +94,27 @@ it.
 - Rationale: coherent minimal semantics using existing jail concepts without importing classic rules.
 - Tests: replace current jail characterization; add visiting, immediate Go To Jail, pay-to-exit/same-turn roll, three skips/release, stale payment, and turn-rotation coverage.
 - Migration: model payment as the typed server-owned optional action from RULE-012; do not retain the shared legacy Jail/Go To Jail offer.
-- Follow-up: rule behavior implemented by REVAMP-019; timer interaction remains REVAMP-020.
+- Follow-up: implemented by REVAMP-019/020.
 
 ### RULE-010 — Stable turn order and leaving players
 
 - Status: `APPROVED`.
 - Current behavior: the game hash persists explicit join order independently of membership; start freezes it and departure preserves relative order.
-- Target decision: freeze join order when the game starts; it is the canonical turn order. Removing/leaving players preserves relative order, and turn advancement selects the next still-active player in that order. Player IDs carry no ordering semantics. Host-departure/disconnect policy remains deferred.
+- Target decision: freeze join order when the game starts; it is the canonical turn order. Removing/leaving players preserves relative order, and turn advancement selects the next still-active player in that order. Player IDs carry no ordering semantics. Lobby host leave removes the lobby; in-progress explicit leave uses the same atomic membership/rotation boundary. Network disconnect alone does not mutate membership.
 - Rationale: deterministic, explainable, and consistent with the intended join-order expectation.
 - Tests: first player, wrap, active/non-active leave, relative-order preservation, and nonnumeric/unsorted-ID cases.
 - Migration: REVAMP-019 adds the `turnOrder` game-hash field with a bounded fail-closed legacy policy; Redis membership remains a set.
-- Follow-up: implemented by REVAMP-019; host-departure/timer policy remains REVAMP-020.
+- Follow-up: implemented by REVAMP-019/020.
 
 ### RULE-011 — Game completion and winner
 
 - Status: `APPROVED`.
-- Current behavior: game ends at timer 1200 seconds or when any player reaches money 5000; winner is highest money plus property purchase prices; scheduler and turn path can both finish it.
+- Current behavior: configured elapsed-time or cash-threshold checks use one transition-safe completion path; winner uses total asset value, then cash, then frozen turn order.
 - Target decision: configurable time limit or configured cash threshold may complete a game. Winner is highest total asset value: current cash plus configured/base value of owned current-model assets. Ties resolve by higher cash, then earlier frozen canonical turn order. Terminal state commits first; winner is stored; MariaDB statistics finalize idempotently; final recoverable snapshot/event follows; active Redis cleanup occurs only after finalization/recovery handling.
 - Rationale: retains current completion style while making result and cleanup deterministic; bankruptcy/elimination and unrepresented valuations are out of scope.
 - Tests: time boundary, threshold crossing, total-asset calculation, cash tie-break, order tie-break, idempotent finalization, final snapshot/event, and delayed cleanup.
 - Migration: route scheduler and turn-path completion through one authoritative transition; current fields/endpoints are approximations, not canonical authority.
-- Follow-up: frozen-order tie-break implemented by REVAMP-019; completion/finalization remains REVAMP-020.
+- Follow-up: implemented by REVAMP-019/020.
 
 ### RULE-012 — Typed optional action
 
@@ -123,7 +124,7 @@ it.
 - Rationale: required by the command boundary, security model, and state-version ADRs.
 - Tests: stale/mismatched actor/type/version, duplicate choice, decline policy, atomic clear-and-transition.
 - Migration: read legacy shapes only during a bounded migration; write one new representation and reject mismatched IDs.
-- Follow-up: implemented by REVAMP-018/019; obsolete helper removal is implemented by REVAMP-025 pending its Docker-backed acceptance gate.
+- Follow-up: implemented by REVAMP-018/019; obsolete helper removal completed in REVAMP-025.
 
 ### RULE-013 — Free Parking and unsupported classic mechanics
 

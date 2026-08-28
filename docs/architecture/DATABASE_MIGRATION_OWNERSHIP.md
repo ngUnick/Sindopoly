@@ -14,6 +14,19 @@ stable reference-data evolution.
 - `MariaDB/init.sql`: historical pre-Flyway test evidence only; never mounted by
   Compose and never edited as a second current schema.
 
+Current V1 durable structures are:
+
+| Table | Ownership/purpose |
+| --- | --- |
+| `player` | Durable anonymous player identity and nickname metadata. |
+| `card` | Stable money/transport card reference definitions. |
+| `square` | Stable board-square reference definitions. |
+| `stats` | Durable per-player aggregate outcomes, protected by trigger/uniqueness rules. |
+| `game_finalization` | Idempotency record for one durable finalization per game/time identity. |
+
+Active turn, membership, balances, position, deck order, and command replay are
+not MariaDB state; they remain transient authoritative Redis state.
+
 Released migrations are immutable because Flyway validates their checksums.
 Future schema or required reference-data changes require V2, V3, and so on.
 
@@ -92,4 +105,5 @@ history.
 The bridge is temporary. Remove it only through reviewed cleanup after every
 supported deployed and developer database is expected to contain valid
 `flyway_schema_history` at version 1 or later. Removal must retain explicit
-operator guidance for unsupported unversioned databases.
+operator guidance for unsupported unversioned databases and requires an
+explicit future support-policy decision; no fixed release or date is assumed.

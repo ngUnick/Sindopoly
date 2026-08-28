@@ -25,8 +25,8 @@ entry. Domain and application services do not depend on servlet APIs.
 are the only anonymous API routes. Other `/api/**` routes and the `/ws/**`
 handshake require an authenticated player session. REST membership, host,
 active-player, phase, and private-read policy is defined in
-`GAME_COMMAND_AUTHORIZATION.md`; STOMP subscription policy remains the
-responsibility of REVAMP-021.
+`GAME_COMMAND_AUTHORIZATION.md`; implemented STOMP subscription and recovery
+policy is defined in `../architecture/REALTIME_SYNCHRONIZATION.md`.
 
 ## Legacy player IDs and compatibility
 
@@ -92,7 +92,7 @@ single-instance deployment. A multi-instance deployment must deliberately
 select a shared Spring Session store and document its namespace, serializer,
 TTL, ownership, and cleanup before use.
 
-## Security review and deferred controls
+## Security review and current controls
 
 Fixed in REVAMP-015:
 
@@ -119,11 +119,18 @@ Fixed in REVAMP-017:
 - removal of client-triggered game deletion and manual completion evaluation;
 - stable `404`/`405` responses for removed routing surfaces.
 
-Deferred to REVAMP-021:
+Fixed in REVAMP-021/022:
 
-- STOMP CONNECT identity mapping details, game-topic subscription membership,
-  inbound command policy, reconnect recovery, and WebSocket origin hardening.
-  The HTTP handshake already shares the same Spring Security session identity.
+- STOMP CONNECT uses the HTTP session identity; game-topic subscriptions require
+  current membership and are rechecked on outbound delivery;
+- client SEND frames and malformed/non-game destinations fail closed;
+- REST and `/ws` share the explicit origin policy, while reconnect/gaps recover
+  through the member snapshot;
+- real HTTP/session/CSRF and SockJS-over-WebSocket STOMP integration tests cover
+  authorized delivery, denial, revocation, replay, reconnect, and completion.
+
+The remaining single-instance session/broker constraint is documented in
+`../operations/CURRENT_LIMITATIONS.md`.
 
 ## Performance
 
@@ -133,15 +140,10 @@ references fail closed; the current-player response adds one row lookup. No
 Redis round trips, global locks, custom cryptography, or repeated service-layer
 session lookups are introduced.
 
-## Acceptance verification
+## Verification
 
-The deterministic local gates passed: `mvn clean verify` completed with 36
-fast/security tests, and `npm run build` completed successfully. External
-Windows/Docker verification completed the same 36-test fast/security tier plus
-three Redis/MariaDB/REST integration tests with
-`mvn -Dapi.version=1.44 verify -Pintegration-tests` using real
-`redis:7.0-alpine` and `mariadb:10.11` containers. Browser smoke verification
-confirmed creation, the HttpOnly `JSESSIONID`, refresh recovery through `/me`,
-an authenticated CSRF-protected mutation, logout invalidation, and an
-unauthenticated post-logout refresh. No session IDs or cookie values are
-recorded here.
+Fast security tests and the container-backed HTTP/STOMP tier cover session
+creation, rotation, current-player recovery, CSRF-protected mutation, logout,
+stale identity, authorization denial, and realtime identity propagation. Use
+the current counts and commands in `../development/LOCAL_VERIFICATION.md`; do
+not copy session IDs or cookie values into evidence or logs.

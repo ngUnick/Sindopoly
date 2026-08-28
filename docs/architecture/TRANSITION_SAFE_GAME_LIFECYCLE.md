@@ -71,7 +71,7 @@ rollbackable. Full lifecycle and removal policy are documented in
 
 ## Contract effects
 
-- Retained terminal state remains readable; REVAMP-021 adds the bounded member-only
+- Retained terminal state remains readable through the bounded member-only
   `/api/game-state/{gameId}/snapshot` recovery projection.
 - Timer transitions and completion use bounded post-commit notifications.
   Snapshot recovery remains authoritative; delivery is non-durable and the

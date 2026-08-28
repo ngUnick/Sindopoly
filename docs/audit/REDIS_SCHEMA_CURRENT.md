@@ -9,9 +9,12 @@ Serializer: `RedisConfig` sets `StringRedisSerializer` for keys, values, hash ke
 REVAMP-027 changes discovery commands, not schema. `RedisGameDiscovery` uses a
 cursor `SCAN` with exact canonical-key filtering for `game:*` and
 `game:*:players`; `GameStateService` delegates public-lobby and cross-game
-membership discovery to it. SCAN is O(N), weakly consistent, and may repeat
-keys, so candidates are deduplicated and authoritative reads/Lua CAS remain the
-security and correctness boundary. No key, type, value, TTL, serializer, index,
+membership discovery to it. `MATCH` narrows candidates and `COUNT 128` is only
+a hint; the cursor is consumed to completion. SCAN is O(N), weakly consistent,
+may return empty nonterminal batches or repeated keys, and may observe
+concurrent creation/expiry. Candidates are deduplicated, parsed only as exact
+ASCII positive integer key forms, and then checked by authoritative reads/Lua
+CAS. No key, type, value, TTL, serializer, index,
 Pub/Sub channel, or Stream was added or changed. Measurement and rejected
 alternatives are recorded in `docs/performance/PERFORMANCE_BASELINE.md`.
 
@@ -24,7 +27,11 @@ logical zero. Game/membership/player/deck changes and the replay marker commit
 atomically on the current single Redis deployment. The detailed entries below
 retain pre-revamp audit provenance where explicitly labeled as risks.
 
-## Keys
+The Lua transition spans multiple game, membership, replay, deck, and player
+keys without Redis Cluster hash tags. Atomicity is guaranteed for the current
+single Redis deployment; Redis Cluster slot-safe operation is not supported.
+
+## Authoritative active-game keys
 
 ### `game:{gameId}`
 
@@ -99,7 +106,8 @@ private authoritative state, and is removed from public-lobby projections.
 - Static effect contract: MariaDB money-card amount is signed (positive credit,
   negative cost); transport amount is an absolute board destination. Redis
   stores only the ordered card IDs, not client-supplied effect values.
-- Risks: final cleanup ownership remains REVAMP-020 scope.
+- Cleanup: authoritative completion aligns the deck TTL with the configured
+  terminal retention window; later expiry removes it with the game-owned state.
 
 The migrated roll path consumes and replaces this list within the same Lua
 commit as player/game state and aligns its TTL with the game. If absent or
@@ -125,6 +133,11 @@ cards then cycle rather than disappear.
 Completed-game command records use the terminal TTL (300s default), preserving
 completion/timeout replay evidence for the terminal window.
 
+## Auxiliary Redis keys
+
+These keys are not authoritative active-game state and are not part of the
+per-game Lua CAS.
+
 ### `stats:leaderboard`
 
 - Type: STRING.
@@ -144,13 +157,10 @@ completion/timeout replay evidence for the terminal window.
 - Purpose: optional random.org dice entropy pool.
 - Risks: external blocking `.block()` call in scheduled job; no failure handling around HTTP retrieve; only active if `dice.source=randomorg`.
 
-### `invite:{code}`
-
-- Type: intended/unknown.
-- Evidence: `GameStateService#generateInviteCode` checks `redisTemplate.hasKey(INVITE_PREFIX + code)`.
-- Status: UNVERIFIED.
-- Reason: no code writes `invite:{code}`; invite code is stored as a field on `game:{gameId}`.
-- Risk: uniqueness check does not actually check existing game invite fields.
+Invite codes are fields of `game:{gameId}` and are discovered through the
+central cursor-based game discovery component. There is no current
+`invite:{code}` key; audit-era references to such a key describe removed code,
+not an alternate schema.
 
 ## Pub/Sub
 

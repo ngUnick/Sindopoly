@@ -21,7 +21,7 @@ selectors or consistency checks and never grant authority.
 | `POST /api/player-state/grant-money/{playerId}/{amount}` | `PlayerStateController#grantPlayerMoney` to `PlayerStateService#grantMoney` | Session actor had to equal path player; amount was client-controlled | Direct `money` update in `player:{playerId}`; MariaDB player-existence read | General-purpose self-cheating balance command; no frontend caller | **REMOVE** |
 | `DELETE /api/game-state/{gameId}` | `GameStateController#deleteGame` to `GameStateService#deleteGame` | Session actor plus host/member/lobby policy from REVAMP-016 | Immediate deletion of `game:{gameId}` and `game:{gameId}:players`; no finalization | Bypassed canonical abandonment, completion, finalization, player-state cleanup, and recovery; frontend wrapper existed but had no caller | **REMOVE** |
 | `POST /api/game-state/{gameId}/check-end` | `GameStateController#checkGameEnd` to `GameStateService#checkEndCondition` | Session actor plus host/member/in-progress policy from REVAMP-016 | Could write terminal fields/TTLs in game and player hashes and finalize MariaDB stats | Exposed server-owned completion evaluation as a client mutation; no frontend caller | **REMOVE** |
-| `POST /api/turn/{gameId}/{playerId}/action` | `TurnController#doAction` to `TurnService#applyAction` | Session actor must equal path player; body game/player IDs must equal path; body identity does not enter service | Existing authorized optional-action transition | REVAMP-015/016 already fail closed on identity mismatch; legitimate frontend caller | **RESTRICT/RETAIN** |
+| `POST /api/turn/{gameId}/{playerId}/action` | `TurnController#doAction` to `TurnCommandService#resolveOptionalAction` | Session actor must equal path player; body game/player IDs must equal path; body identity does not enter authoritative calculation | Versioned authorized optional-action transition | Compatibility body fields remain non-authoritative; legitimate frontend caller | **RESTRICT/RETAIN** |
 
 Removed routes are not compatibility no-ops. Depending on whether the path
 still has another HTTP method, Spring returns `404 Resource not found` or
@@ -91,7 +91,8 @@ or active-state table was introduced.
   `stateVersion`, command IDs, idempotency, and atomic compare-and-commit.
 - No authorization cache, global/JVM lock, new Redis round trip, new MariaDB
   query, or N+1 path was added. Removing endpoints reduces reachable work.
-- STOMP CONNECT/subscription/origin/reconnect authorization remains REVAMP-021.
+- STOMP CONNECT/subscription/origin authorization and snapshot recovery are
+  implemented and documented in `../architecture/REALTIME_SYNCHRONIZATION.md`.
   Current realtime delivery is Spring's in-memory simple broker, not Redis
   Pub/Sub.
 

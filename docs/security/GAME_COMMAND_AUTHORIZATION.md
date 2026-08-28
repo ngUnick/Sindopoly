@@ -35,6 +35,26 @@ inbound WebSocket adapters.
 `GET /api/game-state/players/{gameId}`, `GET /api/game-state/{gameId}`,
 and `GET /api/game-state/{gameId}/players` are private membership reads.
 
+## Role matrix
+
+`Allow` below still means all input, lifecycle, phase, command-ID, and expected-
+version guards applicable to that operation must pass.
+
+| Operation | Anonymous | Member | Host | Active player | Non-active member | Non-member |
+| --- | --- | --- | --- | --- | --- | --- |
+| Public lobby read | Allow | Allow | Allow | Allow | Allow | Allow |
+| Member snapshot/private game read | `401` | Allow | Allow | Allow | Allow | `403` |
+| Join public/invite lobby | `401` | Duplicate/state conflict | Already a member | If not already in that game and lobby permits | Same | Allow when authenticated and lobby/invite permits |
+| Leave self | `401` | Allow | Allow under host-leave policy | Allow; transition rotates safely | Allow | `403` |
+| Start | `401` | `403` | Allow in eligible lobby | Only if also host | `403` | `403` |
+| Roll | `401` | Only if active | Only if also active | Allow in `AWAITING_ROLL` | `403` | `403` |
+| Perform/pass optional action | `401` | Only if active | Only if also active | Allow for own pending typed option | `403` | `403` |
+| Subscribe `/topic/game/{gameId}` | Deny CONNECT | Allow | Allow | Allow | Allow | Deny subscription |
+
+Origin validation is an additional browser transport check, not a substitute
+for authentication or membership. Membership is rechecked on outbound STOMP
+delivery, so removal revokes later frames.
+
 ## Lifecycle, phase, and error semantics
 
 Current Redis values map to the canonical model without a schema migration:
@@ -65,8 +85,8 @@ Redis continues to be authoritative for active-game authorization:
 
 | Key | Type and serialization | Facts read | TTL/lifecycle | Owner |
 | --- | --- | --- | --- | --- |
-| `game:{gameId}` | HASH; string keys/fields/values via `StringRedisSerializer` | `status`, `playerTurn`, typed `optionalAction`, and private `turnOrder`; creator/host is inferred from `gameId` because no owner field exists | 24 hours at lobby creation; shortened to 30 seconds after current end flow | Transition command/store boundary |
-| `game:{gameId}:players` | SET of decimal player-ID strings via `StringRedisSerializer` | Current active-game membership and kick target membership | 24 hours at lobby creation; shortened to 30 seconds after current end flow | `GameStateService` |
+| `game:{gameId}` | HASH; string serialization | Status, active player, typed option, private order | 24 hours at creation; configured terminal retention after completion (300 seconds by default) | Transition command/store boundary |
+| `game:{gameId}:players` | SET of decimal player IDs; string serialization | Membership and kick target membership | Same game lifecycle/terminal retention | Transition command/store boundary |
 
 One authorization decision performs one game-hash load and one membership-set
 load, then reuses that snapshot for its membership, host, active-player, and
@@ -105,10 +125,10 @@ REVAMP-023/REVAMP-027.
 REVAMP-017 removed arbitrary player-state overwrite/deletion, money grant,
 client-triggered game deletion, and manual completion evaluation. Authenticated
 self-leave and explicit lobby-host kick remain the supported membership
-commands; completion and cleanup remain server-owned. REVAMP-021 owns
-STOMP CONNECT identity propagation, destination/subscription authorization,
-reconnect recovery, and WebSocket origin hardening. Current realtime delivery
-is Spring's in-memory STOMP simple broker, not Redis Pub/Sub.
+commands; completion and cleanup remain server-owned. STOMP CONNECT identity,
+subscription authorization, recovery, and origin hardening are implemented as
+documented in `../architecture/REALTIME_SYNCHRONIZATION.md`. Delivery remains
+Spring's in-memory STOMP simple broker, not Redis Pub/Sub.
 
 ## Client migration and examples
 
@@ -136,7 +156,9 @@ curl -sS -b host.cookies \
   http://localhost:8080/api/game-state/HOST_ID
 
 # Authorized host kick; TARGET_ID never becomes the acting identity.
-curl -sS -b host.cookies -H "$HEADER: $TOKEN" -X POST \
+curl -sS -b host.cookies -H "$HEADER: $TOKEN" \
+  -H 'X-Sindopoly-Command-Id: 9fbe7442-e810-4c8f-a4b0-6b04286a8a65' \
+  -H 'X-Sindopoly-Expected-Version: 4' -X POST \
   http://localhost:8080/api/game-state/HOST_ID/players/TARGET_ID/kick
 
 # A different authenticated non-member cookie receives HTTP 403.
@@ -147,7 +169,8 @@ curl -i -b outsider.cookies \
 Postman uses the same flow: preserve the `JSESSIONID` cookie, call
 `GET /api/session/csrf`, copy the returned token into its returned header name,
 and send only the authenticated actor's legacy player ID where an adapter still
-requires one. Never copy session or CSRF values into documentation or logs.
+requires one. Mutations also need a canonical command UUID and last known state
+version. Never copy session or CSRF values into documentation or logs.
 
 The former `DELETE /api/game-state/{gameId}` and
 `POST /api/game-state/{gameId}/check-end` compatibility adapters are no longer

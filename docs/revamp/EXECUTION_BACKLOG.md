@@ -460,7 +460,7 @@ Two choices are especially important:
 
 ### REVAMP-028 — Complete developer, architecture, API, and operations documentation
 
-- Status: `READY`; Priority: `P4`; Category: `DOCUMENTATION`.
+- Status: `DONE`; Priority: `P4`; Category: `DOCUMENTATION`.
 - Rationale / evidence: current README/API snapshot can be stale; later phases change commands, contracts, state, and security.
 - Desired outcome: canonical, non-duplicative developer, architecture, state-machine, API, event, Redis, MariaDB, and security documentation.
 - Dependencies: REVAMP-006 through REVAMP-027 as applicable. Blocks: final release verification.
@@ -475,7 +475,7 @@ Two choices are especially important:
 
 ### REVAMP-029 — Run full regression verification
 
-- Status: `BLOCKED`; Priority: `P0`; Category: `VERIFICATION`.
+- Status: `READY`; Priority: `P0`; Category: `VERIFICATION`.
 - Rationale / evidence: all critical flows currently lack automated coverage and final changes span state, security, and transport.
 - Desired outcome: documented full verification across unit, integration, REST, WebSocket, E2E, lint/build, security review, and migration checks.
 - Dependencies: REVAMP-008, REVAMP-022, REVAMP-024 through REVAMP-028. Blocks: release milestone.
@@ -571,9 +571,8 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-028 — Complete developer, architecture,
-API, and operations documentation**. Later work remains blocked by documentation,
-regression, and release prerequisites.
+The immediate `READY` item is **REVAMP-029 — Run full regression verification**.
+REVAMP-030 remains blocked by regression and release prerequisites.
 
 ## Planning review
 

@@ -1,5 +1,9 @@
 # REST API inventory
 
+Classification: retained audit inventory. The canonical developer-facing
+current contract and executable examples are in `../api/REST_API.md`; where
+presentation differs, source/controllers/tests and that current contract win.
+
 Authentication baseline: `POST /api/player-state/create`, public-lobby discovery,
 and API documentation are anonymous. Other `/api/**` routes require the opaque
 server-managed player session established during player creation. Legacy actor

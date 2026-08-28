@@ -1,135 +1,86 @@
-# 🎓 Sindopoly – A Monopoly-inspired University-themed Online Game
+# Sindopoly
 
-## Overview
+Sindopoly is a real-time multiplayer, Monopoly-inspired game themed around the
+International Hellenic University. The backend is authoritative: browser clients
+submit authenticated intent while Spring Boot validates identity, membership,
+host/turn/phase permissions, command replay, and state version before an atomic
+Redis transition. MariaDB stores durable player/reference/statistics data, and
+STOMP notifications prompt clients to recover the latest REST snapshot.
 
-**Sindopoly** is a full-stack web re-imagining of **Monopoly** set on the
-campus of the *International Hellenic University (IHU)*.
-Play in real time with friends, trade university buildings, pay rent at the
-library kiosk, or end up in the administration building-jail.
+## Stack
 
----
+- Spring Boot 3.3.5, Java 17 bytecode, Maven
+- Redis 7 for transient authoritative game state and command replay records
+- MariaDB 10.11 with Flyway-owned schema and reference data
+- React 18 and Vite 5, served by Nginx in the Docker workflow
+- SockJS/STOMP at `/ws`, with process-local Spring simple-broker delivery
+- JUnit/Mockito plus Redis/MariaDB/Testcontainers HTTP/STOMP integration tests
 
-## 🧠 Objective
+## Start locally on Windows
 
-Simulate the classic board-game while adding:
+The supported development path is Windows PowerShell with Docker Desktop. From
+the repository root:
 
-* 🔴 **Real-time state** (Redis + WebSocket/STOMP)
-* 🟠 Strict Monopoly rules (colour sets, utilities/train scaling, jail, cards)
-* 🟢 Persistent player & leaderboard stats in MariaDB
-* 🔵 A modular Spring-Boot 3 backend that is easy to extend
-
----
-
-## ⚙️ Technology Stack
-
-| Layer         | Technologies                                                              |
-| ------------- | ------------------------------------------------------------------------- |
-| Front-end     | React + Vite, Three.js (3-D board), TailwindCSS, Ant Design, SockJS/STOMP |
-| Back-end      | Spring Boot 3.2, Spring Web & Messaging, Lombok, MapStruct                |
-| Real-time DB  | Redis 7 (game state, timers, card decks, dice entropy)                    |
-| SQL DB        | MariaDB 11 (players, squares, cards, aggregated statistics)               |
-| Build / Other | Maven, Docker + docker-compose, OpenAPI-generated Postman collection      |
-
----
-
-## 💡 Game Lifecycle (Current Implementation)
-
-| Phase          | Details                                                                                                                                                                                          |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Create**     | `POST /api/game-state/create` – owner ID + visibility → lobby *(auto-creates Redis keys & invite code if **private**).*                                                                          |
-| **Join/Leave** | *Public:* `POST /api/game-state/add/{gameId}/{playerId}`   •   *Private:* `POST /api/game-state/join-with-invite?inviteCode=…&playerId=…`  <br> Owner leaving during **lobby** deletes the game. |
-| **Start**      | Only owner: `POST /api/game-state/{gameId}/start?playerId={ownerId}` → `status=inProgress`, turn = owner, timers zeroed.                                                                         |
-| **Play**       | React calls `POST /api/turn/{gameId}/{playerId}`  ➜ backend rolls dice, resolves square, returns **TurnResponse** *(dice, mandatory, optional)*.                                                 |
-| **AFK Skip**   | `GameLoopScheduler` increments `turnAge` every 2 s; at ≥ 60 s marks player `afk=true` and rotates turn.                                                                                          |
-| **End**        | Game ends automatically when <br>① 1200 s total <br>② only 1 active player <br>③ a player reaches €5 000.                                                                                        |
-| **Scoring**    | Winner = highest **cash + property value**; stats row in MariaDB is updated (`wins / losses / money / time`).                                                                                    |
-
----
-
-### 🏠 Rent & Property Rules
-
-| Square type     | Rent computation                                       |
-| --------------- | ------------------------------------------------------ |
-| Colour property | base × 2 if owner controls the full colour set         |
-| Train           | 25 / 50 / 100 / 200 € depending on 1-4 trains owned    |
-| Utility         | 4 × latest dice roll – or 10 × if both utilities owned |
-
-### 🎴 Card Deck
-
-* Two kinds: **money** (± €) & **transport** (teleport) – rows in `card` table.
-* Each game receives a *shuffled* deck in `game:{id}:deck` on first draw.
-
----
-
-## 📦 Redis Key-Schema (runtime)
-
-| Key                 | Type  | Description                                            |
-| ------------------- | ----- | ------------------------------------------------------ |
-| `game:{id}`         | Hash  | status, visibility, playerTurn, winner, timers, etc.   |
-| `game:{id}:players` | Set   | active player IDs                                      |
-| `player:{id}`       | Hash  | money, position, jail flags, bankrupt, properties list |
-| `game:{id}:deck`    | List  | shuffled card IDs                                      |
-| `dice:entropy`      | List  | pre-fetched random.org dice values (refilled 30 s job) |
-| `stats:leaderboard` | Z-SET | *(materialised leaderboard – recreated if missing)*    |
-
----
-
-## 🧪 REST & WS API Snapshot
-
-| Method            | Endpoint & Query                                             | Purpose / Notes                                 |
-| ----------------- | ------------------------------------------------------------ | ----------------------------------------------- |
-| **Players**       |                                                              |                                                 |
-| `POST`            | `/api/player-state/create` *(body:{nickname})*               | Create player → returns ID                      |
-| `GET`             | `/api/player-state/{playerId}`                               | Current money/position/properties               |
-| **Games / Lobby** |                                                              |                                                 |
-| `POST`            | `/api/game-state/create`                                     | New lobby (body: `{ownerId, visibility}`)       |
-| `GET`             | `/api/game-state/public-lobby`                               | List open public lobbies                        |
-| `POST`            | `/api/game-state/add/{gameId}/{playerId}`                    | Join public                                     |
-| `POST`            | `/api/game-state/join-with-invite?inviteCode=ABC&playerId=7` | Join private                                    |
-| `GET`             | `/api/game-state/players-detailed/{gameId}`                  | IDs + nicknames                                 |
-| `POST`            | `/api/game-state/{gameId}/start?playerId=OWNER`              | Owner starts game                               |
-| `POST`            | `/api/game-state/{gameId}/remove-player?playerId=X`          | Leave / kick                                    |
-| **Turn / Play**   |                                                              |                                                 |
-| `POST`            | `/api/turn/{gameId}/{playerId}`                              | Roll dice, move, returns **TurnResponse** JSON  |
-| `POST`            | `/api/player-state/{gameId}/{playerId}/buy?propertyId=N`     | Forced buy (optional turn action)               |
-| **Statistics**    |                                                              |                                                 |
-| `GET`             | `/api/statistics/leaderboard`                                | Top players (wins & win-rate)                   |
-| `GET`             | `/api/statistics/user/{playerId}`                            | Personal aggregated stats                       |
-| **WebSocket**     |                                                              |                                                 |
-| `STOMP SUB`       | `/topic/game/{gameId}`                                       | Broadcast of every TurnResponse (instant board) |
-
----
-
-## 🛢️ MariaDB Schema Highlights
-
-```text
-player(id, name, created_at)
-square(id, type, colour, price, rent_base, rent_set, rent_train_index, ...)
-card(id, title, description, card_type, amount, target_square)
-stats(id, player (FK->player.id), total_wins, total_losses, total_games,
-      total_money, total_time_played)
+```powershell
+Copy-Item .env.example .env
+docker compose config
+docker compose up --build
+docker compose ps
 ```
 
-A trigger ensures a zero-filled **stats** row is created whenever a new player
-row is inserted.
+Open `http://localhost`. The backend is exposed on `http://localhost:8080` and
+OpenAPI UI is available in the development profile at
+`http://localhost:8080/swagger-ui/index.html`.
 
----
+Stop the stack with `docker compose down`. The Compose file is a development
+topology. Its sample credentials and exposed database ports are not production
+settings, and it currently declares no named MariaDB volume. See the
+[Windows and Docker development guide](docs/getting-started/WINDOWS_DOCKER_DEVELOPMENT.md)
+before relying on local data persistence.
 
-## 🔐 Validation & Error Handling
+## Verify changes
 
-* **One-game-at-a-time** check before join/create.
-* **Owner-only** guards (`start`, `kick`, `delete`) – 403 on violation.
-* Turn endpoint validates *it is exactly the caller’s turn*.
-* All rule breaches throw `IllegalStateException` → JSON
-  `{ "error": "reason" }` with correct HTTP status by `@ControllerAdvice`.
+```powershell
+Set-Location .\Sindopoly-Java
+.\mvnw.cmd clean verify
+.\mvnw.cmd verify -Pintegration-tests
 
----
+Set-Location ..\sindopoly-front
+npm.cmd ci
+npm.cmd test
+npm.cmd run build
+```
 
-## 🚧 Planned / Work-In-Progress
+Docker must be running for the integration tier. Frontend lint is not yet a
+required gate because the repository retains known baseline lint debt; it must
+not be represented as passing. See the exact
+[local verification contract](docs/development/LOCAL_VERIFICATION.md).
 
-* 🎲 Dice-double logic & three-doubles-to-jail
-* 🖼️ WebSocket-powered 3-D board updates (eliminate poll)
-* 💬 In-game chat on `/topic/game/{id}/chat`
-* 🪙 Mortgage & auction flow
-* 🧪 Testcontainers integration-tests
+## Architecture and contracts
 
+- [Documentation index](docs/README.md)
+- [Current architecture](docs/architecture/CURRENT_ARCHITECTURE.md)
+- [Canonical game state machine](docs/game-rules/CANONICAL_GAME_STATE_MACHINE.md)
+- [REST API contract](docs/api/REST_API.md)
+- [Realtime synchronization](docs/architecture/REALTIME_SYNCHRONIZATION.md)
+- [Redis schema](docs/audit/REDIS_SCHEMA_CURRENT.md)
+- [MariaDB migration ownership](docs/architecture/DATABASE_MIGRATION_OWNERSHIP.md)
+- [Deployment security](docs/security/DEPLOYMENT_SECURITY.md)
+- [Operations runbook](docs/operations/RUNBOOK.md)
+- [Current limitations](docs/operations/CURRENT_LIMITATIONS.md)
+
+## Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `Sindopoly-Java/` | Spring Boot backend, migrations, and backend tests |
+| `sindopoly-front/` | React/Vite browser client and frontend tests |
+| `docs/` | Current contracts, standards, decisions, and audit evidence |
+| `.github/workflows/verification.yml` | Required CI verification |
+| `docker-compose.yml` | Local Docker Desktop development stack |
+
+Read repository instructions before non-trivial work. The controlled revamp
+discipline is: understand, characterize, test, change, verify, and document.
+`dev` is the integration branch; focused changes normally use a short-lived
+`codex/...` branch. Never commit secrets or treat client game outcomes as
+authoritative.

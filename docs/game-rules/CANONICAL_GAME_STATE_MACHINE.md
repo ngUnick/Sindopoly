@@ -29,9 +29,10 @@ Labels used below:
 | `IN_PROGRESS` | Active state and exactly one active player/turn exist. | Successful `StartGame` | Approved terminal condition |
 | `COMPLETED` | Terminal result is committed; gameplay commands are rejected. | `CompleteGame` internal continuation | Redis cleanup after durable finalization/recovery window |
 
-`READY_TO_START`, `CLEANUP_PENDING`, and `ABANDONED` are not canonical states
-yet. Readiness is derived from lobby guards; cleanup is an operational step;
-abandonment/disconnect policy remains pending.
+`READY_TO_START`, `CLEANUP_PENDING`, and `ABANDONED` are not canonical states.
+Readiness is derived from lobby guards and cleanup is an operational step.
+There is no automatic disconnect mutation: explicit authenticated leave owns
+membership removal.
 
 ### Turn phase
 
@@ -52,9 +53,10 @@ next active player and returns to `AWAITING_ROLL`.
 External commands: `CreateGame`, `JoinGame`, `LeaveGame`, `StartGame`,
 `RollDice`, `PerformOptionalAction`, and `PassOptionalAction`.
 
-System commands: `HandleTurnTimeout`, `HandleDisconnect` (policy pending), and
-`CleanupGame`. Reconnect is primarily authenticated snapshot recovery; it is a
-mutation command only if a later presence policy requires one.
+System commands are `HandleTurnTimeout` and `CleanupGame`. Network disconnect
+does not currently mutate game membership; reconnect is authenticated snapshot
+recovery. Any future presence/disconnect command requires a separate approved
+policy.
 
 Every authoritative mutation is accepted only after actor, membership/role,
 lifecycle/phase, `commandId`, and `expectedStateVersion` guards. Per ADR 0002:
@@ -76,23 +78,24 @@ balance, phase, active player, or next player.
 
 | Lifecycle / phase | Command or trigger | Actor and guards | Authoritative reads / effect | Resulting state and version | Notification / failure |
 | --- | --- | --- | --- | --- | --- |
-| none / `NONE` | `CreateGame` | Authenticated actor; eligible player; new command | MariaDB player metadata; create Redis lobby and owner membership | `LOBBY/NONE`; initial version | `LobbyCreated` after commit; unauthenticated/invalid/conflict otherwise |
-| `LOBBY/NONE` | `JoinGame` | Authenticated actor; game exists; visibility/invite, capacity, duplicate policy | Membership and lobby metadata; add member atomically | `LOBBY/NONE`; version +1 | `LobbyMembershipChanged`; forbidden/full/invalid/stale |
-| `LOBBY/NONE` | `LeaveGame` | Actor is member; host-leave policy pending | Membership; remove member or approved abandon behavior | `LOBBY/NONE` or terminal policy; version +1 | `LobbyMembershipChanged`; forbidden/stale |
-| `LOBBY/NONE` | `StartGame` | Member with host authority; minimum players; current version | Membership plus durable board/player metadata; freeze join order and initialize active state | `IN_PROGRESS/AWAITING_ROLL`; version +1 | `GameStarted`; forbidden/invalid phase/stale |
-| `IN_PROGRESS/AWAITING_ROLL` | jailed turn begins | Active player is jailed with remaining turns | Create typed `PAY_JAIL_EXIT` option (cost 50), bound to player/turn/version | `IN_PROGRESS/AWAITING_OPTIONAL_ACTION`; version +1 | Optional action available; stale transition rejected |
-| `IN_PROGRESS/AWAITING_ROLL` | `RollDice` | Member, active player, not jailed/pending jail option, new command, matching version | Active game/player state; server dice; movement; square rule | Optional choice or next player's `AWAITING_ROLL`; one version +1 | One `RollResolved` result notification; wrong actor/phase/duplicate/stale |
+| none / `NONE` | `CreateGame` | Authenticated actor; eligible player; new command | MariaDB player metadata; create Redis lobby and host membership | `LOBBY/NONE`; initial version | `LOBBY_UPDATED/GAME_CREATED` after commit; unauthenticated/invalid/conflict otherwise |
+| `LOBBY/NONE` | `JoinGame` | Authenticated actor; game exists; visibility/invite, capacity, duplicate policy | Membership and lobby metadata; add member atomically | `LOBBY/NONE`; version +1 | `LOBBY_UPDATED/PLAYER_JOINED`; forbidden/full/invalid/stale |
+| `LOBBY/NONE` | `LeaveGame` | Actor is member | Non-host is removed; host leave removes the lobby-owned Redis state while retaining replay tombstone | Lobby remains or is removed; version +1 result | `LOBBY_UPDATED`; forbidden/stale |
+| `LOBBY/NONE` | `StartGame` | Host member; 2-4 players; current version | Membership plus durable board/player metadata; freeze join order and initialize active state | `IN_PROGRESS/AWAITING_ROLL`; version +1 | `GAME_STARTED/GAME_STARTED`; forbidden/invalid phase/stale |
+| `IN_PROGRESS/AWAITING_ROLL` | jailed turn begins | Active player is jailed with remaining turns | Create typed `PAY_JAIL_EXIT` option (cost 50), bound to player/turn/version | `IN_PROGRESS/AWAITING_OPTIONAL_ACTION`; version +1 | Included in the causing turn/action/timeout notification; stale transition rejected |
+| `IN_PROGRESS/AWAITING_ROLL` | `RollDice` | Member, active player, not jailed/pending jail option, new command, matching version | Active game/player state; server dice; movement; square rule | Optional choice or next player's `AWAITING_ROLL`; one version +1 | `TURN_UPDATED/ROLL_COMPLETED`; wrong actor/phase/duplicate/stale |
 | internal | movement/square/automatic effect | Already accepted roll | Apply Start reward, position, positive-cost tax, rent transfer, card effect, Go To Jail, and ownership rules | Part of same roll commit | No separate command; event may summarize results |
-| `IN_PROGRESS/AWAITING_ROLL` | roll exposes purchase option | Already accepted roll | Build typed `PURCHASE_PROPERTY` option bound to game, actor, turn/version | `AWAITING_OPTIONAL_ACTION`; same roll commit | `OptionalActionAvailable` within roll result |
-| `IN_PROGRESS/AWAITING_OPTIONAL_ACTION` | `PerformOptionalAction` | Active member; matching option/type/turn/version; new command | Purchase property, or pay 50 to clear jail/count and return to same player's `AWAITING_ROLL` | Purchase: next player's `AWAITING_ROLL`; jail payment: same player's `AWAITING_ROLL`; version +1 | `OptionalActionResolved`/turn changed; invalid option/stale |
-| same | `PassOptionalAction` | Same guards; option explicitly declinable | Purchase: clear option and rotate; jail payment: clear option, decrement remaining jail turns, and rotate | Next player's `AWAITING_ROLL`; after third skipped jail turn player is released for their next turn; version +1 | Resolution/turn changed; non-declinable/invalid/stale |
-| `IN_PROGRESS/*` | `HandleTurnTimeout` | System actor; referenced active player/phase/version still current | Current turn and deadline; apply approved timeout consequence once | Approved next phase/player; version +1 | `TurnTimedOut`/turn changed; stale timer is no-op/conflict |
-| `IN_PROGRESS/*` | leave/disconnect | Authenticated member or system observation; policy pending | Membership/turn/state | Only through canonical command; version +1 if accepted | No independent cleanup or duplicate turn mutation |
-| `IN_PROGRESS/*` | terminal condition after accepted transition/system check | Current version; condition approved | Active state; freeze final result | `COMPLETED/NONE`; version +1 | One post-Redis `GameCompleted`; Stats may still be pending |
+| `IN_PROGRESS/AWAITING_ROLL` | roll exposes purchase option | Already accepted roll | Build typed `PURCHASE_PROPERTY` option bound to game, actor, turn/version | `AWAITING_OPTIONAL_ACTION`; same roll commit | Included in `TURN_UPDATED/ROLL_COMPLETED` |
+| `IN_PROGRESS/AWAITING_OPTIONAL_ACTION` | `PerformOptionalAction` | Active member; matching option/type/turn/version; new command | Purchase property, or pay 50 to clear jail/count and return to same player's `AWAITING_ROLL` | Purchase: next player's `AWAITING_ROLL`; jail payment: same player's `AWAITING_ROLL`; version +1 | `TURN_UPDATED/ACTION_RESOLVED`; invalid option/stale |
+| same | `PassOptionalAction` | Same guards; option explicitly declinable | Purchase: clear option and rotate; jail payment: clear option, decrement remaining jail turns, and rotate | Next player's `AWAITING_ROLL`; after third skipped jail turn player is released for their next turn; version +1 | `TURN_UPDATED/ACTION_RESOLVED`; non-declinable/invalid/stale |
+| `IN_PROGRESS/*` | `HandleTurnTimeout` | System actor; referenced active player/phase/version still current | Current turn and deadline; apply approved timeout consequence once | Approved next phase/player; version +1 | `TURN_UPDATED/TURN_TIMED_OUT`; stale timer is no-op/conflict |
+| `IN_PROGRESS/*` | explicit leave | Authenticated member; final active player cannot leave | Remove member; preserve order; if active, rotate and create the next jailed option when applicable; surviving option is rebound to new version | `IN_PROGRESS` at version +1 | `LOBBY_UPDATED/PLAYER_LEFT`; no independent disconnect mutation |
+| `IN_PROGRESS/*` | terminal condition after accepted transition/system check | Current version; condition approved | Active state; freeze final result | `COMPLETED/NONE`; version +1 | `GAME_COMPLETED/GAME_COMPLETED`; Stats may still be pending |
 | `COMPLETED/NONE` | durable finalization | Idempotent system work | Redis final snapshot; write MariaDB statistics once | Lifecycle remains completed | No second completion event |
 | `COMPLETED/NONE` | Redis expiry | Configured terminal TTL elapsed | Game-owned Redis keys only | Active keys removed; durable records retained if finalized | Operational result only |
 
-The exact event envelope is deferred to REVAMP-021. Events are versioned
+The implemented event envelope and recovery contract are defined in
+`../architecture/REALTIME_SYNCHRONIZATION.md`. Events are versioned
 notifications after persistence, not authoritative history.
 
 ## Dice and optional-action flow
@@ -140,6 +143,10 @@ at game start. It is explicit ordered state distinct from membership; removal
 preserves remaining relative order and rotation picks the next active player.
 Numeric player-ID sorting was removed with the unwired deprecated turn helper;
 it is not part of the authoritative command path.
+
+A lobby contains at most four players and needs at least two to start. There is
+no bankruptcy elimination; balances may become negative and only explicit leave
+changes membership.
 
 Implemented migration state and remaining legacy representations:
 
@@ -230,7 +237,7 @@ deck, command markers, and timer metadata. A late/duplicate cleanup is safe.
 | Tests | Current evidence | Target relation | Classification |
 | --- | --- | --- | --- |
 | `GameStateControllerCharacterizationTest` create/join/start | Current adapter responses/prechecks | `CreateGame`, `JoinGame`, `StartGame` | Partial match; actor authorization missing |
-| same remove plus removed check-end | Authenticated self-leave remains; public completion adapter removed | `LeaveGame`, internal completion | Partial match; leave atomicity/version pending |
+| same remove plus removed check-end | Authenticated self-leave is versioned/atomic; public completion adapter removed | `LeaveGame`, internal completion | Matches implemented boundary |
 | `TurnControllerCharacterizationTest` throw | Server actor plus command/version headers | `RollDice` adapter | Matches implemented entry guards |
 | same action mismatch | Mismatched body/path actor is rejected | Optional-action command | Matches target guard |
 | same pass | Typed choice clears/decrements and rotates | `PassOptionalAction` | Matches implemented entry guards |

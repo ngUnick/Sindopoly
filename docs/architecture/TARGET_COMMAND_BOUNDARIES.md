@@ -71,7 +71,10 @@ The transport creates `ResolveOptionalActionCommand(gameId, actor, choice, comma
 
 The scheduler submits `TimeoutCommand` through the same application transition path. It cannot independently call `GameStateService#checkEndCondition` and broadcast. Disconnect/reconnect become commands when their rules are defined. Cleanup may follow an already-committed terminal transition, but cannot create a second terminal transition.
 
-## Current-to-target corrections
+## Audit-to-current corrections
+
+The audit-baseline owners below are historical. The target owners are now the
+implemented command/state boundaries; the work column records their delivery.
 
 | Concern | Audit-baseline owner(s) | Problem | Target owner | Relevant work |
 | --- | --- | --- | --- | --- |
@@ -104,7 +107,12 @@ Controllers do not solve concurrency and rules only express valid transitions. P
 
 ## Event ownership and transport convergence
 
-An accepted application transition decides an event exists. After state-store and necessary durable repository work succeeds, the application layer constructs the authoritative event and the publisher hands it to a STOMP adapter. Delivery does not decide state mutation. Current behavior is recorded, not endorsed: dice throw sends no broker event while optional action sends `actionCompleted`. REVAMP-021/022 repair consistency, ordering, recovery, and delivery.
+An accepted application transition decides an event exists. After the state-store
+commit succeeds, the application layer constructs the authoritative envelope and
+the publisher hands it to a STOMP adapter. Delivery does not decide state
+mutation. REVAMP-021/022 implemented consistent post-commit versioned events,
+membership-authorized delivery, and snapshot-based recovery; see
+`REALTIME_SYNCHRONIZATION.md`.
 
 Redis Pub/Sub is not assumed; current delivery is Spring's in-memory STOMP simple broker. REST and future inbound WebSocket commands must invoke the same application command and domain transition. This does not choose a preferred transport.
 

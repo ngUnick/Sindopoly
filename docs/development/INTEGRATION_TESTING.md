@@ -15,11 +15,11 @@ PowerShell, use the backend directory:
 
 ```powershell
 Set-Location .\Sindopoly-Java
-mvn test
-mvn verify -Pintegration-tests
+.\mvnw.cmd test
+.\mvnw.cmd verify -Pintegration-tests
 ```
 
-`mvn test` runs the fast unit/characterization tier. `mvn verify
+`.\mvnw.cmd test` runs the fast unit/characterization tier. `.\mvnw.cmd verify
 -Pintegration-tests` runs that tier plus Failsafe tests named `*IT`; it must not
 be presented as a passing integration check when Docker is unavailable.
 
@@ -27,7 +27,7 @@ On the verified Windows/Docker Desktop environment, Docker API compatibility
 required this invocation instead:
 
 ```powershell
-mvn -Dapi.version=1.44 verify -Pintegration-tests
+.\mvnw.cmd "-Dapi.version=1.44" verify -Pintegration-tests
 ```
 
 This is a troubleshooting compatibility flag for that Docker Desktop 29.4.3
@@ -99,8 +99,8 @@ failures. Do not substitute local Redis/MariaDB or disable the container tests.
 The suite uses synthetic container credentials and seed data only; do not add
 production credentials, dumps, or secrets.
 
-REVAMP-024 acceptance passes 92 fast and 46 integration tests with zero failures,
-errors, or skips on Docker Engine 29.4.3, Java 21.0.11, Redis 7, and MariaDB
+The latest accepted counts and results live in `LOCAL_VERIFICATION.md`. The
+verified environment uses Docker Engine 29.4.3, Java 21, Redis 7, and MariaDB
 10.11. The real transport coverage exposed and now protects a server defect in
 which valid outbound STOMP notifications were dropped because broker MESSAGE
 frames did not reliably retain the authenticated principal. A non-failing Lettuce

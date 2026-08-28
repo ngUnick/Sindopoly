@@ -15,7 +15,7 @@ error/log disclosure, and bounds WebSocket transport resources. The canonical
 current deployment contract and residual risks are in `DEPLOYMENT_SECURITY.md`;
 older wildcard/default-credential observations below remain historical evidence.
 
-Current evidence baseline:
+Pre-revamp evidence baseline (historical; do not use as current architecture):
 
 - REST controllers live under `Sindopoly-Java/src/main/java/com/example/Sindopoly_Java/controller`.
 - WebSocket/STOMP is configured in `config/WebSocketConfig.java` with `/ws`, `/topic`, and `/app`.

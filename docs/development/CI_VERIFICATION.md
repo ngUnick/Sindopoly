@@ -8,9 +8,9 @@ repository contents permission.
 
 | Job | GitHub command | Local equivalent | Scope |
 | --- | --- | --- | --- |
-| Backend fast verification | `mvn clean verify` | `Sindopoly-Java`; `mvn clean verify` | Compile, package, and the fast 92-test tier on Java 21. |
-| Backend integration verification | `mvn verify -Pintegration-tests` | `Sindopoly-Java`; same command | Fast tier plus Testcontainers Redis/MariaDB and all `*IT` coverage. REVAMP-024 runs 46 integration tests, including empty Flyway V1, legacy baseline/repair/fail-closed/concurrency, and the existing HTTP/STOMP game-flow tests. |
-| Frontend build verification | `npm ci`, `npm test`, `npm run build` | `sindopoly-front`; same commands | Clean lockfile installation, seven Node realtime tests, and the Vite production build on Node 20. |
+| Backend fast verification | `mvn clean verify` | `Sindopoly-Java`; `.\mvnw.cmd clean verify` | Compile, package, and the current fast tier on Java 21. |
+| Backend integration verification | `mvn verify -Pintegration-tests` | `Sindopoly-Java`; `.\mvnw.cmd verify -Pintegration-tests` | Fast tier plus every Testcontainers Redis/MariaDB `*IT`: migration, HTTP/session/CSRF, command/version, STOMP/recovery, game flow, completion, and performance-regression evidence. |
+| Frontend build verification | `npm ci`, `npm test`, `npm run build` | `sindopoly-front`; same commands | Clean lockfile installation, the current Node realtime tests, and the Vite production build on Node 20. |
 
 The integration job deliberately uses no Actions service containers. Testcontainers
 creates disposable `redis:7.0-alpine`, `mariadb:10.11`, and Ryuk resources with
@@ -36,6 +36,7 @@ The Windows Docker Desktop 29.4.3 `-Dapi.version=1.44` Testcontainers discovery
 workaround is local troubleshooting evidence only. Linux GitHub runners use the
 normal integration command unless a workflow run establishes the same need.
 
-The first GitHub-hosted run for the original workflow commit passed all three
-required jobs: backend fast, backend integration, and frontend build. It used
-the normal Linux integration command without the Windows Docker API override.
+Accepted changes through REVAMP-027 have passed all three GitHub-hosted jobs.
+Linux runners use the normal integration command without the Windows Docker API
+override. Exact current counts live in `LOCAL_VERIFICATION.md`; new tests may
+increase them without changing the job contract.

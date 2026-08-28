@@ -28,9 +28,12 @@ The server emits one JSON envelope after an `APPLIED` authoritative transition:
 ```
 
 Event types are `LOBBY_UPDATED`, `GAME_STARTED`, `TURN_UPDATED`, and
-`GAME_COMPLETED`. Reasons are bounded and expose no raw Redis fields. `REPLAY`,
-`STALE`, and `NO_OP` outcomes emit nothing. Publication failure is logged with
-game/type/version only and cannot roll back a committed transition.
+`GAME_COMPLETED`. The exact reason values are `GAME_CREATED`, `PLAYER_JOINED`,
+`PLAYER_LEFT`, `PLAYER_KICKED`, `GAME_STARTED`, `ROLL_COMPLETED`,
+`ACTION_RESOLVED`, `TURN_TIMED_OUT`, and `GAME_COMPLETED`. Reasons are bounded
+and expose no raw Redis fields. `REPLAY`, `STALE`, and `NO_OP` outcomes emit
+nothing. Publication failure is logged with game/type/version only and cannot
+roll back a committed transition.
 
 ## Snapshot and client ordering
 
