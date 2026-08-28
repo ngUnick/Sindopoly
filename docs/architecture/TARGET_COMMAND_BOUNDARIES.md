@@ -149,4 +149,9 @@ Adopt by vertical slice: record ADRs, introduce trusted identity, route one comm
 
 The authoritative transition store remains the only live game-transition write boundary. `RedisGameDiscovery` now owns read-only `game:*` discovery, invite-code lookup, and the existing cross-game membership discovery predicate used by lobby commands; `GameLoopScheduler` consumes that adapter through constructor injection. It accepts only exact positive-decimal `game:<gameId>` HASH key names and `game:<gameId>:players` SET key names. A syntactically valid key of the wrong Redis type fails on the subsequent typed operation. `RedisGameKeys` owns the canonical transition-store keys and current discovery patterns. Existing key names, value formats, TTLs, and CAS semantics are unchanged.
 
-The adapter deliberately retains the existing `KEYS game:*`/`KEYS game:*:players` scans and per-game invite HASH lookup; this centralizes command/scheduler discovery ownership but is not a scalability claim or a new Redis index. `GameStateService` still supplies live compatibility reads for authorization, public lobby queries, and the retained membership-status endpoint, while its raw mutation helpers and the old rule services remain unwired legacy/test surfaces. Their removal or further consolidation requires caller migration and characterization evidence under later cleanup work.
+The adapter owns cursor-based `SCAN game:*`/`SCAN game:*:players` discovery and
+the per-game invite HASH lookup. REVAMP-027 removes every production
+`RedisTemplate.keys(...)` call without introducing a global index; SCAN remains
+O(N) and weakly consistent, while authoritative reads/CAS validate candidates.
+`GameStateService` delegates cross-game discovery to this adapter and retains
+live authorization/public-query projections. Its mutation surface remains absent.

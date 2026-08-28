@@ -143,6 +143,9 @@ class IntegrationInfrastructureIT {
     private RedisGameTransitionStore transitions;
 
     @Autowired
+    private com.example.Sindopoly_Java.service.transition.RedisGameDiscovery discovery;
+
+    @Autowired
     private TurnCommandService turnCommands;
 
     @Autowired
@@ -208,6 +211,44 @@ class IntegrationInfrastructureIT {
             assertThatThrownBy(() -> player.connect("https://attacker.example"))
                     .isInstanceOf(java.util.concurrent.ExecutionException.class);
         }
+    }
+
+    @Test
+    void cursorDiscoveryTraversesMultipleBatchesAndRejectsNonCanonicalKeys() {
+        java.util.Set<Integer> expected = new java.util.TreeSet<>();
+        for (int gameId = 10_000; gameId < 10_512; gameId++) {
+            expected.add(gameId);
+            redis.opsForHash().put("game:" + gameId, "status", "lobby");
+            redis.opsForSet().add("game:" + gameId + ":players", "77");
+            redis.opsForHash().put("game:" + gameId + ":commands", "command", "record");
+        }
+        redis.opsForHash().put("game:0", "status", "lobby");
+        redis.opsForHash().put("game:000009", "status", "lobby");
+        redis.opsForHash().put("game:not-a-number", "status", "lobby");
+        redis.opsForHash().put("game:2147483648", "status", "lobby");
+        redis.opsForValue().set("unrelated:key", "value");
+        redis.execute((org.springframework.data.redis.core.RedisCallback<Void>) connection -> {
+            connection.serverCommands().resetConfigStats();
+            return null;
+        });
+
+        assertThat(discovery.activeGameIds()).containsExactlyElementsOf(expected);
+        assertThat(discovery.isPlayerInAnyGame(77)).isTrue();
+
+        java.util.Properties commandStats = redis.execute(
+                (org.springframework.data.redis.core.RedisCallback<java.util.Properties>)
+                        connection -> connection.serverCommands().info("commandstats"));
+        assertThat(commandStats).doesNotContainKey("cmdstat_keys");
+        assertThat(commandCalls(commandStats, "cmdstat_scan")).isGreaterThan(2);
+    }
+
+    private long commandCalls(java.util.Properties commandStats, String command) {
+        String value = commandStats.getProperty(command);
+        if (value == null) return 0;
+        for (String field : value.split(",")) {
+            if (field.startsWith("calls=")) return Long.parseLong(field.substring("calls=".length()));
+        }
+        return 0;
     }
 
     @Test

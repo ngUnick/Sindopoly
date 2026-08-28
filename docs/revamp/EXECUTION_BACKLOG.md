@@ -445,7 +445,7 @@ Two choices are especially important:
 
 ### REVAMP-027 — Apply evidence-based performance improvements
 
-- Status: `READY`; Priority: `P3`; Category: `PERFORMANCE`.
+- Status: `DONE`; Priority: `P3`; Category: `PERFORMANCE`.
 - Rationale / evidence: `KEYS` scans, polling, owner scans, N+1 reads, and large frontend bundle are risks, but some are bounded or unmeasured.
 - Desired outcome: baseline metrics and targeted fixes such as lifecycle indexes, polling reduction, payload shaping, or query optimization only where evidence warrants.
 - Dependencies: REVAMP-020, REVAMP-021, REVAMP-023, REVAMP-024. Blocks: none unless a measured issue blocks usability.
@@ -460,7 +460,7 @@ Two choices are especially important:
 
 ### REVAMP-028 — Complete developer, architecture, API, and operations documentation
 
-- Status: `BLOCKED`; Priority: `P4`; Category: `DOCUMENTATION`.
+- Status: `READY`; Priority: `P4`; Category: `DOCUMENTATION`.
 - Rationale / evidence: current README/API snapshot can be stale; later phases change commands, contracts, state, and security.
 - Desired outcome: canonical, non-duplicative developer, architecture, state-machine, API, event, Redis, MariaDB, and security documentation.
 - Dependencies: REVAMP-006 through REVAMP-027 as applicable. Blocks: final release verification.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-027 — Apply evidence-based performance
-improvements**. Later work remains blocked by documentation, regression, and
-release prerequisites.
+The immediate `READY` item is **REVAMP-028 — Complete developer, architecture,
+API, and operations documentation**. Later work remains blocked by documentation,
+regression, and release prerequisites.
 
 ## Planning review
 

@@ -16,9 +16,12 @@ applying a square. Property timeout is the canonical decline. Jail timeout is
 the canonical skip/decrement/release. No timeout removes, bankrupts,
 disconnects, or marks a player AFK.
 
-The scheduler retains the two-second `KEYS game:*` discovery loop; only exact
-`game:{decimalId}` hashes are processed. This is read-only discovery, not
-transition ownership, and remains a measured scalability candidate.
+The scheduler retains its two-second discovery loop, but REVAMP-027 replaces
+blocking `KEYS game:*` with cursor-based `SCAN`. Only exact positive decimal
+`game:{gameId}` hashes are processed. SCAN is weakly consistent and may repeat or
+miss keys during concurrent creation/expiry; discovery deduplicates candidates,
+and authoritative reads/Lua CAS still decide every transition. No index or key
+schema was added.
 
 ## Completion and cleanup
 

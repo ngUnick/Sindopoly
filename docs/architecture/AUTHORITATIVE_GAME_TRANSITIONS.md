@@ -99,7 +99,7 @@ commit; the version check rejects it, closing the per-game authorization-to-
 mutation TOCTOU window for migrated commands.
 
 The cross-game predicate "one player belongs to at most one active game" still
-uses the legacy `KEYS game:*:players` discovery check. Concurrent joins to two
+uses the cursor-based `SCAN game:*:players` discovery check. Concurrent joins to two
 different games can therefore both pass because separate game versions cannot
 protect a global predicate. REVAMP-018 deliberately implements ADR-0002's
 per-game boundary; a global membership index/ownership migration belongs to

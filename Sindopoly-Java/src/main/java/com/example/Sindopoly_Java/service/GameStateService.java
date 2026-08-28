@@ -2,6 +2,7 @@ package com.example.Sindopoly_Java.service;
 
 import com.example.Sindopoly_Java.model.Player;
 import com.example.Sindopoly_Java.repository.PlayerRepository;
+import com.example.Sindopoly_Java.service.transition.RedisGameDiscovery;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.SetOperations;
@@ -23,34 +24,24 @@ import java.util.Set;
 public class GameStateService {
     private static final String GAME_PREFIX = "game:";
 
-    private final RedisTemplate<String, String> redisTemplate;
     private final HashOperations<String, String, String> hashOps;
     private final SetOperations<String, String> setOps;
     private final PlayerRepository playerRepo;
+    private final RedisGameDiscovery discovery;
 
     public GameStateService(
             RedisTemplate<String, String> redisTemplate,
-            PlayerRepository playerRepo) {
-        this.redisTemplate = redisTemplate;
+            PlayerRepository playerRepo,
+            RedisGameDiscovery discovery) {
         this.hashOps = redisTemplate.opsForHash();
         this.setOps = redisTemplate.opsForSet();
         this.playerRepo = playerRepo;
+        this.discovery = discovery;
     }
 
     /** Returns whether the player is currently a member of any game. */
     public boolean isPlayerInAnyGame(int playerId) {
-        Set<String> keys = redisTemplate.keys("game:*:players");
-        if (keys == null || keys.isEmpty()) {
-            return false;
-        }
-
-        for (String key : keys) {
-            Boolean isMember = setOps.isMember(key, String.valueOf(playerId));
-            if (Boolean.TRUE.equals(isMember)) {
-                return true;
-            }
-        }
-        return false;
+        return discovery.isPlayerInAnyGame(playerId);
     }
 
     /** Returns the current Redis snapshot for a game hash. */
@@ -60,17 +51,15 @@ public class GameStateService {
 
     /** Returns public games that are still accepting lobby members. */
     public List<Map<String, String>> getAllPublicLobbyGames() {
-        Set<String> keys = redisTemplate.keys("game:*");
-        if (keys == null || keys.isEmpty()) {
+        Set<Integer> gameIds = discovery.activeGameIds();
+        if (gameIds.isEmpty()) {
             return List.of();
         }
 
         List<Map<String, String>> publicLobbyGames = new ArrayList<>();
-        for (String key : keys) {
+        for (Integer canonicalGameId : gameIds) {
             try {
-                if (key.endsWith(":players")) {
-                    continue;
-                }
+                String key = gameKey(canonicalGameId);
 
                 String visibility = hashOps.get(key, "visibility");
                 String status = hashOps.get(key, "status");
@@ -78,7 +67,7 @@ public class GameStateService {
                     continue;
                 }
 
-                String gameId = key.substring(GAME_PREFIX.length());
+                String gameId = String.valueOf(canonicalGameId);
                 Map<String, String> gameData = hashOps.entries(key);
                 // Frozen turn order is private active-game state, not discovery metadata.
                 gameData.remove("turnOrder");

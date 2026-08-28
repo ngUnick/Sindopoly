@@ -6,6 +6,15 @@ the existing authoritative keys through a version-bracketed snapshot.
 
 Serializer: `RedisConfig` sets `StringRedisSerializer` for keys, values, hash keys, and hash values.
 
+REVAMP-027 changes discovery commands, not schema. `RedisGameDiscovery` uses a
+cursor `SCAN` with exact canonical-key filtering for `game:*` and
+`game:*:players`; `GameStateService` delegates public-lobby and cross-game
+membership discovery to it. SCAN is O(N), weakly consistent, and may repeat
+keys, so candidates are deduplicated and authoritative reads/Lua CAS remain the
+security and correctness boundary. No key, type, value, TTL, serializer, index,
+Pub/Sub channel, or Stream was added or changed. Measurement and rejected
+alternatives are recorded in `docs/performance/PERFORMANCE_BASELINE.md`.
+
 REVAMP-018/019 update: normal game commands now write through the centralized Lua
 compare-and-commit store described in
 `docs/architecture/AUTHORITATIVE_GAME_TRANSITIONS.md`. The game hash adds
