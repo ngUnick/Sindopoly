@@ -6,5 +6,13 @@ hs_err_pid*.log
 replay_pid*.log
 dump.rdb
 
+# Machine-local deployment configuration; keep only the reviewed example.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
 # Maven Versions Plugin backup files
 *.versionsBackup

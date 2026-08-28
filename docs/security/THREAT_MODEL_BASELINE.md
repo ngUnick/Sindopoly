@@ -8,6 +8,13 @@ canonical security and architecture references; REVAMP-025 removes the
 production-unwired `TurnService` and raw projection-service mutators without
 removing those controls.
 
+REVAMP-026 additionally replaces committed deployment credentials with explicit
+development/production profiles, centralizes restrictive REST/WebSocket origins,
+requires production Redis TLS and HTTPS browser origins, hardens cookies and
+error/log disclosure, and bounds WebSocket transport resources. The canonical
+current deployment contract and residual risks are in `DEPLOYMENT_SECURITY.md`;
+older wildcard/default-credential observations below remain historical evidence.
+
 Current evidence baseline:
 
 - REST controllers live under `Sindopoly-Java/src/main/java/com/example/Sindopoly_Java/controller`.

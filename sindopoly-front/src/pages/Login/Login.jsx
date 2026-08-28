@@ -76,7 +76,7 @@ const Login = () => {
     const hide = message.loading("Creating player...", 0);
 
     try {
-      const res = await apiFetch("http://localhost:8080/api/player-state/create", {
+      const res = await apiFetch("/api/player-state/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nickname: cleanName }),

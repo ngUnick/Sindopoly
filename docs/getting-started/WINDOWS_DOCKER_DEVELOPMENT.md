@@ -39,7 +39,9 @@ developer path.
 - MariaDB migrations: `Sindopoly-Java/src/main/resources/db/migration/`.
 - Backend configuration: `Sindopoly-Java/src/main/resources/application.properties`.
 - Maven wrappers: root and `Sindopoly-Java/` (`mvnw`, `mvnw.cmd`).
-- No `.env.example`, `scripts/dev-up.ps1`, or `scripts/verify-dev.ps1` exists today.
+- `.env.example` contains optional development-only Compose overrides. Keep a
+  copied `.env` untracked. No `scripts/dev-up.ps1` or
+  `scripts/verify-dev.ps1` exists today.
 
 ## Current startup workflow
 
@@ -86,26 +88,24 @@ declared, so `docker compose down` followed by container recreation is not a
 durable-data guarantee; back up any important local database before recreating
 the MariaDB container.
 
-Compose sets `SPRING_PROFILES_ACTIVE=docker`, datasource variables, and
-`SPRING_DATA_REDIS_HOST=redis` / `SPRING_DATA_REDIS_PORT=6379`. The backend and
-frontend can be built as containers, but their full startup was not verified.
-The frontend contains hard-coded `http://localhost:8080` calls, so browser/API
-networking from the Nginx container is unverified. Redis and MariaDB are
-published to the host for local use; they should not be exposed beyond the
-development machine.
+Compose explicitly selects the `dev` profile and supplies the canonical
+`SINDOPOLY_DB_*`, `SINDOPOLY_REDIS_*`, origin, and frontend API-build values.
+The browser API/WebSocket origin is centralized through `VITE_API_BASE_URL`;
+the local build default is `http://localhost:8080`. Redis and MariaDB are
+published to the host only for local development and must not be exposed beyond
+the development machine. See `docs/security/DEPLOYMENT_SECURITY.md` before
+using any non-local topology.
 
 ## Backend workflow and configuration
 
-`application.properties` defaults MariaDB to `jdbc:mariadb://mariadb:3306/sindopoly`
-with local sample credentials and Redis to `127.0.0.1:6379` through
-`SPRING_REDIS_HOST`/`SPRING_REDIS_PORT` placeholders. Compose instead provides
-`SPRING_DATA_REDIS_HOST`/`SPRING_DATA_REDIS_PORT`; this naming mismatch requires
-runtime verification. A native Windows backend also cannot necessarily resolve
-the Docker hostname `mariadb` without an override or host mapping.
+The default `dev` profile points native development at MariaDB and Redis on
+localhost and permits only explicit local browser origins. Compose overrides
+the same canonical environment variables with container hostnames. The `prod`
+profile has no credential/origin fallback and is not used by this local stack.
 
-The Docker profile is `docker`. The HTTP port is 8080; STOMP/WebSocket is
-configured at `/ws`, but active frontend subscription and realtime delivery are
-not currently verified. The server broker is Spring's in-memory broker.
+The HTTP port is 8080; STOMP/WebSocket is configured at `/ws` and reuses the
+same validated origin allow-list as REST CORS. The server broker is Spring's
+in-memory broker.
 
 ## Redis and MariaDB
 
@@ -128,17 +128,17 @@ legacy data fails startup rather than being silently blessed. Do not delete the
 database merely to obtain Flyway history; diagnose the fail-closed message and
 follow `docs/architecture/DATABASE_MIGRATION_OWNERSHIP.md`.
 
-Mixed native-backend/Docker-infrastructure mode remains sensitive to the
-MariaDB hostname and Redis variable issues documented above.
+Mixed native-backend/Docker-infrastructure mode uses the `dev` localhost
+defaults; override the canonical variables only when Docker publishes services
+on different host ports.
 
 ## Environment variables and secrets
 
-Compose currently declares `SPRING_PROFILES_ACTIVE`,
-`SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`,
-`SPRING_DATASOURCE_PASSWORD`, `SPRING_DATA_REDIS_HOST`, and
-`SPRING_DATA_REDIS_PORT`. Developers provide them through Compose or explicit
-Windows environment overrides; no example environment file or secret-provider
-workflow exists.
+Compose declares `SPRING_PROFILES_ACTIVE=dev` and supplies `SINDOPOLY_DB_*`,
+`SINDOPOLY_REDIS_*`, `SINDOPOLY_DEV_ALLOWED_ORIGINS`, and
+`SINDOPOLY_DEV_API_BASE_URL`. `.env.example` documents optional local
+overrides; `.env` files are ignored. Production uses the separate fail-closed
+contract in `docs/security/DEPLOYMENT_SECURITY.md` and a platform secret store.
 
 Never commit real credentials, tokens, or personal environment files. Compose
 credentials are local sample values, not production credentials. Do not expose
@@ -152,12 +152,13 @@ These prevent claiming a clean `clone → configure → start → verify` workfl
 
 1. Full `docker compose up` has not been verified (REVAMP-007, REVAMP-030).
 2. Maven Wrapper cache permissions failed in the audit (REVAMP-007, REVAMP-030).
-3. Native datasource hostname and Redis variable names are inconsistent (REVAMP-007).
+3. Native and Compose connection variables are aligned; a clean-checkout
+   runtime proof remains REVAMP-030.
 4. Frontend lint fails with 40 baseline problems (REVAMP-007).
-5. Narrow frontend synchronization tests exist; browser-backed WebSocket and
-   critical game-flow E2E coverage remain REVAMP-022.
-6. Frontend localhost API calls versus container networking are unverified
-   (REVAMP-007, REVAMP-021, REVAMP-028).
+5. Backend WebSocket and critical game-flow integration coverage exists;
+   clean-checkout browser verification remains REVAMP-030.
+6. Frontend API/WebSocket origin configuration is centralized; a clean browser
+   deployment proof remains REVAMP-030.
 7. Compose does not yet declare a durable MariaDB named volume; preserve or back
    up local data before container recreation (REVAMP-030 operations verification).
 8. Local and CI verification contracts exist; clean-checkout verification remains

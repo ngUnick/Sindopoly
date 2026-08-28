@@ -38,7 +38,7 @@ export const GameAPI = {
 
   // ✅ Get Public Lobby Games
   getPublicLobbyGames: async () => {
-    const res = await apiFetch("http://localhost:8080/api/game-state/public-lobby");
+    const res = await apiFetch("/api/game-state/public-lobby");
     if (!res.ok) throw new Error("Failed to fetch public games");
     const games = await res.json();
     games.forEach(game => observeGameSnapshot(game.gameId, game));

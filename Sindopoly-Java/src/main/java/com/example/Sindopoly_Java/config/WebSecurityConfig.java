@@ -2,7 +2,6 @@ package com.example.Sindopoly_Java.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
@@ -14,6 +13,7 @@ import org.springframework.security.web.authentication.logout.HttpStatusReturnin
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.cors.CorsConfiguration;
@@ -39,16 +39,21 @@ public class WebSecurityConfig {
     }
 
     @Bean
+    CookieCsrfTokenRepository csrfTokenRepository() {
+        // The frontend obtains the token from /api/session/csrf, so this cookie need not be script-readable.
+        return new CookieCsrfTokenRepository();
+    }
+
+    @Bean
     SecurityFilterChain apiSecurity(
             HttpSecurity http,
-            SecurityContextRepository securityContextRepository) throws Exception {
-
-        CookieCsrfTokenRepository csrfTokens = CookieCsrfTokenRepository.withHttpOnlyFalse();
+            SecurityContextRepository securityContextRepository,
+            CookieCsrfTokenRepository csrfTokenRepository) throws Exception {
 
         http
             .cors(Customizer.withDefaults())
             .csrf(csrf -> csrf
-                    .csrfTokenRepository(csrfTokens)
+                    .csrfTokenRepository(csrfTokenRepository)
                     // Identity creation cannot possess a session CSRF token yet.
                     .ignoringRequestMatchers("/api/player-state/create"))
             .securityContext(context -> context
@@ -56,6 +61,11 @@ public class WebSecurityConfig {
                     .requireExplicitSave(true))
             .sessionManagement(session -> session
                     .sessionFixation(fixation -> fixation.changeSessionId()))
+            .headers(headers -> headers
+                    .referrerPolicy(referrer -> referrer.policy(
+                            ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+                    .permissionsPolicy(permissions -> permissions
+                            .policy("camera=(), geolocation=(), microphone=()")))
             .exceptionHandling(errors -> errors
                     .authenticationEntryPoint(authenticationEntryPoint())
                     .accessDeniedHandler(accessDeniedHandler()))
@@ -91,16 +101,12 @@ public class WebSecurityConfig {
         };
     }
 
-    /**
-     * Global CORS rules.
-     * Adjust origin(s) and paths to taste.
-     */
+    /** Global credentialed CORS policy; WebSocket handshakes reuse the same validated origins. */
     @Bean
-    CorsConfigurationSource corsConfigurationSource(
-            @Value("${sindopoly.web.allowed-origins}") List<String> allowedOrigins) {
+    CorsConfigurationSource corsConfigurationSource(WebOriginPolicy originPolicy) {
 
         CorsConfiguration cfg = new CorsConfiguration();
-        cfg.setAllowedOrigins(allowedOrigins);
+        cfg.setAllowedOrigins(originPolicy.allowedOrigins());
         cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
         cfg.setAllowedHeaders(List.of(
                 "Content-Type", "Accept", "X-XSRF-TOKEN",

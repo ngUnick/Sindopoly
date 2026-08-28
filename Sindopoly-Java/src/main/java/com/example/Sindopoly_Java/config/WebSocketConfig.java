@@ -4,7 +4,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.lang.NonNull;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.messaging.simp.config.ChannelRegistration;
-import org.springframework.beans.factory.annotation.Value;
 import com.example.Sindopoly_Java.realtime.GameSubscriptionAuthorizationInterceptor;
 import org.springframework.web.socket.config.annotation.*;
 
@@ -13,13 +12,12 @@ import org.springframework.web.socket.config.annotation.*;
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final GameSubscriptionAuthorizationInterceptor authorization;
-    private final String[] allowedOrigins;
+    private final WebOriginPolicy originPolicy;
 
     public WebSocketConfig(GameSubscriptionAuthorizationInterceptor authorization,
-                           @Value("${sindopoly.web.allowed-origins}") String allowedOrigins) {
+                           WebOriginPolicy originPolicy) {
         this.authorization = authorization;
-        this.allowedOrigins = java.util.Arrays.stream(allowedOrigins.split(","))
-                .map(String::trim).filter(value -> !value.isEmpty()).toArray(String[]::new);
+        this.originPolicy = originPolicy;
     }
 
     /* broker for messages FROM server → clients */
@@ -33,8 +31,16 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(@NonNull StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")            // main endpoint
-                .setAllowedOrigins(allowedOrigins)
+                .setAllowedOrigins(originPolicy.allowedOriginsArray())
                 .withSockJS();                 // SockJS fallback
+    }
+
+    @Override
+    public void configureWebSocketTransport(@NonNull WebSocketTransportRegistration registration) {
+        // Bound unauthenticated handshake/message resource use without changing the event contract.
+        registration.setMessageSizeLimit(64 * 1024);
+        registration.setSendBufferSizeLimit(512 * 1024);
+        registration.setSendTimeLimit(10_000);
     }
 
     @Override

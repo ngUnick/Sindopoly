@@ -88,6 +88,10 @@ final class GameBoundaryClient implements AutoCloseable {
     }
 
     RealtimeConnection connect() throws Exception {
+        return connect("http://localhost:5173");
+    }
+
+    RealtimeConnection connect(String origin) throws Exception {
         SockJsClient sockJs = new SockJsClient(List.of(
                 new WebSocketTransport(new StandardWebSocketClient())));
         WebSocketStompClient stomp = new WebSocketStompClient(sockJs);
@@ -96,7 +100,7 @@ final class GameBoundaryClient implements AutoCloseable {
         stomp.setMessageConverter(converter);
         WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
         headers.add(HttpHeaders.COOKIE, cookieHeader());
-        headers.setOrigin("http://localhost:5173");
+        headers.setOrigin(origin);
         CompletableFuture<StompSession> connected = new CompletableFuture<>();
         CompletableFuture<Throwable> failed = new CompletableFuture<>();
         StompSessionHandlerAdapter handler = new StompSessionHandlerAdapter() {

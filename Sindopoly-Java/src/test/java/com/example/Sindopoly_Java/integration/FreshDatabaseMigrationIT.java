@@ -45,8 +45,6 @@ class FreshDatabaseMigrationIT {
         registry.add("spring.datasource.driver-class-name", MARIADB::getDriverClassName);
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(REDIS_PORT));
-        registry.add("spring.redis.host", REDIS::getHost);
-        registry.add("spring.redis.port", () -> REDIS.getMappedPort(REDIS_PORT));
     }
 
     @Autowired

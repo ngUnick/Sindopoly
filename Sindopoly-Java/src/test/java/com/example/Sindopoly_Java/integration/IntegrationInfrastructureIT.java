@@ -122,9 +122,6 @@ class IntegrationInfrastructureIT {
         registry.add("spring.datasource.driver-class-name", MARIADB::getDriverClassName);
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(REDIS_PORT));
-        // Existing application properties use SPRING_REDIS_* placeholders.
-        registry.add("spring.redis.host", REDIS::getHost);
-        registry.add("spring.redis.port", () -> REDIS.getMappedPort(REDIS_PORT));
     }
 
     @Autowired
@@ -202,6 +199,15 @@ class IntegrationInfrastructureIT {
         assertThatThrownBy(() -> HttpClient.newHttpClient().newWebSocketBuilder()
                 .buildAsync(endpoint, new java.net.http.WebSocket.Listener() { }).join())
                 .hasCauseInstanceOf(WebSocketHandshakeException.class);
+    }
+
+    @Test
+    void realWebSocketHandshakeRejectsAnUnlistedOriginWithAValidSession() throws Exception {
+        try (GameBoundaryClient player = GameBoundaryClient.create(
+                baseUri(), objectMapper, uniqueName("WsOrigin"))) {
+            assertThatThrownBy(() -> player.connect("https://attacker.example"))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class);
+        }
     }
 
     @Test

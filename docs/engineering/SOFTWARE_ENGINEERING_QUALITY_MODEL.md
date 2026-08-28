@@ -5,7 +5,9 @@ mutators, or direct legacy WebSocket publication describe the 2026-07-13 audit
 baseline. The authoritative command/store/event boundaries replaced those
 paths in REVAMP-018 through REVAMP-023, and REVAMP-025 removes the unwired
 legacy implementation after replacement coverage. The normative standards in
-this document remain current.
+this document remain current. Origin, credential, logging, and deployment
+observations in the audit examples are likewise historical after REVAMP-026;
+`docs/security/DEPLOYMENT_SECURITY.md` is the canonical current contract.
 
 This document defines the engineering model for future Sindopoly work. It is intentionally repository-specific: it uses the current Spring Boot backend, Redis active state, MariaDB persistence, REST APIs, WebSocket broker configuration, scheduled jobs, and React frontend as its reference point.
 

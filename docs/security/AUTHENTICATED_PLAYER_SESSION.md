@@ -58,18 +58,22 @@ yet; it cannot mutate an existing identity. The React client fetches a token
 from `/api/session/csrf`, stores it only in module memory, and sends the named
 header on subsequent unsafe requests. Logout is CSRF-protected.
 
-CORS has one configuration owner and permits credentials only for the origins
-listed by `SINDOPOLY_ALLOWED_ORIGINS`. The local default is
-`http://localhost:5173,http://127.0.0.1:5173`; deployments must supply their
-actual frontend origins rather than widening the list.
+CORS has one Spring Security configuration owner and uses the shared validated
+`WebOriginPolicy` for both REST and WebSocket origins. Development permits only
+the documented localhost origins. The `prod` profile requires explicit HTTPS
+origins rather than widening the list.
 
 Session defaults:
 
-- `HttpOnly=true`;
-- `SameSite=Lax`;
+- `HttpOnly=true` for the session and CSRF repository cookies;
+- `SameSite=Lax` by default;
 - two-hour inactivity timeout, configurable with `SINDOPOLY_SESSION_TIMEOUT`;
 - `Secure=false` only for the documented HTTP localhost workflow;
-- production HTTPS must set `SINDOPOLY_SESSION_COOKIE_SECURE=true`.
+- the production profile forces `Secure=true`.
+
+The frontend reads the CSRF token response body and keeps it in module memory;
+it never needs a script-readable token cookie. The complete secret, cookie,
+proxy, TLS, and origin contract is `DEPLOYMENT_SECURITY.md`.
 
 Spring Security rotates the session ID during identity establishment and
 standard logout invalidates it. Expired or invalidated sessions become

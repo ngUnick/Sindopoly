@@ -2,6 +2,10 @@
 FROM node:18-alpine AS builder
 WORKDIR /app
 
+# Public browser endpoint compiled into the Vite bundle; never pass secrets here.
+ARG VITE_API_BASE_URL=http://localhost:8080
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
 # 1) Copy only lockfile & manifest → install deps (cacheable)
 COPY package.json package-lock.json ./
 RUN npm ci

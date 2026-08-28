@@ -430,7 +430,7 @@ Two choices are especially important:
 
 ### REVAMP-026 — Apply remaining deployment security hardening
 
-- Status: `READY`; Priority: `P1`; Category: `SECURITY`.
+- Status: `DONE`; Priority: `P1`; Category: `SECURITY`.
 - Rationale / evidence: committed defaults, exposed services, duplicate CORS, permissive WebSocket origins, ad hoc logs, and error taxonomy remain.
 - Desired outcome: environment-aware secrets/origin/logging/error/abuse posture consistent with the chosen authentication and realtime design.
 - Dependencies: REVAMP-015 through REVAMP-017, REVAMP-021, REVAMP-023. Blocks: release sign-off.
@@ -445,7 +445,7 @@ Two choices are especially important:
 
 ### REVAMP-027 — Apply evidence-based performance improvements
 
-- Status: `DEFERRED`; Priority: `P3`; Category: `PERFORMANCE`.
+- Status: `READY`; Priority: `P3`; Category: `PERFORMANCE`.
 - Rationale / evidence: `KEYS` scans, polling, owner scans, N+1 reads, and large frontend bundle are risks, but some are bounded or unmeasured.
 - Desired outcome: baseline metrics and targeted fixes such as lifecycle indexes, polling reduction, payload shaping, or query optimization only where evidence warrants.
 - Dependencies: REVAMP-020, REVAMP-021, REVAMP-023, REVAMP-024. Blocks: none unless a measured issue blocks usability.
@@ -571,9 +571,9 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-026 — Apply remaining deployment security
-hardening**. Later work remains deferred or blocked by hardening, documentation,
-regression, and release prerequisites.
+The immediate `READY` item is **REVAMP-027 — Apply evidence-based performance
+improvements**. Later work remains blocked by documentation, regression, and
+release prerequisites.
 
 ## Planning review
 

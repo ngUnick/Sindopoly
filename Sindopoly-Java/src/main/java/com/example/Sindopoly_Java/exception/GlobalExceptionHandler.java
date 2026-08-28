@@ -70,19 +70,26 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(409).body(body);
     }
 
-    @ExceptionHandler({
-        IllegalArgumentException.class,
-        IllegalStateException.class
-    })
-    public ResponseEntity<Map<String,String>> handleBadRequest(RuntimeException ex) {
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String,String>> handleBadRequest(IllegalArgumentException ex) {
         return ResponseEntity
                .badRequest()
                .body(Map.of("error", ex.getMessage()));
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String,String>> handleInvalidInternalState(IllegalStateException ex) {
+        // IllegalStateException also represents corrupt Redis/database data; never echo that detail.
+        log.warn("Request reached an invalid application state ({})", ex.getClass().getSimpleName());
+        return ResponseEntity
+                .badRequest()
+                .body(Map.of("error", "Request cannot be completed in the current state"));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String,String>> handleServerError(Exception ex) {
-        log.error("Unhandled exception caught by GlobalExceptionHandler", ex);
+        // Exception messages can contain connection details or payload fragments; log only bounded type context.
+        log.error("Unhandled exception caught by GlobalExceptionHandler (type={})", ex.getClass().getName());
         return ResponseEntity
                .status(500)
                .body(Map.of("error", "Internal server error"));

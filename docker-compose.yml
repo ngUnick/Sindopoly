@@ -1,3 +1,4 @@
+# DEVELOPMENT ONLY: this stack publishes infrastructure ports and uses replaceable local defaults.
 services:
 
   mariadb:
@@ -6,12 +7,12 @@ services:
     restart: always
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
     environment:
-      MARIADB_ROOT_PASSWORD: nick123root
-      MARIADB_DATABASE:    sindopoly
-      MARIADB_USER:        nick
-      MARIADB_PASSWORD:    nick123
+      MARIADB_ROOT_PASSWORD: ${SINDOPOLY_DEV_DB_ROOT_PASSWORD:-sindopoly_dev_root_only}
+      MARIADB_DATABASE: ${SINDOPOLY_DEV_DB_NAME:-sindopoly}
+      MARIADB_USER: ${SINDOPOLY_DEV_DB_USERNAME:-sindopoly_dev}
+      MARIADB_PASSWORD: ${SINDOPOLY_DEV_DB_PASSWORD:-sindopoly_dev_only}
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u nick -pnick123"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u\"$${MARIADB_USER}\" -p\"$${MARIADB_PASSWORD}\" --silent"]
       interval: 10s
       timeout:  5s
       retries:  5
@@ -41,16 +42,14 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
-
-      # MariaDB
-      - SPRING_DATASOURCE_URL=jdbc:mariadb://mariadb:3306/sindopoly
-      - SPRING_DATASOURCE_USERNAME=nick
-      - SPRING_DATASOURCE_PASSWORD=nick123
-
-      # Redis
-      - SPRING_DATA_REDIS_HOST=redis
-      - SPRING_DATA_REDIS_PORT=6379
+      # The repository Compose stack is explicitly a development deployment.
+      SPRING_PROFILES_ACTIVE: dev
+      SINDOPOLY_DB_URL: jdbc:mariadb://mariadb:3306/${SINDOPOLY_DEV_DB_NAME:-sindopoly}
+      SINDOPOLY_DB_USERNAME: ${SINDOPOLY_DEV_DB_USERNAME:-sindopoly_dev}
+      SINDOPOLY_DB_PASSWORD: ${SINDOPOLY_DEV_DB_PASSWORD:-sindopoly_dev_only}
+      SINDOPOLY_REDIS_HOST: redis
+      SINDOPOLY_REDIS_PORT: 6379
+      SINDOPOLY_ALLOWED_ORIGINS: ${SINDOPOLY_DEV_ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1,http://localhost:5173,http://127.0.0.1:5173}
 
     depends_on:
       mariadb:
@@ -62,6 +61,8 @@ services:
     build:
       context: ./sindopoly-front
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${SINDOPOLY_DEV_API_BASE_URL:-http://localhost:8080}
     image: sindopoly-frontend:latest
     container_name: sindopoly-frontend
     restart: always

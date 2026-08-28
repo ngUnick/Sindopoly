@@ -10,6 +10,8 @@ import com.example.Sindopoly_Java.repository.StatsRepository;
 import com.example.Sindopoly_Java.repository.PlayerRepository;
 
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class StatsService {
+
+    private static final Logger log = LoggerFactory.getLogger(StatsService.class);
 
     private final StatsRepository statsRepository;
     private final PlayerRepository playerRepository;
@@ -54,7 +58,9 @@ public class StatsService {
             try {
                 return objectMapper.readValue(cached, new TypeReference<>() {});
             } catch (Exception e) {
-                e.printStackTrace();
+                // Cache corruption is non-authoritative; report bounded context and rebuild from MariaDB.
+                log.warn("Ignoring unreadable leaderboard cache entry at key {} (cause={})",
+                        LEADERBOARD_KEY, e.getClass().getSimpleName());
             }
         }
         return refreshLeaderboard();
@@ -71,7 +77,9 @@ public class StatsService {
         try {
             redis.opsForValue().set(LEADERBOARD_KEY, objectMapper.writeValueAsString(topPlayers));
         } catch (Exception e) {
-            e.printStackTrace();
+            // A cache write failure must not discard the authoritative MariaDB-derived response.
+            log.warn("Could not refresh leaderboard cache at key {} (cause={})",
+                    LEADERBOARD_KEY, e.getClass().getSimpleName());
         }
 
         return topPlayers;

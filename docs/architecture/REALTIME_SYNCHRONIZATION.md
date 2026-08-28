@@ -58,6 +58,12 @@ server-side membership authorization. Client SEND frames are rejected because
 commands remain REST-only. `/ws` uses the configured origin allow-list. Errors do
 not disclose membership.
 
+REST CORS and `/ws` share the fail-closed `WebOriginPolicy`; wildcard, empty,
+malformed, and production non-HTTPS origins are rejected. The transport bounds
+messages to 64 KiB, the per-session send buffer to 512 KiB, and a send to 10
+seconds. These are transport-abuse bounds, not application rate limits, and do
+not change destinations, envelopes, ordering, or recovery.
+
 An authorized subscription records the server-derived player ID against its
 STOMP session/subscription IDs. Outbound broker frames do not reliably retain the
 authenticated `Principal`, so delivery resolves that server-owned record and
