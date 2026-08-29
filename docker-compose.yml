@@ -3,7 +3,6 @@ services:
 
   mariadb:
     image: mariadb:10.11
-    container_name: sindopoly-mariadb
     restart: always
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
     environment:
@@ -22,7 +21,6 @@ services:
 
   redis:
     image: redis:7.0-alpine
-    container_name: sindopoly-redis
     restart: always
     ports:
       - "6379:6379"
@@ -37,7 +35,6 @@ services:
       context: ./Sindopoly-Java
       dockerfile: Dockerfile
     image: sindopoly-backend:latest
-    container_name: sindopoly-backend
     restart: always
     ports:
       - "8080:8080"
@@ -64,7 +61,6 @@ services:
       args:
         VITE_API_BASE_URL: ${SINDOPOLY_DEV_API_BASE_URL:-http://localhost:8080}
     image: sindopoly-frontend:latest
-    container_name: sindopoly-frontend
     restart: always
     ports:
       - "80:80"
