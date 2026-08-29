@@ -488,14 +488,29 @@ Two choices are especially important:
 - Suggested branch / commit theme: `codex/full-regression-verification`; `test: verify revamp regression matrix`.
 - Recommended Codex model/reasoning: `Terra / Medium` — coordinated verification and triage.
 
+### REVAMP-029A — Add one-command Windows local startup
+
+- Status: `DONE`; Priority: `P0`; Category: `ENVIRONMENT`.
+- Rationale / evidence: the accepted full Docker Compose topology is reproducible but first-time startup still requires developers to coordinate configuration, startup, readiness, logs, and teardown commands before the final clean-checkout proof.
+- Desired outcome: one Windows-native root command surface orchestrates the existing `mariadb`, `redis`, `backend`, and `frontend` Compose services without creating another runtime or deployment architecture.
+- Dependencies: REVAMP-029. Blocks: REVAMP-030.
+- Expected affected areas: root PowerShell launcher, startup/operations documentation, and this execution backlog only.
+- Production behavior change: No. Tests required: PowerShell parsing and command behavior; Compose config; doctor; stopped, repeated, partial, status, logs, stop, and restart flows; safe port-conflict and failure handling where practical.
+- Security considerations: use only reviewed development defaults; do not create secrets, weaken profiles/origins/session protections, change Docker permissions, or touch gameplay state. Performance considerations: avoid rebuilding an already-ready stack and use bounded readiness polling.
+- Redis implications: container-health observation only; no gameplay-key read/write or schema/lifecycle change. MariaDB implications: health observation only; no SQL, migration, or persistence redesign.
+- REST implications: anonymous public-lobby GET may be used read-only for backend readiness. WebSocket implications: none.
+- Compatibility/migration: preserve the manual full-Compose and hybrid/native workflows; fixed development ports remain canonical. Documentation required: root startup UX, Windows/Docker workflow, runbook, and REVAMP-030 clean-checkout dependency.
+- Suggested branch / commit theme: `codex/one-command-windows-startup`; `feat(dev): add one-command Windows startup`.
+- Recommended Codex model/reasoning: `Sol / Medium` — Windows process, Docker ownership, readiness, rollback, and port safety require careful cross-environment review.
+
 ### REVAMP-030 — Verify a clean Windows and Docker Desktop checkout
 
 - Status: `READY`; Priority: `P0`; Category: `ENVIRONMENT`.
 - Rationale / evidence: Windows wrapper, PowerShell, Docker config, native hostname, and dependency-cache behavior were all environment-sensitive in the baseline.
 - Desired outcome: clean-checkout proof using the supported Windows and Docker Desktop paths, with exact commands and expected results.
-- Dependencies: REVAMP-006, REVAMP-007, REVAMP-008, REVAMP-029. Blocks: release sign-off.
+- Dependencies: REVAMP-006, REVAMP-007, REVAMP-008, REVAMP-029, REVAMP-029A. Blocks: release sign-off.
 - Expected affected areas: verification documentation and CI/release evidence.
-- Production behavior change: No. Tests required: fresh clone/dependency/container/build/smoke matrix.
+- Production behavior change: No. Tests required: fresh clone; optional documented configuration overrides; `.\sindopoly.ps1 doctor`; `.\sindopoly.ps1 start`; infrastructure, backend, frontend, and browser/session/game smoke; status; stop; and cleanup verification.
 - Security considerations: use placeholder/local-only credentials and avoid publishing secrets. Performance considerations: record bootstrap time only as operational evidence.
 - Redis implications: container startup and cleanup verified. MariaDB implications: initialization and persistence volume behavior verified.
 - REST implications: smoke endpoint/command verified. WebSocket implications: handshake and selected recovery path verified.
@@ -565,8 +580,8 @@ Two choices are especially important:
 
 - Goal: make the revamp deployable, documented, and independently reproducible.
 - Entry criteria: Milestone G exit criteria.
-- Exit criteria: REVAMP-026 through REVAMP-030 complete.
-- Items: REVAMP-026, REVAMP-027, REVAMP-028, REVAMP-029, REVAMP-030.
+- Exit criteria: REVAMP-026 through REVAMP-030, including supplemental REVAMP-029A, complete.
+- Items: REVAMP-026, REVAMP-027, REVAMP-028, REVAMP-029, REVAMP-029A, REVAMP-030.
 - Major risks: hardening/config changes expose incomplete migration work; optimization lacks evidence.
 
 ## Execution frontier

@@ -18,23 +18,33 @@ STOMP notifications prompt clients to recover the latest REST snapshot.
 
 ## Start locally on Windows
 
-The supported development path is Windows PowerShell with Docker Desktop. From
-the repository root:
+The easiest supported path is Windows PowerShell with Docker Desktop. From the
+repository root:
 
 ```powershell
-Copy-Item .env.example .env
-docker compose config
-docker compose up --build
-docker compose ps
+.\sindopoly.ps1 doctor
+.\sindopoly.ps1 start
 ```
 
 Open `http://localhost`. The backend is exposed on `http://localhost:8080` and
 OpenAPI UI is available in the development profile at
 `http://localhost:8080/swagger-ui/index.html`.
 
-Stop the stack with `docker compose down`. The Compose file is a development
-topology. Its sample credentials and exposed database ports are not production
-settings, and it currently declares no named MariaDB volume. See the
+Use `.\sindopoly.ps1 status`, `.\sindopoly.ps1 logs`, and
+`.\sindopoly.ps1 stop` to inspect, follow, and stop the stack. A root `.env` is
+optional; committed development-only defaults work without one, while
+`.env.example` documents optional local overrides. The launcher orchestrates
+the existing four-service Compose topology and does not require host Java,
+Maven, Node, or npm.
+
+Routine `stop` preserves the Compose containers and their current anonymous
+volume attachments. Manual `docker compose down` is a full teardown that may
+orphan anonymous MariaDB data; back up anything important before using it.
+
+The Compose file is a development topology. Its sample credentials and exposed
+database ports are not production settings, and it currently declares no named
+MariaDB volume. The manual hybrid workflow remains available for IDE debugging
+and frontend HMR. See the
 [Windows and Docker development guide](docs/getting-started/WINDOWS_DOCKER_DEVELOPMENT.md)
 before relying on local data persistence.
 

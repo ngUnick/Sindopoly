@@ -29,7 +29,9 @@
 | `VITE_API_BASE_URL` | Public frontend build-time REST/WebSocket origin; never a secret. |
 
 Compose-only local overrides are documented in `.env.example`, including
-development database credentials and frontend origin. Keep `.env` untracked:
+development database credentials and frontend origin. They are optional because
+the Compose file supplies reviewed development-only defaults. Keep `.env`
+untracked and never treat these values as production credentials:
 
 | Compose override | Maps to |
 | --- | --- |
@@ -42,21 +44,30 @@ development database credentials and frontend origin. Keep `.env` untracked:
 ## Development startup and health
 
 ```powershell
-Copy-Item .env.example .env
-docker compose config
-docker compose up --build
-docker compose ps
-docker compose logs -f backend
+.\sindopoly.ps1 doctor
+.\sindopoly.ps1 start
+.\sindopoly.ps1 status
 ```
+
+The launcher wraps the existing full Compose development topology, remains
+independent of the caller's working directory, and requires Docker Desktop but
+not host Java or Node. It validates Compose before startup, refuses unrelated
+fixed-port conflicts, waits for MariaDB/Redis health plus backend/frontend HTTP
+readiness, and does not require or create `.env`. Follow output with
+`.\sindopoly.ps1 logs` and stop with `.\sindopoly.ps1 stop`.
 
 Expected local ports: frontend `80`, backend `8080`, MariaDB `3306`, Redis
 `6379`. MariaDB and Redis have Compose healthchecks; backend startup waits for
 them. Validate the browser, `GET /api/game-state/public-lobby`, authenticated
 session creation, and `/ws` using the documented API/realtime flow.
 
-Stop with `docker compose down`. No named MariaDB volume is declared, so do not
-assume container recreation preserves local data. Back up important developer
-data before destructive Docker operations.
+The stop command uses `docker compose stop`, preserving containers and their
+current anonymous volume attachments. No named MariaDB volume is declared;
+manual `docker compose down` removes containers and may orphan anonymous-volume
+data that a later `up` will not reliably reattach. Back up important developer
+data before destructive Docker operations. The manual full-Compose and
+hybrid/native commands remain in the Windows/Docker development guide for
+debugging and HMR workflows.
 
 ## Database migration
 

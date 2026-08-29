@@ -20,16 +20,50 @@ PowerShell may resolve `npm.ps1` through an execution policy, so repository
 commands use `npm.cmd`. Maven wrappers exist at the root and backend; commands
 below use the backend wrapper.
 
-## Full Docker workflow
+## Recommended one-command workflow
+
+From the repository root, validate the environment and start the complete
+development stack:
+
+```powershell
+.\sindopoly.ps1 doctor
+.\sindopoly.ps1 start
+```
+
+The launcher builds and starts the existing `mariadb`, `redis`, `backend`, and
+`frontend` Compose services, waits for infrastructure health and application
+HTTP readiness, and then exits. It does not require host Java, Maven, Node, or
+npm and does not open a browser automatically.
+
+```powershell
+.\sindopoly.ps1 status
+.\sindopoly.ps1 logs
+.\sindopoly.ps1 stop
+```
+
+`start` is safe to repeat and does not rebuild an already-ready stack. `status`
+returns non-zero when the stack is stopped, partial, or unhealthy. `logs`
+follows Compose output until Ctrl+C without stopping containers. `stop` runs
+`docker compose stop`, preserving the current containers and their anonymous
+volume attachments.
+
+A root `.env` is optional. The committed Compose development defaults are
+sufficient; `.env.example` documents optional local overrides. The launcher
+does not create or copy `.env`, generate secrets, or weaken production
+configuration.
+
+## Manual full Docker workflow
 
 From the repository root:
 
 ```powershell
-Copy-Item .env.example .env
 docker compose config
 docker compose up --build
 docker compose ps
 ```
+
+Copy `.env.example` to `.env` first only when you intentionally want to review
+or change the documented local overrides.
 
 Open `http://localhost`. Backend REST/OpenAPI development endpoints are on
 `http://localhost:8080`; SockJS/STOMP connects at `/ws`. Follow logs with:
@@ -38,10 +72,12 @@ Open `http://localhost`. Backend REST/OpenAPI development endpoints are on
 docker compose logs -f backend
 ```
 
-Stop with `docker compose down`. MariaDB and Redis healthchecks gate backend
-startup. The frontend waits for backend start, not full application health, so
-use the logs and smoke checks rather than assuming dependency startup means the
-whole application is ready.
+For a routine stop, use `docker compose stop`. `docker compose down` is a manual
+full teardown: it removes containers and the network, and may leave anonymous
+volume data orphaned rather than reattaching it on the next `up`. MariaDB and
+Redis healthchecks gate backend startup. The frontend waits for backend start,
+not full application health, so use the logs and smoke checks rather than
+assuming dependency startup means the whole application is ready.
 
 | Service | Image/build | Host port | Purpose |
 | --- | --- | --- | --- |
@@ -55,7 +91,10 @@ be exposed as production defaults. No named MariaDB volume is declared; back up
 important local data before container recreation. `MariaDB/init.sql` is
 historical and is not mounted—Flyway V1 owns fresh schema/reference data.
 
-## Native application with Docker infrastructure
+## Advanced native application with Docker infrastructure
+
+Use this secondary workflow for IDE debugging, faster backend iteration, or
+frontend HMR. It is not required for the easiest first-time startup.
 
 Start dependencies:
 
@@ -107,7 +146,8 @@ for test isolation.
 
 ## Configuration and troubleshooting
 
-Copy `.env.example` only for local overrides; `.env` is ignored. Canonical
+Copy `.env.example` only for intentional local overrides; `.env` is ignored and
+is not required by either the launcher or Compose. Canonical
 database, Redis, origin, session, timeout, terminal-retention, forwarded-header,
 and OpenAPI variables are listed in `../operations/RUNBOOK.md`. Production has
 no credential/origin fallback and requires Redis TLS plus HTTPS browser origins.
