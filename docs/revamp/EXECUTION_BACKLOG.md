@@ -475,7 +475,7 @@ Two choices are especially important:
 
 ### REVAMP-029 — Run full regression verification
 
-- Status: `READY`; Priority: `P0`; Category: `VERIFICATION`.
+- Status: `DONE`; Priority: `P0`; Category: `VERIFICATION`.
 - Rationale / evidence: all critical flows currently lack automated coverage and final changes span state, security, and transport.
 - Desired outcome: documented full verification across unit, integration, REST, WebSocket, E2E, lint/build, security review, and migration checks.
 - Dependencies: REVAMP-008, REVAMP-022, REVAMP-024 through REVAMP-028. Blocks: release milestone.
@@ -490,7 +490,7 @@ Two choices are especially important:
 
 ### REVAMP-030 — Verify a clean Windows and Docker Desktop checkout
 
-- Status: `BLOCKED`; Priority: `P0`; Category: `ENVIRONMENT`.
+- Status: `READY`; Priority: `P0`; Category: `ENVIRONMENT`.
 - Rationale / evidence: Windows wrapper, PowerShell, Docker config, native hostname, and dependency-cache behavior were all environment-sensitive in the baseline.
 - Desired outcome: clean-checkout proof using the supported Windows and Docker Desktop paths, with exact commands and expected results.
 - Dependencies: REVAMP-006, REVAMP-007, REVAMP-008, REVAMP-029. Blocks: release sign-off.
@@ -571,8 +571,8 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-029 — Run full regression verification**.
-REVAMP-030 remains blocked by regression and release prerequisites.
+The immediate `READY` item is **REVAMP-030 — Verify a clean Windows and Docker
+Desktop checkout**.
 
 ## Planning review
 
