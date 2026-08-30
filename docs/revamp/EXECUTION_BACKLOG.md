@@ -505,7 +505,7 @@ Two choices are especially important:
 
 ### REVAMP-030 — Verify a clean Windows and Docker Desktop checkout
 
-- Status: `READY`; Priority: `P0`; Category: `ENVIRONMENT`.
+- Status: `DONE`; Priority: `P0`; Category: `ENVIRONMENT`.
 - Rationale / evidence: Windows wrapper, PowerShell, Docker config, native hostname, and dependency-cache behavior were all environment-sensitive in the baseline.
 - Desired outcome: clean-checkout proof using the supported Windows and Docker Desktop paths, with exact commands and expected results.
 - Dependencies: REVAMP-006, REVAMP-007, REVAMP-008, REVAMP-029, REVAMP-029A. Blocks: release sign-off.
@@ -586,8 +586,8 @@ Two choices are especially important:
 
 ## Execution frontier
 
-The immediate `READY` item is **REVAMP-030 — Verify a clean Windows and Docker
-Desktop checkout**.
+No `READY` items remain. All items in the frozen revamp execution backlog are
+complete; no additional revamp item is implied.
 
 ## Planning review
 

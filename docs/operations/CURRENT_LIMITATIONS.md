@@ -23,6 +23,9 @@ Historical audit documents may describe defects that have since been repaired.
   by a single global uniqueness transaction.
 - The development Compose topology exposes Redis/MariaDB host ports, uses sample
   credentials, and declares no named MariaDB volume. It is not production-ready.
+- Browser-authenticated servlet sessions are process-local: restarting the
+  backend invalidates existing browser sessions and returns the SPA to login,
+  even when Redis game state remains available.
 - TLS termination, secret rotation, backups, monitoring, abuse rate limits, and
   production shared-broker/load-balancer topology are external operational work.
 - The repository provides no production ingress/TLS manifest, external secret
@@ -34,6 +37,8 @@ Historical audit documents may describe defects that have since been repaired.
 ## Client and compatibility
 
 - Polling remains as a slower compatibility fallback beside STOMP recovery.
+- The production Docker board currently emits a non-fatal parser diagnostic for
+  the relative Dice GLB asset path; authoritative turn state remains usable.
 - The turn action body retains legacy `gameId`, `playerId`, and `squareType`
   fields. IDs must match the path/session and `squareType` is not authoritative;
   removal would require an intentional client contract migration.
@@ -55,8 +60,9 @@ Historical audit documents may describe defects that have since been repaired.
 - Leaderboard refresh reads/sorts all Stats every 60 seconds and caches JSON in
   `stats:leaderboard` without TTL. JPA open-in-view/fetch behavior and query
   counts remain measurement candidates, not proven defects.
-- A clean, independent Windows/Docker Desktop checkout remains the explicit
-  REVAMP-030 release-signoff step after full regression verification.
+- A clean, independent Windows/Docker Desktop checkout was verified for
+  REVAMP-030; fixed host ports and the process-local session limitation remain
+  operational constraints.
 
 ## Deliberately unsupported game scope
 

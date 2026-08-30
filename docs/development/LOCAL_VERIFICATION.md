@@ -42,6 +42,9 @@ fixes.
 
 The complete [REVAMP-029 release regression evidence](REVAMP_029_REGRESSION_VERIFICATION.md)
 records the commands, environment, results, warnings, and compatibility conclusion.
+The completed [REVAMP-030 clean-checkout evidence](REVAMP_030_CLEAN_CHECKOUT_VERIFICATION.md)
+records the independent Windows/Docker startup, two-browser game flow,
+stop/restart, cleanup, and historical-state preservation gates.
 
 “Backend build passes” currently means compilation, packaging, and the 102-test
 fast backend tier. The separate 48-test container-backed integration tier is
