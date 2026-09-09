@@ -1,6 +1,8 @@
 package com.example.Sindopoly_Java.integration;
 
 import com.example.Sindopoly_Java.service.GameLoopScheduler;
+import com.example.Sindopoly_Java.service.core.StatsService;
+import org.springframework.aop.framework.AopInfrastructureBean;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +60,10 @@ class FreshDatabaseMigrationIT {
 
     @MockBean
     private GameLoopScheduler gameLoopScheduler;
+
+    // The scheduled leaderboard refresh writes stats:leaderboard and would race this migration-only Redis assertion.
+    @MockBean(extraInterfaces = AopInfrastructureBean.class)
+    private StatsService statsService;
 
     @Test
     void emptyDatabaseRunsSelfContainedV1BeforeHibernateValidation() {
