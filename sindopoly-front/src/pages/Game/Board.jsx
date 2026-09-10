@@ -5,6 +5,9 @@ import { GamePlayAPI, boardFromSnapshot } from "../../apis/GamePlayAPI";
 import {
   assignPawnRefsByPlayerId, enqueueNotification, movePawnForPlayer, observerNotification,
 } from "../../apis/gameEvents";
+import {
+  isOptionalTurnChoice, OBSERVER_NOTIFICATION_DURATION_MS, ObserverNotificationToast, TurnResultModal,
+} from "../../components/GameFeedback";
 import { useGameRealtime } from "../../hooks/useGameRealtime";
 import { TurnAPI }    from "../../apis/TurnAPI";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -298,7 +301,10 @@ const Board = () => {
 
   useEffect(() => {
     if (!activeObserverNotificationId) return undefined;
-    const timeout = window.setTimeout(() => setObserverQueue(queue => queue.slice(1)), 5500);
+    const timeout = window.setTimeout(
+      () => setObserverQueue(queue => queue.slice(1)),
+      OBSERVER_NOTIFICATION_DURATION_MS,
+    );
     return () => window.clearTimeout(timeout);
   }, [activeObserverNotificationId]);
 
@@ -1023,7 +1029,7 @@ const Board = () => {
     try {
       // Automatic square effects were already committed with RollDice. Only
       // genuine server-created choices submit a second command.
-      if (isYesNo()) {
+      if (isOptionalTurnChoice(turnResult)) {
         if (choice) {
           await TurnAPI.doAction(gameId, playerId, true);
         } else {
@@ -1039,64 +1045,6 @@ const Board = () => {
      } catch (e) {
        console.error("Action failed:", e);
      }
-  };
-
-
-  const getModalMessage = () => {
-    const { squareType, data, newPosition } = turnResult;
-    // look up the square object from state
-    const sq = gamePositions.find(s => s.position === newPosition) || {};
-    const sqName  = sq.name  || `#${newPosition}`;
-    const owner   = sq.player || null;
-
-    switch (squareType) {
-      case 1: // transport
-        if (turnResult.card?.text) {
-          return `${turnResult.card.text} Μετακίνηση στο ${gamePositions.find(s => s.position === data)?.name ?? `#${data}`}.`;
-        }
-        return `Μεταφέρθηκες στο τετράγωνο #${sqName}.`;
-
-      case 2: // money card
-        if (turnResult.card?.text) {
-          const outcome = data >= 0 ? `+€${data}` : `−€${Math.abs(data)}`;
-          return `${turnResult.card.text} (${outcome})`;
-        }
-        return data >= 0
-          ? `Έλαβες €${data}!`
-          : `Πλήρωσε €${-data}.`;
-
-      case 3: // rent
-        return `Έπεσες πάνω στο ${sqName} που ανήκει στον ${owner}. Πλήρωσε €${data}.`;
-
-      case 4: // passed Go
-        return `Πέρασες από την ΑΦΕΤΗΡΙΑ. Πάρε €200!`;
-
-      case 5: // buy offer
-        return `Έπεσες πάνω στο ${sqName} που δεν ανήκει σε κανέναν. Θες να το αγοράσεις για €${data};`;
-
-      case 6: // tax
-        return `Πλήρωσε €${data} για το ${sqName}.`;
-
-      case 7: // go to jail
-        return `Πάνε στη ΦΥΛΑΚΗ!`;
-
-      case 8: // just visiting
-        return `Έπεσες στη ΦΥΛΑΚΗ, αλλά είσαι μόνο για επίσκεψη.`;
-
-      case 10: // jailed player's pre-roll payment option
-        return `Θες να πληρώσεις €${data} για να βγεις από τη ΦΥΛΑΚΗ και να ρίξεις ζάρια;`;
-
-      case 9: // free parking
-        return `Έπεσες στη ΝΑΥΤΙΛΟ. Χαλάρωσε και περίμενε ξανά τον γύρο σου.`;
-
-      default:
-        return `OK`;
-    }
-  };
-
-
-  const isYesNo = () => {
-    return turnResult.squareType === 5 || turnResult.squareType === 10;
   };
 
 
@@ -1126,19 +1074,10 @@ const Board = () => {
         ))}
       </div>
 
-      {activeObserverNotification && (
-        <div className="absolute top-24 right-6 z-40 max-w-sm rounded-md border border-white/60 bg-[rgba(255,236,195,0.95)] p-4 text-black shadow-lg" role="status">
-          <p className="pr-6 text-sm font-medium">{activeObserverNotification.message}</p>
-          <button
-            type="button"
-            aria-label="Κλείσιμο ειδοποίησης"
-            className="absolute right-2 top-1 text-xl leading-none"
-            onClick={() => setObserverQueue(queue => queue.slice(1))}
-          >
-            ×
-          </button>
-        </div>
-      )}
+      <ObserverNotificationToast
+        notification={activeObserverNotification}
+        onDismiss={() => setObserverQueue(queue => queue.slice(1))}
+      />
 
       
       
@@ -1174,39 +1113,12 @@ const Board = () => {
 
 
       {/* Modal Overlay & Card */}
-      {modalVisible && turnResult && (
-        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50  max-w-25">
-          <div className="bg-[rgba(255,236,195,0.8)] backdrop-blur-sm border border-white/60 rounded-md p-6 shadow-lg">
-            <h2 className="text-xl font-semibold mb-4">
-              {getModalMessage()}
-            </h2>
-
-            {isYesNo() ? (
-              <div className="flex space-x-4">
-                <button
-                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                  onClick={() => handleModalChoice(true)}
-                >
-                  Ναι
-                </button>
-                <button
-                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                  onClick={() => handleModalChoice(false)}
-                >
-                  Όχι
-                </button>
-              </div>
-            ) : (
-              <button
-                className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                onClick={() => handleModalChoice(true)}
-              >
-                OK
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      <TurnResultModal
+        visible={modalVisible}
+        turnResult={turnResult}
+        gamePositions={gamePositions}
+        onChoice={handleModalChoice}
+      />
 
 
       {/* ── Properties Modal ─────────────────────────────────────────────────── */}

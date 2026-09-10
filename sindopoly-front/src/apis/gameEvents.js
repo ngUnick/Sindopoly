@@ -23,7 +23,7 @@ export function observerNotification(event, viewerPlayerId, playerName, squareNa
 
   let message = "";
   if (dice && landed) {
-    message = `${actor} έφερε ${dice.dice} και βρέθηκε στο ${squareName(landed.squareId)}.`;
+    message = `${actor} έριξε ${dice.dice} και βρέθηκε στο ${squareName(landed.squareId)}.`;
   } else if (moved) {
     message = `${actor} μετακινήθηκε στο ${squareName(moved.toPosition)}.`;
   }
@@ -33,6 +33,9 @@ export function observerNotification(event, viewerPlayerId, playerName, squareNa
       card.card.title === "Community Chest" ? "Κάρτα Απόφασης" : card.card.title;
     message += ` ${actor} τράβηξε ${label}: ${card.card.text}`;
     if (card.card.effect === "money") message += ` (${outcomeAmount(card.card.amount)})`;
+    else if (card.card.effect === "transport" && moved) {
+      message += ` Μετακινήθηκε στο ${squareName(moved.toPosition)}.`;
+    }
   } else if (available) {
     message += ` Μπορεί να αγοράσει το ${squareName(available.squareId)} για €${available.amount}.`;
   } else if (purchased) {

@@ -57,6 +57,24 @@ The Docker, Redis, MariaDB, REST, and WebSocket checks are intentionally
 separate. A Compose configuration pass does not prove that the daemon, services,
 database schema, application, endpoint, or authorized subscriptions work.
 
+## Docker browser retest freshness
+
+Before a browser verification of changed backend or frontend code, rebuild and
+recreate the application containers:
+
+```powershell
+docker compose up -d mariadb redis
+docker compose up -d --build --force-recreate --no-deps backend frontend
+```
+
+`docker compose start` only restarts existing containers. It does not rebuild
+their images or move an existing container to a newer `:latest` image. Confirm
+freshness with `docker compose images` and use a hard browser reload before the
+two-session test. The frontend Dockerfile compiles `sindopoly-front/src` into a
+Vite production bundle and copies `dist` into the nginx web root; it does not
+mount source files at runtime. If the stack was created with `-p`, use the same
+project name in both commands so a second stack is not created accidentally.
+
 ## Later-task exit criteria
 
 - REVAMP-007 establishes this matrix and its explicit current/target distinction.
