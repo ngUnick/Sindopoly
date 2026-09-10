@@ -9,6 +9,9 @@ import com.example.Sindopoly_Java.repository.CardRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.service.core.DiceService;
 import com.example.Sindopoly_Java.realtime.GameEventPublisher;
+import com.example.Sindopoly_Java.realtime.GameEventDetailType;
+import com.example.Sindopoly_Java.realtime.GameEventPayload;
+import com.example.Sindopoly_Java.realtime.GameEventType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -89,6 +93,13 @@ class TurnCommandGameplayRuleTest {
         assertThat(plan.playerPuts().get(41).get("money")).isEqualTo("1400");
         assertThat(plan.playerPuts().get(7).get("money")).isEqualTo("1600");
         assertThat(plan.gamePuts()).containsEntry("playerTurn", "7").doesNotContainKey("optionalAction");
+        ArgumentCaptor<GameEventPayload> event = ArgumentCaptor.forClass(GameEventPayload.class);
+        verify(events).publish(eq(41), eq(1L), eq(GameEventType.TURN_UPDATED), event.capture());
+        assertThat(event.getValue().details()).extracting(detail -> detail.type())
+                .containsExactly(GameEventDetailType.DICE_ROLLED, GameEventDetailType.PLAYER_MOVED,
+                        GameEventDetailType.LANDED_ON_TILE, GameEventDetailType.RENT_PAID,
+                        GameEventDetailType.TURN_CHANGED);
+        assertThat(event.getValue().details().get(3).counterpartyPlayerId()).isEqualTo(7);
     }
 
     @Test
@@ -120,6 +131,11 @@ class TurnCommandGameplayRuleTest {
         assertThat(pending.stateVersion()).isEqualTo(1);
         assertThat(pending.cost()).isEqualTo(60);
         assertThat(plan.gamePuts()).doesNotContainKey("playerTurn");
+        ArgumentCaptor<GameEventPayload> event = ArgumentCaptor.forClass(GameEventPayload.class);
+        verify(events).publish(eq(41), eq(1L), eq(GameEventType.TURN_UPDATED), event.capture());
+        assertThat(event.getValue().details()).extracting(detail -> detail.type())
+                .containsExactly(GameEventDetailType.DICE_ROLLED, GameEventDetailType.PLAYER_MOVED,
+                        GameEventDetailType.LANDED_ON_TILE, GameEventDetailType.PROPERTY_AVAILABLE);
     }
 
     @Test
@@ -156,8 +172,21 @@ class TurnCommandGameplayRuleTest {
         GameTransitionPlan plan = committedPlan();
 
         assertThat(result.data()).isEqualTo(-50);
+        assertThat(result.card().title()).isEqualTo("Community Chest");
+        assertThat(result.card().text()).isEqualTo("Έληξε η κάρτα του ΟΑΣΘ. Πλήρωσε €50.");
         assertThat(plan.playerPuts().get(41).get("money")).isEqualTo("1450");
         assertThat(plan.deckReplacement()).containsExactly("6", "5");
+        ArgumentCaptor<GameEventPayload> event = ArgumentCaptor.forClass(GameEventPayload.class);
+        verify(events).publish(eq(41), eq(1L), eq(GameEventType.TURN_UPDATED), event.capture());
+        assertThat(event.getValue().actorPlayerId()).isEqualTo(41);
+        assertThat(event.getValue().details()).extracting(detail -> detail.type())
+                .containsExactly(GameEventDetailType.DICE_ROLLED, GameEventDetailType.PLAYER_MOVED,
+                        GameEventDetailType.LANDED_ON_TILE, GameEventDetailType.CARD_DRAWN,
+                        GameEventDetailType.TURN_CHANGED);
+        assertThat(event.getValue().details().stream()
+                .filter(detail -> detail.type() == GameEventDetailType.CARD_DRAWN)
+                .findFirst().orElseThrow().card().text())
+                .isEqualTo("Έληξε η κάρτα του ΟΑΣΘ. Πλήρωσε €50.");
     }
 
     @Test
@@ -186,6 +215,8 @@ class TurnCommandGameplayRuleTest {
 
         assertThat(result.newPosition()).isEqualTo(5);
         assertThat(result.passedGo()).isTrue();
+        assertThat(result.card().title()).isEqualTo("Chance");
+        assertThat(result.card().text()).isEqualTo("Πήγαινε στο ΚΙΟΣΚΙ Σ.Ε.Υ.Π.");
         assertThat(committedPlan().playerPuts().get(41).get("money")).isEqualTo("1700");
     }
 
@@ -315,6 +346,10 @@ class TurnCommandGameplayRuleTest {
         assertThat(plan.playerPuts().get(41).get("properties")).isEqualTo("[1]");
         assertThat(plan.gameDeletes()).contains("optionalAction");
         assertThat(plan.gamePuts()).containsEntry("playerTurn", "7");
+        ArgumentCaptor<GameEventPayload> event = ArgumentCaptor.forClass(GameEventPayload.class);
+        verify(events).publish(eq(41), eq(4L), eq(GameEventType.TURN_UPDATED), event.capture());
+        assertThat(event.getValue().details()).extracting(detail -> detail.type())
+                .containsExactly(GameEventDetailType.PROPERTY_PURCHASED, GameEventDetailType.TURN_CHANGED);
     }
 
     @Test
@@ -433,6 +468,13 @@ class TurnCommandGameplayRuleTest {
         when(card.getId()).thenReturn(id);
         when(card.getType()).thenReturn(type);
         when(card.getAmount()).thenReturn(amount);
+        if (type == Card.CardType.money) {
+            when(card.getTitle()).thenReturn("Community Chest");
+            when(card.getDescription()).thenReturn("Έληξε η κάρτα του ΟΑΣΘ. Πλήρωσε €50.");
+        } else {
+            when(card.getTitle()).thenReturn("Chance");
+            when(card.getDescription()).thenReturn("Πήγαινε στο ΚΙΟΣΚΙ Σ.Ε.Υ.Π.");
+        }
         return card;
     }
 

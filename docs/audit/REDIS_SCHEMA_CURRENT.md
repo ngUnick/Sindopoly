@@ -1,8 +1,14 @@
 # Redis schema current
 
-REVAMP-021 adds no Redis key, serializer, TTL, Pub/Sub channel, Stream, or event
-history. Realtime notifications are process-local and ephemeral; recovery reads
-the existing authoritative keys through a version-bracketed snapshot.
+The contextual game-event work adds no Redis key, serializer, TTL, Pub/Sub
+channel, Stream, or event history. Realtime notifications remain process-local
+and ephemeral; recovery reads the existing authoritative keys through a
+version-bracketed snapshot. The richer STOMP payload is not persisted in Redis.
+No old-to-new key or value migration is required. Exact command replay continues
+to return its originally stored semantic result; therefore, for at most the
+existing commands-key lifetime, a pre-deployment card-roll replay can have a
+null `card` projection. It still returns the correct authoritative effect and
+does not publish a duplicate transient event.
 
 Serializer: `RedisConfig` sets `StringRedisSerializer` for keys, values, hash keys, and hash values.
 

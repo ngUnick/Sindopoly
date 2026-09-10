@@ -21,10 +21,10 @@ public class StompGameEventPublisher implements GameEventPublisher {
     }
 
     @Override
-    public void publish(int gameId, long stateVersion, GameEventType eventType, GameEventReason reason) {
+    public void publish(int gameId, long stateVersion, GameEventType eventType, GameEventPayload payload) {
         try {
             GameEventEnvelope envelope = new GameEventEnvelope(UUID.randomUUID(), eventType, gameId,
-                    stateVersion, timing.now(), new GameEventPayload(reason));
+                    stateVersion, timing.now(), payload);
             broker.convertAndSend("/topic/game/" + gameId, envelope);
         } catch (RuntimeException exception) {
             // Delivery is intentionally non-transactional: snapshot polling/reconnect repairs missed events.

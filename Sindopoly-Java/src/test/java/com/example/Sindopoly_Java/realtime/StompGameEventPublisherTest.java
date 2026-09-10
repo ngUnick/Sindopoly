@@ -1,11 +1,14 @@
 package com.example.Sindopoly_Java.realtime;
 
+import com.example.Sindopoly_Java.model.dto.CardDrawDto;
 import com.example.Sindopoly_Java.service.transition.GameTimingService;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.Instant;
 import java.util.UUID;
+import java.util.List;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,6 +40,41 @@ class StompGameEventPublisherTest {
         assertThrows(IllegalArgumentException.class, () -> new GameEventEnvelope(
                 UUID.randomUUID(), GameEventType.TURN_UPDATED, 0, 1, Instant.EPOCH,
                 new GameEventPayload(GameEventReason.ROLL_COMPLETED)));
+    }
+
+    @Test
+    void publishesBoundedUiDetailsWithoutChangingTheGameTopic() throws Exception {
+        SimpMessagingTemplate broker = mock(SimpMessagingTemplate.class);
+        GameTimingService timing = mock(GameTimingService.class);
+        when(timing.now()).thenReturn(Instant.EPOCH);
+        GameEventPayload payload = new GameEventPayload(GameEventReason.ROLL_COMPLETED, 41, List.of(
+                GameEventDetail.diceRolled(7), GameEventDetail.playerMoved(3, 10),
+                GameEventDetail.propertyAvailable(10, 200)));
+
+        new StompGameEventPublisher(broker, timing).publish(7, 4, GameEventType.TURN_UPDATED, payload);
+
+        var envelope = org.mockito.ArgumentCaptor.forClass(GameEventEnvelope.class);
+        verify(broker).convertAndSend(eq("/topic/game/7"), envelope.capture());
+        assertEquals(41, envelope.getValue().payload().actorPlayerId());
+        assertEquals(GameEventDetailType.PROPERTY_AVAILABLE,
+                envelope.getValue().payload().details().get(2).type());
+    }
+
+    @Test
+    void rejectsUnboundedDetailsAndPreservesGreekCardTextInJson() throws Exception {
+        List<GameEventDetail> tooMany = IntStream.range(0, 13)
+                .mapToObj(ignored -> GameEventDetail.diceRolled(7)).toList();
+        assertThrows(IllegalArgumentException.class, () -> new GameEventPayload(
+                GameEventReason.ROLL_COMPLETED, 41, tooMany));
+
+        CardDrawDto card = new CardDrawDto(5, "Chance", "Πήγαινε στη ΛΕΣΧΗ.", "transport", 28);
+        GameEventPayload payload = new GameEventPayload(GameEventReason.ROLL_COMPLETED, 41,
+                List.of(GameEventDetail.cardDrawn(7, card)));
+        String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(payload);
+
+        org.assertj.core.api.Assertions.assertThat(json)
+                .contains("\"cardId\":5", "\"text\":\"Πήγαινε στη ΛΕΣΧΗ.\"",
+                        "\"effect\":\"transport\"", "\"amount\":28");
     }
 
     @Test

@@ -6,6 +6,7 @@ import com.example.Sindopoly_Java.repository.CardRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.service.core.DiceService;
 import com.example.Sindopoly_Java.realtime.GameEventPublisher;
+import com.example.Sindopoly_Java.realtime.GameEventPayload;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,7 +66,8 @@ class TurnCommandServiceTest {
         assertThat(result.stateVersion()).isEqualTo(1);
         InOrder order = inOrder(store, events);
         order.verify(store).commit(anyInt(), any(), anyString(), any(), any(JsonNode.class));
-        order.verify(events).publish(anyInt(), org.mockito.ArgumentMatchers.anyLong(), any(), any());
+        order.verify(events).publish(anyInt(), org.mockito.ArgumentMatchers.anyLong(), any(),
+                any(GameEventPayload.class));
     }
 
     @Test
@@ -81,7 +83,8 @@ class TurnCommandServiceTest {
         assertThat(result.replayed()).isTrue();
         verify(dice, never()).roll();
         verify(store).load(1);
-        verify(events, never()).publish(anyInt(), org.mockito.ArgumentMatchers.anyLong(), any(), any());
+        verify(events, never()).publish(anyInt(), org.mockito.ArgumentMatchers.anyLong(), any(),
+                any(GameEventPayload.class));
     }
 
     @Test
@@ -94,7 +97,8 @@ class TurnCommandServiceTest {
                 .isInstanceOf(AccessDeniedException.class);
         verify(store, never()).replayIfPresent(anyInt(), any(), anyString());
         verify(dice, never()).roll();
-        verify(events, never()).publish(anyInt(), org.mockito.ArgumentMatchers.anyLong(), any(), any());
+        verify(events, never()).publish(anyInt(), org.mockito.ArgumentMatchers.anyLong(), any(),
+                any(GameEventPayload.class));
     }
 
     private GameSnapshot snapshot() {

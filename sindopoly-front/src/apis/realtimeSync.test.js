@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSnapshotSynchronizer, parseGameEvent } from "./realtimeSync.js";
+import {
+  createSnapshotSynchronizer, parseGameEvent, shouldDisplayGameEvent,
+} from "./realtimeSync.js";
 import {
   acceptGameSnapshot, clearGameVersion, currentGameVersion, observeGameSnapshot, observeGameVersion,
 } from "./gameCommandState.js";
@@ -11,6 +13,7 @@ test("rejects malformed and cross-game notifications", () => {
   assert.equal(parseGameEvent("not-json", 7), null);
   assert.equal(parseGameEvent({ ...event(2), gameId: 8 }, 7), null);
   assert.equal(parseGameEvent({ ...event(2), eventType: "INTERNAL" }, 7), null);
+  assert.equal(parseGameEvent({ ...event(2), payload: { details: [{ type: "REDIS_WRITE" }] } }, 7), null);
 });
 
 test("ignores duplicate and stale notifications", async () => {
@@ -36,6 +39,18 @@ test("uses a gap as a recovery signal and ignores the later out-of-order event",
   assert.equal(version, 13);
   assert.equal(await sync.onEvent(event(12)), false);
   assert.equal(reads, 1);
+});
+
+test("displays versions 15 then 17 once and rejects late 16 or duplicate 17", () => {
+  let acceptedSnapshotVersion = 14;
+  let lastDisplayedVersion = -1;
+  assert.equal(shouldDisplayGameEvent(event(15), acceptedSnapshotVersion, lastDisplayedVersion), true);
+  lastDisplayedVersion = 15;
+  acceptedSnapshotVersion = 15;
+  assert.equal(shouldDisplayGameEvent(event(17), acceptedSnapshotVersion, lastDisplayedVersion), true);
+  lastDisplayedVersion = 17;
+  assert.equal(shouldDisplayGameEvent(event(16), acceptedSnapshotVersion, lastDisplayedVersion), false);
+  assert.equal(shouldDisplayGameEvent(event(17), acceptedSnapshotVersion, lastDisplayedVersion), false);
 });
 
 test("coalesces bursts and follows an event racing an in-flight snapshot", async () => {

@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { GamePlayAPI, boardFromSnapshot } from "../../apis/GamePlayAPI";
+import {
+  assignPawnRefsByPlayerId, enqueueNotification, movePawnForPlayer, observerNotification,
+} from "../../apis/gameEvents";
 import { useGameRealtime } from "../../hooks/useGameRealtime";
 import { TurnAPI }    from "../../apis/TurnAPI";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -38,6 +41,7 @@ const Board = () => {
   const torusRef = useRef(null);
   const cubeRef = useRef(null);
   const coneRef = useRef(null);
+  const pawnRefsByPlayerId = useRef(new Map());
   // const ironRef = useRef(null);
 
   const pawnRefs = [ cubeRef, sphereRef, torusRef, coneRef ];
@@ -288,6 +292,15 @@ const Board = () => {
   const optionalPromptKeyRef = useRef(null);
   // whether to show the modal overlay
   const [modalVisible, setModalVisible] = useState(false);
+  const [observerQueue, setObserverQueue] = useState([]);
+  const activeObserverNotification = observerQueue[0] ?? null;
+  const activeObserverNotificationId = activeObserverNotification?.id;
+
+  useEffect(() => {
+    if (!activeObserverNotificationId) return undefined;
+    const timeout = window.setTimeout(() => setObserverQueue(queue => queue.slice(1)), 5500);
+    return () => window.clearTimeout(timeout);
+  }, [activeObserverNotificationId]);
 
   function filterAndDisplayNames() {
     const filteredPositions = gamePositions.filter(
@@ -546,6 +559,9 @@ const Board = () => {
 
       // A slower polling response may be rejected after a newer socket snapshot.
       if (!board?.length) return;
+      pawnRefsByPlayerId.current = assignPawnRefsByPlayerId(
+        board, pawnRefs, pawnRefsByPlayerId.current
+      );
 
       // 0) mark which properties each player owns
       updateProperties(board);
@@ -583,6 +599,7 @@ const Board = () => {
 
       // build array of { nickname, money } in Redis order
       setPlayersData(board.map(p => ({
+        playerId: p.player_id,
         nickname: p.nickname,
         money:     p.money != null ? p.money : 0
       })));
@@ -654,24 +671,24 @@ const Board = () => {
         if (ref.current) ref.current.visible = false;
       });
 
-      board.forEach((p, idx) => {
-        const pawn = pawnRefs[idx].current;
-        if (pawn) {
+      board.forEach(p => {
+        movePawnForPlayer(p.player_id, pawnRefsByPlayerId.current, p.position, (pawn, position) => {
           pawn.visible = true;
-          findSteps(pawn, p.position);
-        }
+          findSteps(pawn, position);
+        });
 
-        // // update money for player #idx+1
-        // moneySetters[idx]?.({ money: p.money });
-
-        // track “my” pawn index for the animated box
-        if (p.player_id === playerId) {
-          setSelfIdx(idx);
-        }
       });
   };
 
-  useGameRealtime(gameId, handleTick);
+  const handleRealtimeEvent = event => {
+    const playerName = id => playersData.find(player => String(player.playerId) === String(id))?.nickname
+      ?? `Παίκτης ${id}`;
+    const squareName = id => gamePositions.find(square => square.position === id)?.name ?? `#${id}`;
+    const notification = observerNotification(event, playerId, playerName, squareName);
+    if (notification) setObserverQueue(queue => enqueueNotification(queue, notification));
+  };
+
+  useGameRealtime(gameId, handleTick, handleRealtimeEvent);
 
 
   useEffect(() => {
@@ -985,7 +1002,8 @@ const Board = () => {
       setDice(dice);
       // randomDiceThrow(dice1, dice);
       await new Promise(r => setTimeout(r, 1000));
-      findSteps(sphereRef.current, newPosition);
+      // Pawn ownership is resolved by immutable player ID; array position is only a visual slot.
+      movePawnForPlayer(playerId, pawnRefsByPlayerId.current, newPosition, findSteps);
 
       // 2️⃣ always show modal with the raw result
       setTurnResult(tr);
@@ -1033,9 +1051,16 @@ const Board = () => {
 
     switch (squareType) {
       case 1: // transport
+        if (turnResult.card?.text) {
+          return `${turnResult.card.text} Μετακίνηση στο ${gamePositions.find(s => s.position === data)?.name ?? `#${data}`}.`;
+        }
         return `Μεταφέρθηκες στο τετράγωνο #${sqName}.`;
 
       case 2: // money card
+        if (turnResult.card?.text) {
+          const outcome = data >= 0 ? `+€${data}` : `−€${Math.abs(data)}`;
+          return `${turnResult.card.text} (${outcome})`;
+        }
         return data >= 0
           ? `Έλαβες €${data}!`
           : `Πλήρωσε €${-data}.`;
@@ -1083,7 +1108,7 @@ const Board = () => {
       <div className="first-nav">
         {playersData.map((p, idx) => (
           <span
-            key={idx}
+            key={p.playerId}
             className={`
               px-5 
               ${idx === turnIdx ? "animated-box" : ""}`}
@@ -1100,6 +1125,20 @@ const Board = () => {
           </span>
         ))}
       </div>
+
+      {activeObserverNotification && (
+        <div className="absolute top-24 right-6 z-40 max-w-sm rounded-md border border-white/60 bg-[rgba(255,236,195,0.95)] p-4 text-black shadow-lg" role="status">
+          <p className="pr-6 text-sm font-medium">{activeObserverNotification.message}</p>
+          <button
+            type="button"
+            aria-label="Κλείσιμο ειδοποίησης"
+            className="absolute right-2 top-1 text-xl leading-none"
+            onClick={() => setObserverQueue(queue => queue.slice(1))}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       
       

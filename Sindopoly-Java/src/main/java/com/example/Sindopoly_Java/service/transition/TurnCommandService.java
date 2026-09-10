@@ -5,6 +5,7 @@ import com.example.Sindopoly_Java.exception.GameStateConflictException;
 import com.example.Sindopoly_Java.model.Card;
 import com.example.Sindopoly_Java.model.Square;
 import com.example.Sindopoly_Java.model.dto.ActionResultDto;
+import com.example.Sindopoly_Java.model.dto.CardDrawDto;
 import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.repository.CardRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
@@ -15,6 +16,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.Sindopoly_Java.realtime.GameEventPublisher;
+import com.example.Sindopoly_Java.realtime.GameEventDetail;
+import com.example.Sindopoly_Java.realtime.GameEventPayload;
 import com.example.Sindopoly_Java.realtime.GameEventReason;
 import com.example.Sindopoly_Java.realtime.GameEventType;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -88,8 +91,9 @@ public class TurnCommandService {
         GameTransitionPlan plan = GameTransitionPlan.transition().putGame("lastDice", String.valueOf(rolled));
         RollResolution resolution = resolveSquare(snapshot, actorId, actor, movementResult.newPosition(), rolled, plan);
         boolean passedStart = movementResult.passedGo() || resolution.additionalStartPass();
+        int nextPlayerId = actorId;
         if (resolution.optionalAction() == null) {
-            completeTurn(snapshot, plan, order, actorId, actor);
+            nextPlayerId = completeTurn(snapshot, plan, order, actorId, actor);
         } else {
             plan.putGame("optionalAction", json(resolution.optionalAction()))
                     .putGame("turnDeadlineEpochMs", String.valueOf(timing.newTurnDeadlineEpochMs()));
@@ -98,8 +102,10 @@ public class TurnCommandService {
         plan.putPlayer(actorId, actor);
 
         ThrowResultDto result = new ThrowResultDto(rolled, integer(actor, "position"), passedStart,
-                resolution.squareType(), resolution.data(), snapshot.stateVersion() + 1, false);
-        return commitThrow(gameId, metadata, fingerprint, plan, result);
+                resolution.squareType(), resolution.data(), snapshot.stateVersion() + 1, false, resolution.card());
+        GameEventPayload event = rollEvent(actorId, oldPosition, movementResult.newPosition(), result,
+                resolution, nextPlayerId, movementResult.passedGo());
+        return commitThrow(gameId, metadata, fingerprint, plan, result, event);
     }
 
     public ActionResultDto action(int gameId, int actorId, boolean yes, CommandMetadata metadata) {
@@ -117,6 +123,7 @@ public class TurnCommandService {
         Map<String, String> actor = player(snapshot, actorId);
         GameTransitionPlan plan = GameTransitionPlan.transition().deleteGameField("optionalDeadline");
         List<Integer> acquired = new ArrayList<>();
+        List<GameEventDetail> details = new ArrayList<>();
         int next;
         switch (pending.type()) {
             case PURCHASE_PROPERTY -> {
@@ -136,7 +143,9 @@ public class TurnCommandService {
                 properties.add(squareId);
                 actor.put("properties", json(properties));
                 acquired.add(squareId);
+                details.add(GameEventDetail.propertyPurchased(squareId, price));
                 next = completeTurn(snapshot, plan, order, actorId, actor);
+                details.add(GameEventDetail.turnChanged(next));
             }
             case PAY_JAIL_EXIT -> {
                 if (!Boolean.parseBoolean(actor.getOrDefault("jail", "false"))
@@ -149,6 +158,7 @@ public class TurnCommandService {
                 actor.put("money", String.valueOf(integer(actor, "money") - JAIL_EXIT_COST));
                 actor.put("jail", "false");
                 actor.put("jailTime", "0");
+                details.add(GameEventDetail.playerReleased(JAIL_EXIT_COST));
                 // Paying exits before rolling, so the same player remains active.
                 next = actorId;
                 plan.putGame("playerTurn", String.valueOf(actorId))
@@ -160,7 +170,8 @@ public class TurnCommandService {
         plan.putPlayer(actorId, actor);
         ActionResultDto result = new ActionResultDto(integer(actor, "money"), acquired, next,
                 snapshot.stateVersion() + 1, false);
-        return commitAction(gameId, metadata, fingerprint, plan, result, "actionCompleted");
+        return commitAction(gameId, metadata, fingerprint, plan, result,
+                new GameEventPayload(GameEventReason.ACTION_RESOLVED, actorId, details));
     }
 
     public ActionResultDto pass(int gameId, int actorId, CommandMetadata metadata) {
@@ -188,7 +199,9 @@ public class TurnCommandService {
                 .putPlayer(actorId, actor);
         ThrowResultDto result = new ThrowResultDto(0, integer(actor, "position"), false, 10,
                 JAIL_EXIT_COST, snapshot.stateVersion() + 1, false);
-        return commitThrow(gameId, metadata, fingerprint, plan, result);
+        GameEventPayload event = new GameEventPayload(GameEventReason.ROLL_COMPLETED, actorId,
+                List.of(GameEventDetail.jailExitAvailable(JAIL_EXIT_COST)));
+        return commitThrow(gameId, metadata, fingerprint, plan, result, event);
     }
 
     private ActionResultDto resolvePass(int gameId, int actorId, CommandMetadata metadata, String fingerprint,
@@ -215,7 +228,15 @@ public class TurnCommandService {
         int next = completeTurn(snapshot, plan, order, actorId, actor);
         ActionResultDto result = new ActionResultDto(integer(actor, "money"), List.of(), next,
                 snapshot.stateVersion() + 1, false);
-        return commitAction(gameId, metadata, fingerprint, plan, result, event);
+        List<GameEventDetail> details = new ArrayList<>();
+        if (pending.type() == PendingOptionalAction.Type.PURCHASE_PROPERTY && pending.squareId() != null) {
+            details.add(GameEventDetail.propertyDeclined(pending.squareId()));
+        }
+        details.add(GameEventDetail.turnChanged(next));
+        GameEventReason reason = "turnTimedOut".equals(event)
+                ? GameEventReason.TURN_TIMED_OUT : GameEventReason.ACTION_RESOLVED;
+        return commitAction(gameId, metadata, fingerprint, plan, result,
+                new GameEventPayload(reason, actorId, details));
     }
 
     /** Rotates once and materializes a jailed next player's choice in the same commit. */
@@ -288,7 +309,9 @@ public class TurnCommandService {
         int next = completeTurn(snapshot, plan, order, candidate.playerId(), actor);
         ActionResultDto result = new ActionResultDto(integer(actor, "money"), List.of(), next,
                 snapshot.stateVersion() + 1, false);
-        commitAction(candidate.gameId(), metadata, fingerprint, plan, result, "turnTimedOut");
+        commitAction(candidate.gameId(), metadata, fingerprint, plan, result,
+                new GameEventPayload(GameEventReason.TURN_TIMED_OUT, candidate.playerId(),
+                        List.of(GameEventDetail.turnChanged(next))));
         return true;
     }
 
@@ -332,9 +355,11 @@ public class TurnCommandService {
         PreparedCard prepared = prepareCard(snapshot);
         Card card = prepared.card();
         int amount = Math.round(card.getAmount());
+        CardDrawDto cardDraw = new CardDrawDto(card.getId(), card.getTitle(), card.getDescription(),
+                card.getType().name(), amount);
         if (card.getType() == Card.CardType.money) {
             actor.put("money", String.valueOf(integer(actor, "money") + amount));
-            return new RollResolution(2, amount, null, prepared.deck(), false);
+            return new RollResolution(2, amount, null, prepared.deck(), false, cardDraw, null);
         }
         if (card.getType() == Card.CardType.transport) {
             if (amount < 0 || amount >= MovementService.BOARD_SIZE) {
@@ -343,7 +368,7 @@ public class TurnCommandService {
             boolean crossesStart = amount < landingPosition;
             actor.put("position", String.valueOf(amount));
             if (crossesStart) actor.put("money", String.valueOf(integer(actor, "money") + START_REWARD));
-            return new RollResolution(1, amount, null, prepared.deck(), crossesStart);
+            return new RollResolution(1, amount, null, prepared.deck(), crossesStart, cardDraw, null);
         }
         throw new GameStateConflictException("Unsupported card type");
     }
@@ -356,7 +381,7 @@ public class TurnCommandService {
             if (integer(actor, "money") < price) return RollResolution.automatic(4, -1);
             PendingOptionalAction option = PendingOptionalAction.purchase(
                     snapshot.gameId(), actorId, snapshot.stateVersion() + 1, square.getId(), price);
-            return new RollResolution(5, price, option, null, false);
+            return new RollResolution(5, price, option, null, false, null, null);
         }
         if (ownerId == actorId) return RollResolution.automatic(4, -1);
 
@@ -366,7 +391,7 @@ public class TurnCommandService {
         actor.put("money", String.valueOf(integer(actor, "money") - rent));
         owner.put("money", String.valueOf(integer(owner, "money") + rent));
         plan.putPlayer(ownerId, owner);
-        return RollResolution.automatic(3, rent);
+        return new RollResolution(3, rent, null, null, false, null, ownerId);
     }
 
     private int calculateRent(GameSnapshot snapshot, int ownerId, Square square, int rolled) {
@@ -424,19 +449,20 @@ public class TurnCommandService {
     }
 
     private ThrowResultDto commitThrow(int gameId, CommandMetadata metadata, String fingerprint,
-                                       GameTransitionPlan plan, ThrowResultDto result) {
+                                       GameTransitionPlan plan, ThrowResultDto result, GameEventPayload event) {
         TransitionExecution execution = store.commit(gameId, metadata, fingerprint, plan, mapper.valueToTree(result));
-        if (execution.shouldPublish()) events.publish(gameId, execution.stateVersion(),
-                GameEventType.TURN_UPDATED, GameEventReason.ROLL_COMPLETED);
+        if (execution.shouldPublish()) {
+            events.publish(gameId, execution.stateVersion(), GameEventType.TURN_UPDATED, event);
+        }
         return throwResult(execution, execution.replayed());
     }
 
     private ActionResultDto commitAction(int gameId, CommandMetadata metadata, String fingerprint,
-                                         GameTransitionPlan plan, ActionResultDto result, String event) {
+                                         GameTransitionPlan plan, ActionResultDto result, GameEventPayload payload) {
         TransitionExecution execution = store.commit(gameId, metadata, fingerprint, plan, mapper.valueToTree(result));
-        if (execution.shouldPublish()) events.publish(gameId, execution.stateVersion(),
-                GameEventType.TURN_UPDATED,
-                "turnTimedOut".equals(event) ? GameEventReason.TURN_TIMED_OUT : GameEventReason.ACTION_RESOLVED);
+        if (execution.shouldPublish()) {
+            events.publish(gameId, execution.stateVersion(), GameEventType.TURN_UPDATED, payload);
+        }
         return actionResult(execution, execution.replayed());
     }
 
@@ -444,7 +470,7 @@ public class TurnCommandService {
         try {
             ThrowResultDto value = mapper.treeToValue(execution.semanticResult(), ThrowResultDto.class);
             return new ThrowResultDto(value.dice(), value.newPosition(), value.passedGo(), value.squareType(), value.data(),
-                    execution.stateVersion(), replayed);
+                    execution.stateVersion(), replayed, value.card());
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Invalid roll replay", exception);
         }
@@ -537,10 +563,33 @@ public class TurnCommandService {
 
     private record PreparedCard(Card card, List<String> deck) { }
 
+    private GameEventPayload rollEvent(int actorId, int oldPosition, int landingPosition, ThrowResultDto result,
+                                       RollResolution resolution, int nextPlayerId, boolean crossedStartByDice) {
+        List<GameEventDetail> details = new ArrayList<>();
+        details.add(GameEventDetail.diceRolled(result.dice()));
+        details.add(GameEventDetail.playerMoved(oldPosition, result.newPosition()));
+        details.add(GameEventDetail.landedOn(landingPosition));
+        switch (result.squareType()) {
+            case 1, 2 -> details.add(GameEventDetail.cardDrawn(landingPosition, resolution.card()));
+            case 3 -> details.add(GameEventDetail.rentPaid(
+                    landingPosition, result.data(), resolution.counterpartyPlayerId()));
+            case 5 -> details.add(GameEventDetail.propertyAvailable(landingPosition, result.data()));
+            case 6 -> details.add(GameEventDetail.taxPaid(landingPosition, result.data()));
+            case 7 -> details.add(GameEventDetail.playerJailed(landingPosition));
+            default -> { }
+        }
+        if (crossedStartByDice || resolution.additionalStartPass()) {
+            details.add(GameEventDetail.moneyReceived(START_REWARD));
+        }
+        if (resolution.optionalAction() == null) details.add(GameEventDetail.turnChanged(nextPlayerId));
+        return new GameEventPayload(GameEventReason.ROLL_COMPLETED, actorId, details);
+    }
+
     private record RollResolution(int squareType, int data, PendingOptionalAction optionalAction,
-                                  List<String> deck, boolean additionalStartPass) {
+                                  List<String> deck, boolean additionalStartPass, CardDrawDto card,
+                                  Integer counterpartyPlayerId) {
         static RollResolution automatic(int squareType, int data) {
-            return new RollResolution(squareType, data, null, null, false);
+            return new RollResolution(squareType, data, null, null, false, null, null);
         }
     }
 }

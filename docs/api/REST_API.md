@@ -81,7 +81,7 @@ player, be in the accepted lifecycle/phase, and provide command headers.
 
 | Method and path | Request / result |
 | --- | --- |
-| `POST /api/turn/{gameId}/{playerId}/throw` | Server generates dice and resolves movement/square effects. Returns dice, position, Start flag, square result, version, replay status. |
+| `POST /api/turn/{gameId}/{playerId}/throw` | Server generates dice and resolves movement/square effects. Returns dice, position, Start flag, square result, version, replay status, and nullable `card`. When a card is drawn, `card` contains the MariaDB `cardId`, `title`, thematic `text`, effect (`money` or `transport`), and authoritative signed amount/destination. |
 | `POST /api/turn/{gameId}/{playerId}/action` | Body includes `gameId`, `playerId`, legacy `squareType`, and `yes`. Path/body IDs must agree; the server-owned typed pending option—not `squareType`—authorizes the choice. |
 | `POST /api/turn/{gameId}/{playerId}/pass` | No body → action/rotation result with version/replay; declines the current permitted typed option. |
 

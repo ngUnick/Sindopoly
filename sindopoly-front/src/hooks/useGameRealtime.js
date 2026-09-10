@@ -4,15 +4,21 @@ import SockJS from "sockjs-client";
 import API_BASE_URL from "../apis/apiConfig";
 import { GameAPI } from "../apis/GameAPI";
 import { acceptGameSnapshot, currentGameVersion } from "../apis/gameCommandState";
-import { createSnapshotSynchronizer } from "../apis/realtimeSync";
+import {
+  createSnapshotSynchronizer, parseGameEvent, shouldDisplayGameEvent,
+} from "../apis/realtimeSync";
 
 /** One authenticated subscription per mounted game; HTTP snapshots remain authoritative. */
-export function useGameRealtime(gameId, onSnapshot) {
+export function useGameRealtime(gameId, onSnapshot, onGameEvent) {
   const callback = useRef(onSnapshot);
+  const eventCallback = useRef(onGameEvent);
+  const lastEventVersion = useRef(-1);
   callback.current = onSnapshot;
+  eventCallback.current = onGameEvent;
 
   useEffect(() => {
     if (gameId == null) return undefined;
+    lastEventVersion.current = -1;
     const sync = createSnapshotSynchronizer({
       gameId,
       currentVersion: currentGameVersion,
@@ -32,7 +38,15 @@ export function useGameRealtime(gameId, onSnapshot) {
       onConnect: () => {
         subscription?.unsubscribe();
         subscription = client.subscribe(`/topic/game/${gameId}`, message => {
-          sync.onEvent(message.body).catch(error => console.error("Game snapshot recovery failed", error));
+          const event = parseGameEvent(message.body, gameId);
+          // Equal-version delivery is still useful when a polling snapshot won the commit/publish race.
+          if (shouldDisplayGameEvent(
+            event, currentGameVersion(gameId), lastEventVersion.current
+          )) {
+            lastEventVersion.current = event.stateVersion;
+            eventCallback.current?.(event);
+          }
+          sync.onEvent(event ?? message.body).catch(error => console.error("Game snapshot recovery failed", error));
         });
         // Subscribe before reading to close the connect/snapshot race.
         sync.onConnect().catch(error => console.error("Game snapshot recovery failed", error));
