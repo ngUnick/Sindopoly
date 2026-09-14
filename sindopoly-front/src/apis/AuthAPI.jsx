@@ -1,5 +1,6 @@
 import API_BASE_URL from "./apiConfig";
 import { apiFetch, clearCsrfToken } from "./apiClient";
+import { readCurrentGameResponse } from "./currentGame";
 
 export const AuthAPI = {
   getPlayerInfo: async (playerId) => {
@@ -12,6 +13,11 @@ export const AuthAPI = {
     const res = await apiFetch(`${API_BASE_URL}/api/session/me`);
     if (!res.ok) throw new Error("Authenticated session not found");
     return await res.json();
+  },
+
+  getCurrentGame: async () => {
+    const res = await apiFetch(`${API_BASE_URL}/api/session/current-game`);
+    return readCurrentGameResponse(res);
   },
 
   logout: async () => {

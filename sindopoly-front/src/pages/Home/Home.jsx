@@ -15,32 +15,53 @@ import {
 import { useEffect, useState } from "react";
 import { useContext } from "react";
 import { useNavigate } from "react-router-dom";
-import { GamePlayAPI } from "../../apis/GamePlayAPI";
 import { GameAPI } from "../../apis/GameAPI";
+import { AuthAPI } from "../../apis/AuthAPI";
+import { continueGameRoute } from "../../apis/currentGame";
 import bgImg from "../../assets/images/monopoly_bg.png";
 import AuthContext from "../../AuthContext/AuthContext";
 
 function Home() {
   const navigate = useNavigate();
-  const { logout } = useContext(AuthContext);
+  const { logout, currentPlayer } = useContext(AuthContext);
 
   /* -------------------------- state -------------------------- */
-  const [isOnGame, setIsOnGame]   = useState(false);
+  const [currentGameState, setCurrentGameState] = useState({ status: "loading", game: null });
   const [isModalOpen, setModalOpen] = useState(false);
   const [visibility, setVisibility] = useState("public");
 
-  const nickname  = sessionStorage.getItem("nickname") || "Guest";
-  const playerId  = localStorage.getItem("player_id");
+  const nickname = currentPlayer?.nickname || "Guest";
+  const playerId = currentPlayer?.id;
 
   /* ---------------------- helpers ---------------------------- */
-  const fetchIsOnGame = async () => {
-    if (!playerId) return;
-    const inGame = await GamePlayAPI.getInGameStatus(playerId);
-    setIsOnGame(inGame);
+  const fetchCurrentGame = async () => {
+    setCurrentGameState({ status: "loading", game: null });
+    try {
+      const game = await AuthAPI.getCurrentGame();
+      setCurrentGameState({ status: game ? "ready" : "none", game });
+    } catch (error) {
+      if (error.status === 401) {
+        await logout();
+        return;
+      }
+      console.error(error);
+      setCurrentGameState({ status: "error", game: null });
+      message.error("Could not check your current game.");
+    }
   };
 
   /* run once */
-  useEffect(() => { fetchIsOnGame(); }, []);
+  useEffect(() => { void fetchCurrentGame(); }, []);
+
+  const handleContinueGame = () => {
+    const route = continueGameRoute(currentGameState.game, playerId);
+    if (!route) {
+      setCurrentGameState({ status: "error", game: null });
+      message.error("Could not open your current game.");
+      return;
+    }
+    navigate(route);
+  };
 
   /* create-game flow */
   const handleCreateGame = async () => {
@@ -70,14 +91,23 @@ function Home() {
         <div className="w-[800px] flex flex-col gap-5">
           <img src={monopoly_logo} alt="logo" />
           <ConfigProvider theme={{ token: { colorPrimary: "#cf971c" } }}>
-            {isOnGame ? (
+            {currentGameState.status === "ready" ? (
               <div className="flex flex-col items-center gap-5">
                 <Button
                   type="primary"
-                  onClick={() => navigate(`/Game?player=${playerId}`)}
+                  onClick={handleContinueGame}
                 >
                   Continue Game
                 </Button>
+              </div>
+            ) : currentGameState.status === "loading" ? (
+              <div className="flex flex-col items-center gap-5">
+                <Button type="primary" disabled>Checking current game...</Button>
+              </div>
+            ) : currentGameState.status === "error" ? (
+              <div className="flex flex-col items-center gap-5">
+                <Button type="primary" disabled>Continue Game unavailable</Button>
+                <Button type="primary" onClick={fetchCurrentGame}>Retry</Button>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-5">

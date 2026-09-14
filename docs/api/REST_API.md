@@ -47,9 +47,21 @@ statuses below apply to every route according to its guards.
 | --- | --- | --- |
 | `POST /api/player-state/create` | Anonymous only; CSRF exempt | `{ "nickname": "..." }` → numeric player ID and authenticated session. Rejects an already authenticated session. |
 | `GET /api/session/me` | Authenticated | Current server-derived player identity. |
+| `GET /api/session/current-game` | Authenticated | Current resumable game for the server-derived player, or `204` when none exists. |
 | `GET /api/session/csrf` | Authenticated | CSRF token for unsafe requests. |
 | `POST /api/session/logout` | Authenticated + CSRF | Invalidates session, removes session/CSRF cookies, returns `204`. |
 | `GET /api/player-state/{playerId}` | Same player only | Current bounded player projection. |
+
+`GET /api/session/current-game` accepts no player ID. A successful lookup returns
+`{gameId,status,stateVersion,visibility}` with canonical `status` equal to
+`lobby` or `inProgress` and `visibility` equal to `public` or `private`.
+Membership is discovered through the existing incremental Redis SCAN adapter
+and then revalidated against a stable game snapshot. Missing games, stale
+memberships, players who left or were kicked, host-deleted lobbies, and retained
+`ended` games produce `204`. If corrupt state exposes more than one resumable
+game for the player, the request fails explicitly with `409` rather than using
+Redis scan order. An absent or expired authenticated session produces `401`.
+This read adds no Redis key, reverse index, TTL, or MariaDB schema change.
 
 ### Lobby and game state
 
@@ -128,6 +140,9 @@ $base = 'http://localhost:8080'
 $hostId = curl.exe -sS -c host.cookies -H 'Content-Type: application/json' `
   --data-raw '{"nickname":"HostExample"}' "$base/api/player-state/create"
 curl.exe -sS -b host.cookies "$base/api/session/me"
+# Before game creation this returns 204; after create/start it returns 200 with
+# the authoritative resume route data. No CSRF header is required for this GET.
+curl.exe -i -b host.cookies "$base/api/session/current-game"
 $hostCsrf = (curl.exe -sS -b host.cookies -c host.cookies `
   "$base/api/session/csrf" | ConvertFrom-Json).token
 
@@ -139,6 +154,7 @@ $game = curl.exe -sS -b host.cookies -H "X-XSRF-TOKEN: $hostCsrf" `
   "$base/api/game-state/create" | ConvertFrom-Json
 $gameId = $game.gameId
 $version = $game.stateVersion
+curl.exe -i -b host.cookies "$base/api/session/current-game"
 
 $guestId = curl.exe -sS -c guest.cookies -H 'Content-Type: application/json' `
   --data-raw '{"nickname":"GuestExample"}' "$base/api/player-state/create"

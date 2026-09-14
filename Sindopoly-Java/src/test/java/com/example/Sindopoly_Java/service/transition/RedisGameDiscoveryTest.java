@@ -92,6 +92,22 @@ class RedisGameDiscoveryTest {
 
     @SuppressWarnings("unchecked")
     @Test
+    void returnsEveryCanonicalMembershipCandidateInGameIdOrder() {
+        RedisTemplate<String, String> redis = mock(RedisTemplate.class);
+        SetOperations<String, String> sets = mock(SetOperations.class);
+        scannedKeys(redis, "game:12:players", "game:2:players", "game:02:players",
+                "game:12:commands", "game:4:players");
+        when(redis.opsForSet()).thenReturn(sets);
+        when(sets.isMember("game:12:players", "7")).thenReturn(true);
+        when(sets.isMember("game:2:players", "7")).thenReturn(true);
+
+        assertThat(new RedisGameDiscovery(redis).gameIdsForPlayer(7))
+                .containsExactly(2, 12);
+        verify(redis, never()).keys(anyString());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
     void deduplicatesKeysReturnedAcrossCursorBatches() {
         Cursor<byte[]> cursor = mock(Cursor.class);
         when(cursor.hasNext()).thenReturn(true, true, true, false);

@@ -102,6 +102,12 @@ class PlayerSessionSecurityTest {
     }
 
     @Test
+    void currentGameRejectsRequestWithoutApplicationSession() throws Exception {
+        mockMvc.perform(get("/api/session/current-game"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void corsAllowsOnlyTheConfiguredCredentialedOrigin() throws Exception {
         mockMvc.perform(options("/api/session/me")
                         .header(HttpHeaders.ORIGIN, ALLOWED_ORIGIN)

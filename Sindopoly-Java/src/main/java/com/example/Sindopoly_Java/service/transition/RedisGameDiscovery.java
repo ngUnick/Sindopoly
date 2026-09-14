@@ -45,6 +45,20 @@ public class RedisGameDiscovery {
                 .anyMatch(key -> Boolean.TRUE.equals(redis.opsForSet().isMember(key, member)));
     }
 
+    /** Returns every existing membership candidate so callers can revalidate it authoritatively. */
+    public Set<Integer> gameIdsForPlayer(int playerId) {
+        Set<Integer> ids = new TreeSet<>();
+        String member = String.valueOf(playerId);
+        for (String key : scanKeys(RedisGameKeys.membersPattern())) {
+            if (!isCanonicalMembersKey(key)
+                    || !Boolean.TRUE.equals(redis.opsForSet().isMember(key, member))) {
+                continue;
+            }
+            parseGameId(key.substring(0, key.length() - ":players".length())).ifPresent(ids::add);
+        }
+        return ids;
+    }
+
     /**
      * Traverses the existing keyspace incrementally. SCAN is weakly consistent,
      * so callers treat discovery as a candidate set and authoritative commands
