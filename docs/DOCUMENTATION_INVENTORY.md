@@ -31,6 +31,7 @@ retained evidence. `Normative` means an accepted rule/decision/standard.
 | Performance | `performance/PERFORMANCE_BASELINE.md` | Current measured/provable baseline and retained candidates. |
 | Operations | `operations/RUNBOOK.md`, `operations/CURRENT_LIMITATIONS.md` | Current runbook and single residual-limitations register. |
 | Frontend | `../sindopoly-front/README.md` | Current frontend orientation; links to API/realtime/deployment contracts. |
+| Frontend revamp implementation | `frontend-revamp/IMPLEMENTATION_ARCHITECTURE.md` | Current reviewed planning baseline for the controlled frontend migration; not implementation authorization. |
 | Engineering standards | `engineering/SOFTWARE_ENGINEERING_QUALITY_MODEL.md`, `engineering/CODE_COMMENTING_STANDARD.md` | Current normative standards; audit examples are labeled historical. |
 | Revamp execution | `revamp/EXECUTION_BACKLOG.md` | Current canonical frozen dependency/status plan. |
 | Cleanup decisions | `revamp/REVAMP_025_CLEANUP_DECISIONS.md` | Historical accepted cleanup evidence. |
