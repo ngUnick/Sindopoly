@@ -8,6 +8,10 @@ machine/generated artifacts, and confirmed stale frontend/commented paths were
 removed after replacement coverage and call-site verification. See
 `docs/revamp/REVAMP_025_CLEANUP_DECISIONS.md` for current disposition.
 
+FE-REVAMP-003 update (2026-09-15): the audit-time `/getToken` route listed
+below has been removed. Supported authentication uses the opaque server session
+documented in `docs/security/AUTHENTICATED_PLAYER_SESSION.md`.
+
 ## Modules and entry points
 
 | Area | Location | Evidence | Notes |

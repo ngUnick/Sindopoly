@@ -12,7 +12,6 @@ import EndGame from './pages/Game/EndGame';
 import Login from "./pages/Login/Login";
 import { AuthProvider } from './AuthContext/AuthContext';
 import { ProtectedRoute } from './AuthContext/ProtectedRoute';
-import GetToken from './pages/GetToken/GetToken';
 import Statistics from './pages/Statistics/Statistics';
 import Lobby from './pages/Lobby/Lobby';
 
@@ -25,7 +24,6 @@ function App() {
             <AuthProvider>
               <Routes>
                 <Route path="/login" element={<Login/>}/>
-                <Route path="/getToken" element={<GetToken/>}/>
                 <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>}/>
                 <Route path="/searchGame" element={<ProtectedRoute><SearchGame /></ProtectedRoute>}/>
                 <Route path="/lobby" element={<ProtectedRoute><Lobby /></ProtectedRoute>}/>
