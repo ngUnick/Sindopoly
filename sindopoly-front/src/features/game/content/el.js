@@ -114,6 +114,10 @@ export const ACCESSIBILITY_CONTENT = Object.freeze({
   refreshConnection: "Ανανέωση σύνδεσης",
 });
 
+export const EVENT_HISTORY_CONTENT = Object.freeze({
+  gap: "Χάθηκαν ενδιάμεσες ενημερώσεις· η κατάσταση συγχρονίστηκε",
+});
+
 const greekNumber = new Intl.NumberFormat("el-GR", {
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,

@@ -687,7 +687,52 @@ its existing queue and non-actionable behavior.
 There are no REST, STOMP, Redis, MariaDB, background, board asset, Three.js,
 layout or gameplay-rule changes in this milestone.
 
-## 23. Git, documentation and risk
+## 23. FE-REVAMP-009 session event history
+
+`eventHistory.js` is the pure, framework-free presentation-session boundary
+between an FE-REVAMP-008 `EventViewModel` and the future `EventHistory` React
+component. A future mounted game controller owns its state; it is not part of an
+authoritative snapshot, transport connection, scene, observer-toast queue or
+global store. The current milestone connects the decoder → event model → history
+flow in contract tests only, leaving `Board.jsx` and visible behavior unchanged.
+
+State is the frozen shape `{gameId, entries, seenEventIds}`. A normal frozen entry
+copies only `{id, kind, stateVersion, occurredAt, actorPlayerId, text, emphasis,
+announceable}` from one already validated/presented envelope. One grouped event
+model creates one history entry. Distinct event IDs remain distinct even when
+they share a state version; the history does not reinterpret details or calculate
+game rules.
+
+At most 100 entries are retained. They are ordered by authoritative
+`stateVersion`, then parseable server `occurredAt`, then event ID. A late older
+event is inserted at its stable position and cannot replace the newest
+announcement candidate. Event IDs use a separate 256-item immutable LRU: a
+duplicate is not added and refreshes its recency, and an ID forgotten after the
+bounded window is eligible again. Visible overflow evicts the oldest ordered
+entry independently of the dedup window.
+
+`markEventHistoryGap` is called only when reconciliation has already proved a
+missed version range. It adds a presentation marker with `id: null`, kind
+`HISTORY_GAP`, explicit version/time metadata and the Greek content-boundary text
+“Χάθηκαν ενδιάμεσες ενημερώσεις· η κατάσταση συγχρονίστηκε”. Adjacent recovery
+signals are coalesced. The marker is not a server event, and no snapshot details
+are used to invent rolls, rent, cards or other missed narrative. Clean reconnects
+retain history without a marker. A new game ID clears entries and deduplication;
+explicit cleanup can do the same. Full reload naturally starts empty.
+
+Selectors expose the latest ordered entry and the single latest announceable
+entry. This supports a future throttled polite live region without storing DOM or
+ARIA behavior in the reducer and without replaying retained entries when a panel
+opens. The current observer notification remains a separate short-lived queue.
+
+History is current-browser-session, presentation-only memory. Reload loses it;
+reconnect preserves locally observed entries; a proven gap is disclosed rather
+than reconstructed. It provides no replay or audit guarantee, never becomes game
+state, and has no localStorage/sessionStorage, REST, STOMP protocol, Redis,
+MariaDB, background, board, Three.js or package impact. The server remains
+authoritative.
+
+## 24. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn
