@@ -16,7 +16,7 @@ test("renders another player's card text without action authority", () => {
   ] } };
   const result = observerNotification(event, 2, names, squares);
   assert.match(result.message, /Βρήκες ένα τάλιρο/);
-  assert.match(result.message, /\+€5/);
+  assert.match(result.message, /\+5€/);
   assert.deepEqual(Object.keys(result).sort(), ["id", "message"]);
   assert.equal(observerNotification(event, 1, names, squares), null);
 });
@@ -27,7 +27,7 @@ test("observer property offer is informational and contains no controls", () => 
     { type: "PROPERTY_AVAILABLE", squareId: 9, amount: 120 },
   ] } };
   const result = observerNotification(event, 2, names, squares);
-  assert.match(result.message, /Μπορεί να αγοράσει/);
+  assert.match(result.message, /διαθέσιμη αγορά/);
   assert.equal("actionable" in result, false);
 });
 

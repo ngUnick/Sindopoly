@@ -49,8 +49,9 @@ test("rendered P2 observer notification shows a P1 property landing", () => {
     { type: "PROPERTY_AVAILABLE", squareId: 1, amount: 60 },
   ]));
 
-  assert.match(html, /Άννα έριξε 6 και βρέθηκε στο ΓΥΜΝΑΣΤΗΡΙΟ/);
-  assert.match(html, /Μπορεί να αγοράσει το ΓΥΜΝΑΣΤΗΡΙΟ για €60/);
+  assert.match(html, /Άννα: έφερε 6/);
+  assert.match(html, /Άννα → ΓΥΜΝΑΣΤΗΡΙΟ/);
+  assert.match(html, /διαθέσιμη αγορά για ΓΥΜΝΑΣΤΗΡΙΟ, 60€/);
   assert.match(html, /data-game-feedback="observer"/);
 });
 
@@ -84,7 +85,7 @@ test("rendered active-player Chance modal keeps thematic REST card text primary"
   }));
 
   assert.match(html, new RegExp(thematicText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(html, /Μετακίνηση στο ΣΤΑΣΗ ΔΙΠΑΕ/);
+  assert.match(html, /Μετακίνηση προς ΣΤΑΣΗ ΔΙΠΑΕ/);
   const visibleText = html.replace(/<[^>]+>/g, "").trim();
   assert.notEqual(visibleText, "Πάρε 200€");
 });
@@ -105,8 +106,8 @@ test("rendered P2 Chance notification contains the thematic STOMP card text", ()
   ], "00000000-0000-0000-0000-000000000002"));
 
   assert.match(html, /Ο φίλος σου που έχει αμάξι έφυγε πιο νωρίς σήμερα/);
-  assert.match(html, /Μετακινήθηκε στο ΣΤΑΣΗ ΔΙΠΑΕ/);
-  assert.match(html, /Πέρασε από την ΑΦΕΤΗΡΙΑ και πήρε €200/);
+  assert.match(html, /Προορισμός: ΣΤΑΣΗ ΔΙΠΑΕ/);
+  assert.match(html, /πέρασε από την ΑΦΕΤΗΡΙΑ και έλαβε 200€/);
 });
 
 test("rendered active and observer Community Chest feedback keeps thematic text", () => {
@@ -124,7 +125,7 @@ test("rendered active and observer Community Chest feedback keeps thematic text"
   ], "00000000-0000-0000-0000-000000000003"));
 
   assert.match(activeHtml, /Βρήκες ένα τάλιρο στο πάτωμα/);
-  assert.match(activeHtml, /\+€5/);
+  assert.match(activeHtml, /\+5€/);
   assert.match(observerHtml, /Βρήκες ένα τάλιρο στο πάτωμα/);
-  assert.match(observerHtml, /\+€5/);
+  assert.match(observerHtml, /\+5€/);
 });

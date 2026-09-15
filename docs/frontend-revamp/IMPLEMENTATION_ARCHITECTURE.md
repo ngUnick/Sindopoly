@@ -604,7 +604,44 @@ statuses and optional-action types fail closed because treating them as known
 could create unsafe state or command eligibility. None of these policies changes
 the backend REST or STOMP contract.
 
-## 21. Git, documentation and risk
+## 21. FE-REVAMP-007 Greek content boundary
+
+The Greek-only content owner is `sindopoly-front/src/features/game/content/el.js`.
+It contains small frozen dictionaries and deterministic formatters for normalized
+errors, gameplay terms, money, turn/player descriptions, current event facts,
+connection/recovery states and accessible names. No locale switch or localization
+framework is introduced while Greek remains the sole product language.
+
+The dependency flow is:
+
+```text
+raw server data
+  -> transport decoder
+  -> validated facts
+  -> Greek content formatters
+  -> future presentation view model
+  -> UI
+```
+
+The content boundary describes facts supplied by its caller. It does not decide
+turn ownership, movement, purchase eligibility, winner identity or any other game
+rule. FE-REVAMP-008 remains responsible for selecting content from future pure
+presentation models. The current Home and Lobby error surfaces map only normalized
+transport identity, while the existing gameplay-result and observer paths call the
+formatters with facts they already selected.
+
+Backend/MariaDB card text remains canonical thematic content and is preserved
+verbatim; the frontend owns only category labels and mechanical-result framing.
+Property/square names continue to come from supplied metadata or the retained
+legacy board list, so this milestone adds no duplicate forty-square catalog.
+Source contracts keep Greek copy out of transport modules, prevent direct exception
+message rendering in migrated paths, and keep the content module free of network,
+realtime, component and scene dependencies.
+
+There are no REST, event-envelope/destination, Redis, MariaDB, board-asset,
+Three.js or layout changes in this milestone.
+
+## 22. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

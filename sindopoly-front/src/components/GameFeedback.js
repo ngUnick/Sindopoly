@@ -1,5 +1,16 @@
 import React from "react";
 import PropTypes from "prop-types";
+import {
+  ACCESSIBILITY_CONTENT,
+  GAMEPLAY_CONTENT,
+  formatJailExitOffer,
+  formatMoney,
+  formatPurchaseOffer,
+  formatRentOutcome,
+  formatTaxOutcome,
+  formatTurnDestination,
+  formatTurnMoney,
+} from "../features/game/content/el.js";
 
 /** Observer feedback is informational and must not disappear before it is readable. */
 export const OBSERVER_NOTIFICATION_DURATION_MS = 12_000;
@@ -20,33 +31,29 @@ export function formatTurnResultMessage(turnResult, gamePositions) {
     case 1:
       if (turnResult.card?.text) {
         const destination = gamePositions.find(item => item.position === data)?.name ?? `#${data}`;
-        return `${turnResult.card.text} Μετακίνηση στο ${destination}.`;
+        return formatTurnDestination(turnResult.card.text, destination);
       }
-      return `Μεταφέρθηκες στο τετράγωνο #${squareName}.`;
+      return formatTurnDestination(null, squareName);
     case 2:
-      if (turnResult.card?.text) {
-        const outcome = data >= 0 ? `+€${data}` : `−€${Math.abs(data)}`;
-        return `${turnResult.card.text} (${outcome})`;
-      }
-      return data >= 0 ? `Έλαβες €${data}!` : `Πλήρωσε €${-data}.`;
+      return formatTurnMoney(turnResult.card?.text, data);
     case 3:
-      return `Έπεσες πάνω στο ${squareName} που ανήκει στον ${owner}. Πλήρωσε €${data}.`;
+      return formatRentOutcome(squareName, owner, data) ?? `${GAMEPLAY_CONTENT.rent}: ${formatMoney(data)}.`;
     case 4:
-      return "Πέρασες από την ΑΦΕΤΗΡΙΑ. Πάρε €200!";
+      return `Πέρασες από την ${GAMEPLAY_CONTENT.start}. Έλαβες ${formatMoney(200)}!`;
     case 5:
-      return `Έπεσες πάνω στο ${squareName} που δεν ανήκει σε κανέναν. Θες να το αγοράσεις για €${data};`;
+      return formatPurchaseOffer(squareName, data);
     case 6:
-      return `Πλήρωσε €${data} για το ${squareName}.`;
+      return formatTaxOutcome(squareName, data);
     case 7:
-      return "Πάνε στη ΦΥΛΑΚΗ!";
+      return `Μετακίνηση στη ${GAMEPLAY_CONTENT.jail}!`;
     case 8:
-      return "Έπεσες στη ΦΥΛΑΚΗ, αλλά είσαι μόνο για επίσκεψη.";
+      return `Επίσκεψη στη ${GAMEPLAY_CONTENT.jail}.`;
     case 9:
-      return "Έπεσες στη ΝΑΥΤΙΛΟ. Χαλάρωσε και περίμενε ξανά τον γύρο σου.";
+      return `${GAMEPLAY_CONTENT.freeParking}: χαλάρωσε μέχρι την επόμενη σειρά σου.`;
     case 10:
-      return `Θες να πληρώσεις €${data} για να βγεις από τη ΦΥΛΑΚΗ και να ρίξεις ζάρια;`;
+      return formatJailExitOffer(data);
     default:
-      return "OK";
+      return GAMEPLAY_CONTENT.acknowledge;
   }
 }
 
@@ -65,7 +72,7 @@ export function ObserverNotificationToast({ notification, onDismiss = () => {} }
       "button",
       {
         type: "button",
-        "aria-label": "Κλείσιμο ειδοποίησης",
+        "aria-label": ACCESSIBILITY_CONTENT.closeNotification,
         className: "absolute right-2 top-1 text-xl leading-none",
         onClick: onDismiss,
       },
@@ -92,7 +99,7 @@ export function TurnResultModal({ visible, turnResult, gamePositions, onChoice =
         className: "bg-[rgba(255,236,195,0.8)] backdrop-blur-sm border border-white/60 rounded-md p-6 shadow-lg",
         role: "dialog",
         "aria-modal": "true",
-        "aria-label": "Αποτέλεσμα γύρου",
+        "aria-label": ACCESSIBILITY_CONTENT.turnResultDialog,
         "data-game-feedback": "active-player",
       },
       React.createElement(
@@ -110,7 +117,7 @@ export function TurnResultModal({ visible, turnResult, gamePositions, onChoice =
                 className: "px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700",
                 onClick: () => onChoice(true),
               },
-              "Ναι",
+              GAMEPLAY_CONTENT.confirm,
             ),
             React.createElement(
               "button",
@@ -118,7 +125,7 @@ export function TurnResultModal({ visible, turnResult, gamePositions, onChoice =
                 className: "px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700",
                 onClick: () => onChoice(false),
               },
-              "Όχι",
+              GAMEPLAY_CONTENT.decline,
             ),
           )
         : React.createElement(
@@ -127,7 +134,7 @@ export function TurnResultModal({ visible, turnResult, gamePositions, onChoice =
               className: "px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700",
               onClick: () => onChoice(true),
             },
-            "OK",
+            GAMEPLAY_CONTENT.acknowledge,
           ),
     ),
   );

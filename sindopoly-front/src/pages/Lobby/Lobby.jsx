@@ -5,6 +5,10 @@ import { GameAPI } from '../../apis/GameAPI';
 import { acceptGameSnapshot } from '../../apis/gameCommandState';
 import bgImg from "../../assets/images/monopoly_bg.png";
 import { useGameRealtime } from '../../hooks/useGameRealtime';
+import {
+  LOBBY_CONTENT,
+  contentForTransportError,
+} from '../../features/game/content/el.js';
 
 const Lobby = () => {
   const navigate = useNavigate();
@@ -26,7 +30,7 @@ const Lobby = () => {
       navigate(`/Game?game=${gameId}&player=${playerId}`);
     } catch (err) {
       console.error(err);
-      message.error(err.message ?? "Failed to start game");
+      message.error(contentForTransportError(err).message);
     }
   };
 
@@ -66,11 +70,11 @@ const Lobby = () => {
   const handleKick = async (targetId) => {
     try {
       await GameAPI.kickPlayer(gameId, targetId);
-      message.success("Player removed.");
+      message.success(LOBBY_CONTENT.playerRemoved);
       fetchPlayers();
     } catch (err) {
       console.error(err);
-      message.error(err.message ?? "Failed to remove player.");
+      message.error(contentForTransportError(err).message);
     }
   };
 

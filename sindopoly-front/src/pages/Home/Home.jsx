@@ -20,6 +20,10 @@ import { AuthAPI } from "../../apis/AuthAPI";
 import { continueGameRoute } from "../../apis/currentGame";
 import bgImg from "../../assets/images/monopoly_bg.png";
 import AuthContext from "../../AuthContext/AuthContext";
+import {
+  HOME_CONTENT,
+  contentForTransportError,
+} from "../../features/game/content/el.js";
 
 function Home() {
   const navigate = useNavigate();
@@ -46,7 +50,7 @@ function Home() {
       }
       console.error(error);
       setCurrentGameState({ status: "error", game: null });
-      message.error("Could not check your current game.");
+      message.error(contentForTransportError(error).message);
     }
   };
 
@@ -57,7 +61,7 @@ function Home() {
     const route = continueGameRoute(currentGameState.game, playerId);
     if (!route) {
       setCurrentGameState({ status: "error", game: null });
-      message.error("Could not open your current game.");
+      message.error(HOME_CONTENT.cannotOpenCurrentGame);
       return;
     }
     navigate(route);
@@ -69,9 +73,9 @@ function Home() {
       const res     = await GameAPI.createGame(visibility);
       const gameId  = res.gameId ?? res.id ?? res.game_id;
       navigate(`/lobby?game_id=${gameId}&visibility=${visibility}`);
-    } catch (e) {
-      console.error(e);
-      message.error("Failed to create game.");
+    } catch (error) {
+      console.error(error);
+      message.error(contentForTransportError(error).message);
     }
   };
 
@@ -97,17 +101,17 @@ function Home() {
                   type="primary"
                   onClick={handleContinueGame}
                 >
-                  Continue Game
+                  {HOME_CONTENT.continueGame}
                 </Button>
               </div>
             ) : currentGameState.status === "loading" ? (
               <div className="flex flex-col items-center gap-5">
-                <Button type="primary" disabled>Checking current game...</Button>
+                <Button type="primary" disabled>{HOME_CONTENT.checkingCurrentGame}</Button>
               </div>
             ) : currentGameState.status === "error" ? (
               <div className="flex flex-col items-center gap-5">
-                <Button type="primary" disabled>Continue Game unavailable</Button>
-                <Button type="primary" onClick={fetchCurrentGame}>Retry</Button>
+                <Button type="primary" disabled>{HOME_CONTENT.currentGameUnavailable}</Button>
+                <Button type="primary" onClick={fetchCurrentGame}>{HOME_CONTENT.retry}</Button>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-5">

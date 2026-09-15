@@ -1,4 +1,7 @@
-const outcomeAmount = amount => amount > 0 ? `+€${amount}` : `−€${Math.abs(amount)}`;
+import {
+  GAME_EVENT_FACT_TYPES,
+  formatGameEventFact,
+} from "../features/game/content/el.js";
 
 /** Builds one non-actionable Greek observer notification per committed transition. */
 export function observerNotification(event, viewerPlayerId, playerName, squareName) {
@@ -20,43 +23,103 @@ export function observerNotification(event, viewerPlayerId, playerName, squareNa
   const released = byType("PLAYER_RELEASED");
   const jailOffer = byType("JAIL_EXIT_AVAILABLE");
   const moneyReceived = byType("MONEY_RECEIVED");
+  const turnChanged = byType("TURN_CHANGED");
 
-  let message = "";
-  if (dice && landed) {
-    message = `${actor} έριξε ${dice.dice} και βρέθηκε στο ${squareName(landed.squareId)}.`;
+  const messages = [];
+  const addFact = fact => {
+    const content = formatGameEventFact(fact);
+    if (content) messages.push(content);
+  };
+
+  if (event.payload.reason === "TURN_TIMED_OUT") {
+    addFact({ type: GAME_EVENT_FACT_TYPES.TIMEOUT, playerName: actor });
+  } else if (dice) {
+    addFact({ type: GAME_EVENT_FACT_TYPES.ROLL, playerName: actor, total: dice.dice });
+  }
+  if (landed) {
+    addFact({
+      type: GAME_EVENT_FACT_TYPES.LANDING,
+      playerName: actor,
+      squareName: squareName(landed.squareId),
+    });
   } else if (moved) {
-    message = `${actor} μετακινήθηκε στο ${squareName(moved.toPosition)}.`;
+    addFact({
+      type: GAME_EVENT_FACT_TYPES.LANDING,
+      playerName: actor,
+      squareName: squareName(moved.toPosition),
+    });
   }
 
   if (card?.card) {
-    const label = card.card.title === "Chance" ? "Κάρτα Εντολής" :
-      card.card.title === "Community Chest" ? "Κάρτα Απόφασης" : card.card.title;
-    message += ` ${actor} τράβηξε ${label}: ${card.card.text}`;
-    if (card.card.effect === "money") message += ` (${outcomeAmount(card.card.amount)})`;
-    else if (card.card.effect === "transport" && moved) {
-      message += ` Μετακινήθηκε στο ${squareName(moved.toPosition)}.`;
-    }
+    addFact({
+      type: GAME_EVENT_FACT_TYPES.CARD,
+      playerName: actor,
+      category: card.card.title,
+      cardText: card.card.text,
+      amount: card.card.effect === "money" ? card.card.amount : undefined,
+      destinationName: card.card.effect === "transport" && moved
+        ? squareName(moved.toPosition) : undefined,
+    });
   } else if (available) {
-    message += ` Μπορεί να αγοράσει το ${squareName(available.squareId)} για €${available.amount}.`;
+    addFact({
+      type: GAME_EVENT_FACT_TYPES.PURCHASE_AVAILABLE,
+      playerName: actor,
+      squareName: squareName(available.squareId),
+      amount: available.amount,
+    });
   } else if (purchased) {
-    message = `${actor} αγόρασε το ${squareName(purchased.squareId)} για €${purchased.amount}.`;
+    addFact({
+      type: GAME_EVENT_FACT_TYPES.PURCHASE,
+      playerName: actor,
+      squareName: squareName(purchased.squareId),
+      amount: purchased.amount,
+    });
   } else if (declined) {
-    message = `${actor} δεν αγόρασε το ${squareName(declined.squareId)}.`;
+    addFact({
+      type: GAME_EVENT_FACT_TYPES.PURCHASE_DECLINED,
+      playerName: actor,
+      squareName: squareName(declined.squareId),
+    });
   } else if (rent) {
-    message += ` Πλήρωσε €${rent.amount} ενοίκιο στον ${playerName(rent.counterpartyPlayerId)}.`;
+    addFact({
+      type: GAME_EVENT_FACT_TYPES.RENT,
+      playerName: actor,
+      amount: rent.amount,
+      counterpartyName: playerName(rent.counterpartyPlayerId),
+    });
   } else if (tax) {
-    message += ` Πλήρωσε φόρο €${tax.amount}.`;
+    addFact({ type: GAME_EVENT_FACT_TYPES.TAX, playerName: actor, amount: tax.amount });
   } else if (jailed) {
-    message += ` Οδηγήθηκε στη ΦΥΛΑΚΗ.`;
+    addFact({ type: GAME_EVENT_FACT_TYPES.JAIL, playerName: actor });
   } else if (released) {
-    message = `${actor} πλήρωσε €${released.amount} και βγήκε από τη ΦΥΛΑΚΗ.`;
+    addFact({
+      type: GAME_EVENT_FACT_TYPES.JAIL_RELEASED,
+      playerName: actor,
+      amount: released.amount,
+    });
   } else if (jailOffer) {
-    message = `${actor} μπορεί να πληρώσει €${jailOffer.amount} για να βγει από τη ΦΥΛΑΚΗ.`;
+    addFact({
+      type: GAME_EVENT_FACT_TYPES.JAIL_EXIT_AVAILABLE,
+      playerName: actor,
+      amount: jailOffer.amount,
+    });
   }
-  if (moneyReceived) message += ` Πέρασε από την ΑΦΕΤΗΡΙΑ και πήρε €${moneyReceived.amount}.`;
+  if (moneyReceived) {
+    addFact({
+      type: GAME_EVENT_FACT_TYPES.START_REWARD,
+      playerName: actor,
+      amount: moneyReceived.amount,
+    });
+  }
+  if (messages.length === 0 && turnChanged) {
+    addFact({
+      type: GAME_EVENT_FACT_TYPES.TURN_CHANGE,
+      playerName: playerName(turnChanged.nextPlayerId),
+    });
+  }
 
-  if (!message.trim()) return null;
-  return { id: event.eventId, message: message.trim() };
+  if (messages.length === 0) return null;
+  return { id: event.eventId, message: messages.join(" ") };
 }
 
 /** Keeps rapid events ordered and bounded; duplicate STOMP envelopes are ignored. */
