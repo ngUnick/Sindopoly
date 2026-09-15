@@ -130,6 +130,55 @@ Consequently exact memory growth remains unmeasured, while listener/RAF/GPU
 ownership defects are reproducible from lifecycle code and must be quantified
 after an isolated authenticated fixture exists.
 
+### FE-REVAMP-005 ownership and lifecycle update (2026-09-15)
+
+Ownership now follows one derived path:
+
+```text
+accepted GameRealtimeSnapshot.players[].properties (number[])
+  -> deriveOwnershipProjection(snapshot)
+       -> frozen ownerBySquareId and propertiesByPlayerId records
+       -> explicit invalid, duplicate and cross-player conflict signals
+  -> propertyIdsForPlayer for the existing property-list modal
+  -> applyOwnershipToSquares for the existing square display shape
+```
+
+Player ID is ownership identity; nickname is display-only. Invalid property IDs
+are filtered and reported, duplicate same-player claims are deduplicated, and a
+cross-player conflict leaves the square unowned in the projection instead of
+letting array order choose an owner. Snapshot and metadata arrays are not
+mutated. `boardFromSnapshot` remains a compatibility boundary for positions,
+money, turn state, optional actions and completion. Its stringified properties
+remain only in the separately backlogged completion-capital path. No Three.js
+material or marker currently consumes property ownership.
+
+The active mount/unmount boundary is now characterized as follows:
+
+| Resource | Current owner / creation | Lifetime | Current cleanup | Remaining risk | Future owner |
+| --- | --- | --- | --- | --- | --- |
+| Main render RAF | Board scene effect; `animate` | Game-route mount | Latest frame ID is cancelled on effect cleanup | Still renders continuously while idle | `BoardSceneAdapter` |
+| Window resize listener | Board scene effect; named `onResize` | Game-route mount | Removed on effect cleanup | Still global rather than canvas/layout scoped | `BoardSceneAdapter` |
+| Window mouse drag listeners | Board scene effect; named down/move/up callbacks | Game-route mount | All three removed on effect cleanup | Global input scope remains | `BoardSceneAdapter` |
+| STOMP client/subscription | `useGameRealtime` effect | Mounted `gameId` | Subscription unsubscribed and client deactivated | Recovery ownership remains split from polling | Authoritative controller |
+| Snapshot recovery poll | Board scene effect; 15-second interval | Game-route mount | Interval cleared on effect cleanup | In-flight HTTP read is not aborted | Authoritative controller |
+| Observer notification timeout | Board observer effect; 12 seconds | Active notification | Timeout cleared on dependency change/unmount | None known for the active timeout | Presentation coordinator |
+| Command delay | `throwDiceAction`; one-second promise timer | One roll command presentation | Not cancelled | May resume after route unmount | Presentation coordinator |
+| Dormant dice RAF and hide timer | `randomDiceThrow` | Only if currently disabled call is re-enabled | No retained IDs or cancellation | Would outlive unmount if enabled | `BoardSceneAdapter` |
+| Audio instance | Board component `useState(() => new Audio(...))` | Board component instance | Play/pause follows local mute state; no unmount cleanup | Playing audio may retain the route instance | Audio settings/service |
+| Renderer and WebGL context | Board scene effect | Game-route mount | Not disposed or context-released | GPU/context retention across remounts | `BoardSceneAdapter` |
+| Scene, lights and primitive pawn geometry/materials | Board scene effect | Game-route mount | Not traversed or disposed | CPU/GPU resource retention | `BoardSceneAdapter` |
+| Board and Dice GLTF scenes/resources | Async loaders in Board scene effect | Game-route mount and loader completion | No abort/stale-callback guard or disposal | Late callbacks and retained GPU resources | `BoardSceneAdapter` |
+| Pawn player-ID map | Board component ref | Board component instance | Replaced from accepted snapshots; otherwise GC-dependent | Coupled to legacy pawn slots | `BoardSceneAdapter` |
+| Version/refresh maps and set | `gameCommandState.js` module scope | Application session/per game | Explicit clear API exists; Board does not call it | Entries intentionally outlive route mounts today | Authoritative controller |
+
+There are no active Board keyboard listeners, pointer listeners or Three.js
+controls. A reliable repeated DOM/WebGL mount harness is not available in the
+current Node-only test setup, so FE-REVAMP-005 uses source-contract coverage for
+the listener/RAF cleanup rather than pretending to measure browser resources.
+The later scene-adapter acceptance test must mount/unmount repeatedly and prove
+zero Board RAFs, listeners, polls, STOMP subscriptions, playing audio,
+route-specific timers and undisposed scene-owned resources after unmount.
+
 ## 6. Authoritative fixtures
 
 Sanitized importable fixtures live in

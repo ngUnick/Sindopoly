@@ -3,14 +3,16 @@ import { apiFetch } from "./apiClient";
 import { acceptGameSnapshot, observeGameSnapshot } from "./gameCommandState";
 import { GameAPI } from "./GameAPI";
 
-/**
- * Helper that builds the "board" blob Board.jsx expects.
- * Uses your existing /players-detailed endpoint.
- */
-async function assembleBoard(gameId) {
+async function getAcceptedSnapshot(gameId) {
   const snapshot = await GameAPI.getRealtimeSnapshot(gameId);
   if (!acceptGameSnapshot(gameId, snapshot)) return null;
-  return boardFromSnapshot(snapshot);
+  return snapshot;
+}
+
+/** Retained compatibility adapter for Board consumers not normalized yet. */
+async function assembleBoard(gameId) {
+  const snapshot = await getAcceptedSnapshot(gameId);
+  return snapshot ? boardFromSnapshot(snapshot) : null;
 }
 
 export function boardFromSnapshot(snapshot) {
@@ -43,6 +45,7 @@ export function boardFromSnapshot(snapshot) {
 export const GamePlayAPI = {
   /** snapshot of board + game */
   getBoard: assembleBoard,
+  getSnapshot: getAcceptedSnapshot,
 
 
   getInGameStatus: async playerId => {

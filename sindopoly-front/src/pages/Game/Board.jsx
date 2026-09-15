@@ -3,6 +3,9 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { GamePlayAPI, boardFromSnapshot } from "../../apis/GamePlayAPI";
 import {
+  applyOwnershipToSquares, deriveOwnershipProjection, propertyIdsForPlayer,
+} from "../../apis/ownershipProjection";
+import {
   assignPawnRefsByPlayerId, enqueueNotification, movePawnForPlayer, observerNotification,
 } from "../../apis/gameEvents";
 import {
@@ -24,6 +27,18 @@ import boardGLB from "../../assets/models/board.glb?url";  // ⬅ forces asset h
 import diceModelUrl from "../../assets/models/Dice.glb?url";
 import moneyImg from "../../assets/images/monopoly_money.png";
 
+
+function reportOwnershipIssues(ownership) {
+  if (ownership.conflicts.length) {
+    console.error("Conflicting property ownership in authoritative snapshot", ownership.conflicts);
+  }
+  if (ownership.invalidPlayers.length || ownership.invalidPropertyClaims.length) {
+    console.warn("Ignored malformed property ownership claims", {
+      invalidPlayers: ownership.invalidPlayers,
+      invalidPropertyClaims: ownership.invalidPropertyClaims,
+    });
+  }
+}
 
 
 const Board = () => {
@@ -89,27 +104,23 @@ const Board = () => {
   const showProperties = async () => {
     if (!gameId) return;
     try {
-      const board = await GamePlayAPI.getBoard(gameId);
+      const snapshot = await GamePlayAPI.getSnapshot(gameId);
+      if (!snapshot) return;
+      const ownership = deriveOwnershipProjection(snapshot);
+      reportOwnershipIssues(ownership);
 
       // build lookup: position (0–39) -> name
       const nameByPos = new Map(
         gamePositions.map(({ position, name }) => [position, name])
       );
 
-      const lines = board.map(p => {
-        // safely JSON.parse the stored properties list
-        let arr = [];
-        if (p.properties) {
-          try {
-            arr = JSON.parse(p.properties);
-          } catch {}
-        }
-        // now arr is e.g. [1,6] (or whatever zero-based IDs you're using)
-        const labels = arr.map(id =>
+      const lines = (snapshot.players ?? []).flatMap(player => {
+        if (!Number.isSafeInteger(player?.playerId) || player.playerId <= 0) return [];
+        const labels = propertyIdsForPlayer(ownership, player.playerId).map(id =>
           nameByPos.get(id) ?? `#${id}`
         );
         const props = labels.length ? labels.join(", ") : "none";
-        return `${p.nickname}: ${props}`;
+        return [`${player.nickname}: ${props}`];
       });
 
       setPropList(lines);
@@ -119,26 +130,6 @@ const Board = () => {
     }
   };
 
-
-  const updateProperties = (board__) => {
-      var copyGamepositions = [];
-      board__.forEach((item) => {
-        let currentProperties = item["properties"];
-        if(currentProperties)
-        {
-          copyGamepositions = [...gamePositions];
-          currentProperties = currentProperties.split(",").map(function(item) {return parseInt(item, 10);});
-          for (let index = 0; index < copyGamepositions.length; index++) {
-            const element = copyGamepositions[index];
-            if(currentProperties.includes(element["position"]))
-            {
-              copyGamepositions[index]["player"] = item["name"];
-            }
-          }
-        }
-      });
-      setGamePositions(copyGamepositions);
-    };
 
   // Audio Management --------------------------------------------------------------------------------------------------
   const [isVolumeVisible, setIsVolumeVisible] = useState(true);
@@ -559,19 +550,21 @@ const Board = () => {
   const handleTick = async (realtimeSnapshot = null) => {
     if (!gameId) return;
 
-      // pull the entire board+game blob in one shot
-      const board = realtimeSnapshot?.stateVersion != null
-        ? boardFromSnapshot(realtimeSnapshot)
-        : await GamePlayAPI.getBoard(gameId);
+      const snapshot = realtimeSnapshot?.stateVersion != null
+        ? realtimeSnapshot
+        : await GamePlayAPI.getSnapshot(gameId);
 
       // A slower polling response may be rejected after a newer socket snapshot.
-      if (!board?.length) return;
+      if (!snapshot) return;
+      const board = boardFromSnapshot(snapshot);
+      if (!board.length) return;
       pawnRefsByPlayerId.current = assignPawnRefsByPlayerId(
         board, pawnRefs, pawnRefsByPlayerId.current
       );
 
-      // 0) mark which properties each player owns
-      updateProperties(board);
+      const ownership = deriveOwnershipProjection(snapshot);
+      reportOwnershipIssues(ownership);
+      setGamePositions(positions => applyOwnershipToSquares(positions, ownership));
 
       // who am I in that array?
       const myIndex   = board.findIndex(p => String(p.player_id) === String(playerId));
@@ -699,9 +692,10 @@ const Board = () => {
 
 
   useEffect(() => {
-
-    
-
+    if (gameId == null) {
+      console.error("Board.jsx: missing or invalid gameId");
+      return undefined;
+    }
 
       // document.addEventListener("click", function (event) {
       //   // Event listener for closing the card when clicked outside of it
@@ -883,9 +877,23 @@ const Board = () => {
       isDragging = false;
     };
 
+    const onResize = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight * 0.92;
+      if (!canvasRef.current) return;
+      canvasRef.current.width = width;
+      canvasRef.current.height = height;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.render(scene, camera);
+    };
+
     window.addEventListener("mousedown", onMouseDown, false);
     window.addEventListener("mousemove", onMouseMove, false);
     window.addEventListener("mouseup", onMouseUp, false);
+    window.addEventListener("resize", onResize);
 
     // Load Dice ---------------------------------------------------------------------------------------------
     const loader2 = new GLTFLoader();
@@ -911,10 +919,11 @@ const Board = () => {
       dice2.visible = false;
     });
 
+    let animationFrameId;
     const animate = () => {
       // Function for animation rendering
       renderer.render(scene, camera);
-      requestAnimationFrame(animate);
+      animationFrameId = requestAnimationFrame(animate);
     };
 
     animate(); // Start animation
@@ -937,19 +946,6 @@ const Board = () => {
     
 
 
-
-
-    // don’t even try to call the API if gameId is missing
-    if (gameId == null) {
-      console.error("Board.jsx: missing or invalid gameId");
-      return;
-    }
-
-    
-    if (gameId == null) {
-      console.error("Board.jsx: missing or invalid gameId");
-      return;
-    }
     let polling = false;
     const poll = async () => {
       if (polling) return;
@@ -961,33 +957,15 @@ const Board = () => {
     
     // STOMP drives normal updates; retain a bounded recovery poll for broker/socket loss.
     const id = setInterval(poll, 15000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener("mousedown", onMouseDown, false);
+      window.removeEventListener("mousemove", onMouseMove, false);
+      window.removeEventListener("mouseup", onMouseUp, false);
+      window.removeEventListener("resize", onResize);
+    };
   }, [gameId, playerId, navigate]);
-
-  // Add Responsiveness ------------------------------------------------------------------------------------------------
-  window.addEventListener("resize", () => {
-    // update display width and height
-    let width = window.innerWidth;
-    let height = window.innerHeight * 0.92;
-
-    // Ensure canvasRef is defined and holds a reference to the canvas DOM element
-    if (canvasRef.current) {
-      // Update canvas width and height
-      canvasRef.current.width = width;
-      canvasRef.current.height = height;
-
-      // Update camera aspect ratio
-      cameraRef.current.aspect = width / height;
-      cameraRef.current.updateProjectionMatrix();
-
-      // Update renderer size and pixel ratio
-      rendererRef.current.setSize(width, height);
-      rendererRef.current.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-      // Render the scene with updated dimensions
-      rendererRef.current.render(sceneRef.current, cameraRef.current);
-    }
-  });
 
   /** STEP 1: click dice → throw & move */
   const throwDiceAction = async () => {
