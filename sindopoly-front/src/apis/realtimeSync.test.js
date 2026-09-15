@@ -7,13 +7,22 @@ import {
   acceptGameSnapshot, clearGameVersion, currentGameVersion, observeGameSnapshot, observeGameVersion,
 } from "./gameCommandState.js";
 
-const event = version => ({ eventId: `event-${version}`, eventType: "TURN_UPDATED", gameId: 7, stateVersion: version });
+const event = version => ({
+  eventId: `event-${version}`,
+  eventType: "TURN_UPDATED",
+  gameId: 7,
+  stateVersion: version,
+  occurredAt: "2026-09-01T10:00:00Z",
+  payload: { reason: "ROLL_COMPLETED", actorPlayerId: null, details: [] },
+});
 
 test("rejects malformed and cross-game notifications", () => {
   assert.equal(parseGameEvent("not-json", 7), null);
   assert.equal(parseGameEvent({ ...event(2), gameId: 8 }, 7), null);
-  assert.equal(parseGameEvent({ ...event(2), eventType: "INTERNAL" }, 7), null);
-  assert.equal(parseGameEvent({ ...event(2), payload: { details: [{ type: "REDIS_WRITE" }] } }, 7), null);
+  assert.equal(parseGameEvent({ ...event(2), payload: { details: [] } }, 7), null);
+  assert.equal(parseGameEvent({
+    ...event(2), payload: { ...event(2).payload, details: [{ type: "DICE_ROLLED", dice: "6" }] },
+  }, 7), null);
 });
 
 test("ignores duplicate and stale notifications", async () => {
@@ -51,6 +60,22 @@ test("displays versions 15 then 17 once and rejects late 16 or duplicate 17", ()
   lastDisplayedVersion = 17;
   assert.equal(shouldDisplayGameEvent(event(16), acceptedSnapshotVersion, lastDisplayedVersion), false);
   assert.equal(shouldDisplayGameEvent(event(17), acceptedSnapshotVersion, lastDisplayedVersion), false);
+});
+
+test("unsupported event values trigger recovery but never presentation", async () => {
+  const unknown = { ...event(2), eventType: "FUTURE_EVENT" };
+  const decoded = parseGameEvent(unknown, 7);
+  assert.equal(shouldDisplayGameEvent(decoded, 1, -1), false);
+
+  let reads = 0;
+  const sync = createSnapshotSynchronizer({
+    gameId: 7,
+    currentVersion: () => 1,
+    fetchSnapshot: async () => { reads += 1; return { stateVersion: 2 }; },
+    applySnapshot: () => true,
+  });
+  assert.equal(await sync.onEvent(unknown), true);
+  assert.equal(reads, 1);
 });
 
 test("coalesces bursts and follows an event racing an in-flight snapshot", async () => {

@@ -1,39 +1,17 @@
-const EVENT_TYPES = new Set([
-  "LOBBY_UPDATED", "GAME_STARTED", "TURN_UPDATED", "GAME_COMPLETED",
-]);
-const DETAIL_TYPES = new Set([
-  "DICE_ROLLED", "PLAYER_MOVED", "LANDED_ON_TILE", "PROPERTY_AVAILABLE",
-  "PROPERTY_PURCHASED", "PROPERTY_DECLINED", "RENT_PAID", "TAX_PAID",
-  "CARD_DRAWN", "MONEY_RECEIVED", "TURN_CHANGED", "PLAYER_JAILED",
-  "PLAYER_RELEASED", "JAIL_EXIT_AVAILABLE",
-]);
+import { decodeGameEventBody } from "./gameEventDecoder.js";
 
 export function parseGameEvent(raw, expectedGameId) {
-  let value;
   try {
-    value = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return decodeGameEventBody(raw, expectedGameId);
   } catch {
     return null;
   }
-  const version = Number(value?.stateVersion);
-  if (!value || typeof value.eventId !== "string" || !EVENT_TYPES.has(value.eventType) ||
-      String(value.gameId) !== String(expectedGameId) ||
-      !Number.isSafeInteger(version) || version < 0) return null;
-  const actor = value.payload?.actorPlayerId;
-  const details = value.payload?.details ?? [];
-  if (actor != null && (!Number.isSafeInteger(Number(actor)) || Number(actor) <= 0)) return null;
-  if (!Array.isArray(details) || details.length > 12 ||
-      details.some(detail => !detail || !DETAIL_TYPES.has(detail.type))) return null;
-  return { ...value, stateVersion: version, payload: {
-    ...value.payload,
-    actorPlayerId: actor == null ? null : Number(actor),
-    details,
-  } };
 }
 
 /** Details are shown once and only when they are not older than accepted authoritative state. */
 export function shouldDisplayGameEvent(event, currentVersion, lastDisplayedVersion) {
-  return Boolean(event) && event.stateVersion >= (currentVersion ?? -1) &&
+  return Boolean(event) && event.unsupported == null &&
+    event.stateVersion >= (currentVersion ?? -1) &&
     event.stateVersion > lastDisplayedVersion;
 }
 

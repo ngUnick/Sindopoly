@@ -2,6 +2,10 @@ import API_BASE_URL from "./apiConfig";
 import { apiFetch } from "./apiClient";
 import { acceptGameSnapshot, observeGameSnapshot } from "./gameCommandState";
 import { GameAPI } from "./GameAPI";
+import {
+  decodeArrayPayload, decodeBooleanPayload, decodeRecordPayload,
+} from "./transportDecoders";
+import { readJsonResponse } from "./transportError";
 
 async function getAcceptedSnapshot(gameId) {
   const snapshot = await GameAPI.getRealtimeSnapshot(gameId);
@@ -52,16 +56,14 @@ export const GamePlayAPI = {
     const r = await apiFetch(
       `${API_BASE_URL}/api/game-state/in-game/${playerId}`
     );
-    if (!r.ok) throw new Error("Failed to check game state");
-    return r.json();
+    return readJsonResponse(r, { decoder: decodeBooleanPayload });
   },
 
 };
 
 export async function getGameState(gameId) {
   const r = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}`);
-  if (!r.ok) throw new Error("Game state fetch failed");
-  const game = await r.json();
+  const game = await readJsonResponse(r, { decoder: decodeRecordPayload });
   observeGameSnapshot(gameId, game);
   return game;
 }
@@ -70,6 +72,5 @@ export async function getPlayersDetailed(gameId) {
   const r = await apiFetch(
     `${API_BASE_URL}/api/game-state/players-detailed/${gameId}`
   );
-  if (!r.ok) throw new Error("Players fetch failed");
-  return r.json();
+  return readJsonResponse(r, { decoder: decodeArrayPayload });
 }

@@ -1,18 +1,18 @@
 import API_BASE_URL from "./apiConfig";
 import { apiFetch, clearCsrfToken } from "./apiClient";
 import { readCurrentGameResponse } from "./currentGame";
+import { decodeCurrentPlayer, decodeRecordPayload } from "./transportDecoders";
+import { readJsonResponse, requireSuccessfulResponse } from "./transportError";
 
 export const AuthAPI = {
   getPlayerInfo: async (playerId) => {
     const res = await apiFetch(`${API_BASE_URL}/api/player-state/${playerId}`);
-    if (!res.ok) throw new Error("Player not found");
-    return await res.json(); // { position: 0, money: 1500, ... }
+    return readJsonResponse(res, { decoder: decodeRecordPayload });
   },
 
   getCurrentPlayer: async () => {
     const res = await apiFetch(`${API_BASE_URL}/api/session/me`);
-    if (!res.ok) throw new Error("Authenticated session not found");
-    return await res.json();
+    return readJsonResponse(res, { decoder: decodeCurrentPlayer });
   },
 
   getCurrentGame: async () => {
@@ -25,6 +25,6 @@ export const AuthAPI = {
       method: "POST",
     });
     clearCsrfToken();
-    if (!res.ok) throw new Error("Logout failed");
+    await requireSuccessfulResponse(res);
   },
 };

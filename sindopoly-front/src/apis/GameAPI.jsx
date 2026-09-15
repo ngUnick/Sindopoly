@@ -1,6 +1,10 @@
 import API_BASE_URL from "./apiConfig";
 import { apiFetch } from "./apiClient";
 import { commandHeaders, observeGameSnapshot, readCommandResponse } from "./gameCommandState";
+import {
+  decodeArrayPayload, decodeGameSnapshot, decodeInviteMetadata, decodeRecordPayload,
+} from "./transportDecoders";
+import { readJsonResponse } from "./transportError";
 
 export const GameAPI = {
   // ✅ Create Game
@@ -15,11 +19,6 @@ export const GameAPI = {
       headers: { "Content-Type": "application/json", ...commandHeaders(payload.ownerId, -1) },
       body: JSON.stringify(payload),
     });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Create game failed: ${errText}`);
-    }
 
     return await readCommandResponse(response, payload.ownerId);
   },
@@ -39,8 +38,7 @@ export const GameAPI = {
   // ✅ Get Public Lobby Games
   getPublicLobbyGames: async () => {
     const res = await apiFetch("/api/game-state/public-lobby");
-    if (!res.ok) throw new Error("Failed to fetch public games");
-    const games = await res.json();
+    const games = await readJsonResponse(res, { decoder: decodeArrayPayload });
     games.forEach(game => observeGameSnapshot(game.gameId, game));
     return games;
   },
@@ -62,8 +60,7 @@ export const GameAPI = {
     const metadataRes = await apiFetch(
       `${API_BASE_URL}/api/game-state/invite-metadata?inviteCode=${encodeURIComponent(inviteCode)}`
     );
-    if (!metadataRes.ok) throw new Error("Invalid or expired invite code");
-    const metadata = await metadataRes.json();
+    const metadata = await readJsonResponse(metadataRes, { decoder: decodeInviteMetadata });
     observeGameSnapshot(metadata.gameId, metadata);
     const res = await apiFetch(
       `${API_BASE_URL}/api/game-state/join-with-invite?inviteCode=${inviteCode}&playerId=${playerId}`,
@@ -77,23 +74,20 @@ export const GameAPI = {
   // ✅ Get Game Metadata
   getGameInfo: async (gameId) => {
     const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}`);
-    if (!response.ok) throw new Error("Failed to get game info");
-    const game = await response.json();
+    const game = await readJsonResponse(response, { decoder: decodeRecordPayload });
     observeGameSnapshot(gameId, game);
     return game;
   },
 
   getRealtimeSnapshot: async (gameId) => {
     const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}/snapshot`);
-    if (!response.ok) throw new Error("Failed to recover game snapshot");
-    return response.json();
+    return readJsonResponse(response, { decoder: decodeGameSnapshot });
   },
 
   // ✅ Get Lobby Player IDs
   getGamePlayers: async (gameId) => {
     const response = await apiFetch(`${API_BASE_URL}/api/game-state/${gameId}/players`);
-    if (!response.ok) throw new Error("Failed to get players");
-    return await response.json(); // Array of playerIds
+    return readJsonResponse(response, { decoder: decodeArrayPayload });
   },
 
   // ✅ Remove Player From Game

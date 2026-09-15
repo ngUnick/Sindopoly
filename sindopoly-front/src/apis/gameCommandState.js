@@ -1,3 +1,6 @@
+import { decodeVersionedCommandResult } from "./transportDecoders.js";
+import { readJsonResponse, TRANSPORT_ERROR_CODES } from "./transportError.js";
+
 const versions = new Map();
 const snapshotVersions = new Map();
 const refreshRequired = new Set();
@@ -52,21 +55,22 @@ export function commandHeaders(gameId, expectedVersion = expectedGameVersion(gam
   };
 }
 
-export async function readCommandResponse(response, gameId) {
-  const body = await response.json().catch(() => ({}));
-  const resolvedGameId = gameId ?? body.gameId;
-  if (!response.ok) {
-    if (["STALE_STATE", "STALE_VERSION"].includes(body.reason) && resolvedGameId != null) {
+export async function readCommandResponse(
+  response, gameId, decoder = decodeVersionedCommandResult,
+) {
+  let body;
+  try {
+    body = await readJsonResponse(response, { decoder });
+  } catch (error) {
+    if (error.code === TRANSPORT_ERROR_CODES.STALE_STATE && gameId != null) {
       // A version alone is not a state snapshot. Block later intents until the
       // authoritative state is fetched instead of applying stale UI intent.
-      refreshRequired.add(String(resolvedGameId));
+      refreshRequired.add(String(gameId));
     }
-    const error = new Error(body.error || "Game command failed");
-    error.reason = body.reason;
-    error.stateVersion = body.stateVersion;
     // Stale commands require a fresh snapshot. Never blind-retry with a new version.
     throw error;
   }
+  const resolvedGameId = gameId ?? body.gameId;
   observeGameVersion(resolvedGameId, body);
   return body;
 }

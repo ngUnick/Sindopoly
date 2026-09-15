@@ -567,7 +567,44 @@ path until M9 parity.
 | FE-REVAMP-028 | Final hardening and legacy removal | 022–027 | Full required CI/E2E/a11y/perf; reviewed deletion list | No breaking change / None / None | High |
 | FE-REVAMP-029 | Greek nickname policy | Separate approval | Unicode/security/persistence compatibility suite | Typed player-create contract / None / policy-dependent migration | High |
 
-## 20. Git, documentation and risk
+## 20. FE-REVAMP-006 transport boundary
+
+The implemented boundary is `raw HTTP/STOMP -> safe body read -> pure decoder ->
+decoded transport fact`. Decoders copy and shallow-freeze known records and
+arrays, ignore unknown additive snapshot/player fields, and never derive
+ownership, eligibility, prices, rent, movement outcomes or presentation copy.
+`deriveOwnershipProjection` remains a downstream pure derivation.
+
+| Current transport | Current wire shape / empty behavior | Decoder policy |
+| --- | --- | --- |
+| Session player | `{id,nickname}` | Positive numeric ID and string nickname required |
+| Current game | `{gameId,status,stateVersion,visibility}`; 204 means none | Only current resumable statuses and visibilities accepted; 204 is explicit success |
+| Recovery snapshot | `{gameId,stateVersion,status,playerTurn,winner,visibility,inviteCode,optionalAction,players}` | Required identity/version/state fields validated; additive fields ignored |
+| Snapshot player | `{playerId,nickname,position,money,properties,jailed,jailTurnsRemaining,bankrupt,afk}` | Canonical numeric IDs, copied numeric property array, strict booleans, unique player IDs |
+| Optional action | `PURCHASE_PROPERTY` or `PAY_JAIL_EXIT` with game/player/version identity, square, cost and `declinable` | Known shapes only; unknown command-bearing types fail closed |
+| Throw result | `{dice,newPosition,passedGo,squareType,data,stateVersion,replayed,card}` | Current fields validated; no `die1`/`die2` inference |
+| Action/pass result | `{newBalance,acquiredProperties,nextPlayerId,stateVersion,replayed}` | Numeric values and copied property IDs validated |
+| Game event | `{eventId,eventType,gameId,stateVersion,occurredAt,payload:{reason,actorPlayerId,details}}` | Envelope identity/version validated before existing recovery/display flow |
+| Event detail | Fourteen current detail discriminators from `GameEventDetailType`; type-specific nullable fields omitted on the wire | Known details validate their exact fields; unknown details become bounded unsupported markers |
+| Standard error | Usually `{error}` with HTTP status | Raw message is not promoted to UI copy; status becomes a stable internal code |
+| Stale conflict | HTTP 409 `{error,reason:"STALE_STATE",stateVersion?}` | Preserved as `STALE_STATE`; legacy `STALE_VERSION` remains accepted; command gate still requires snapshot recovery |
+| Empty success | Current-game 204; logout may have no response body | Parsed only where a body is required; expected empty success is not invalid JSON |
+
+Normalized internal error codes are `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`,
+`VALIDATION`, `STALE_STATE`, `CONFLICT`, `NETWORK`, `SERVER`, `INVALID_PAYLOAD`
+and `UNKNOWN`. They retain safe HTTP status, reason, version, retry classification
+and bounded diagnostics; presentation copy is explicitly deferred.
+
+Unknown additive object fields are ignored. Unknown top-level event types and
+reasons remain non-command, versioned recovery signals and are marked
+unsupported; unsupported envelopes are not sent to presentation. Unknown detail
+types retain only their discriminator and an unsupported marker. Malformed known
+details are rejected. Unknown snapshot
+statuses and optional-action types fail closed because treating them as known
+could create unsafe state or command eligibility. None of these policies changes
+the backend REST or STOMP contract.
+
+## 21. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

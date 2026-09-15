@@ -1,4 +1,7 @@
 import API_BASE_URL from "./apiConfig";
+import {
+  invalidPayloadError, normalizeNetworkError, readJsonResponse, requireSuccessfulResponse,
+} from "./transportError";
 
 let csrfToken;
 let csrfHeaderName = "X-XSRF-TOKEN";
@@ -10,13 +13,17 @@ function resolveUrl(input) {
 }
 
 async function refreshCsrfToken() {
-  const response = await fetch(`${API_BASE_URL}/api/session/csrf`, {
-    credentials: "include",
-  });
-  if (!response.ok) {
-    throw new Error("Authenticated session required");
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/session/csrf`, { credentials: "include" });
+  } catch (error) {
+    throw normalizeNetworkError(error);
   }
-  const csrf = await response.json();
+  await requireSuccessfulResponse(response);
+  const csrf = await readJsonResponse(response);
+  if (typeof csrf?.token !== "string" || typeof csrf?.headerName !== "string") {
+    throw invalidPayloadError("csrf");
+  }
   csrfToken = csrf.token;
   csrfHeaderName = csrf.headerName;
 }
@@ -26,19 +33,23 @@ export async function apiFetch(input, options = {}) {
   const method = (requestOptions.method || "GET").toUpperCase();
   const headers = new Headers(requestOptions.headers || {});
 
-  if (csrf && !["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
-    if (!csrfToken) {
-      await refreshCsrfToken();
+  try {
+    if (csrf && !["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
+      if (!csrfToken) {
+        await refreshCsrfToken();
+      }
+      headers.set(csrfHeaderName, csrfToken);
     }
-    headers.set(csrfHeaderName, csrfToken);
-  }
 
-  return fetch(resolveUrl(input), {
-    ...requestOptions,
-    method,
-    headers,
-    credentials: "include",
-  });
+    return await fetch(resolveUrl(input), {
+      ...requestOptions,
+      method,
+      headers,
+      credentials: "include",
+    });
+  } catch (error) {
+    throw normalizeNetworkError(error);
+  }
 }
 
 export function clearCsrfToken() {

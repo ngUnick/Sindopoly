@@ -1,6 +1,7 @@
 import API_BASE_URL from "./apiConfig";
 import { apiFetch } from "./apiClient";
 import { commandHeaders, readCommandResponse } from "./gameCommandState";
+import { decodeActionResult, decodeThrowResult } from "./transportDecoders";
 
 /**
  * Low-level wrappers around your two turn endpoints:
@@ -16,7 +17,7 @@ export const TurnAPI = {
     );
     // body should be your ThrowResultDto:
     // { dice, newPosition, passedGo, squareType, data }
-    return await readCommandResponse(res, gameId);
+    return await readCommandResponse(res, gameId, decodeThrowResult);
   },
 
   /** STEP 2: apply buy/ok → POST /action */
@@ -32,7 +33,7 @@ export const TurnAPI = {
     );
     // body should be your ActionResultDto:
     // { newBalance, acquiredProperties, nextPlayerId }
-    return await readCommandResponse(res, gameId);
+    return await readCommandResponse(res, gameId, decodeActionResult);
   },
 
   /** Decline the server-owned purchase or jail-payment option. */
@@ -41,6 +42,6 @@ export const TurnAPI = {
       `${API_BASE_URL}/api/turn/${gameId}/${playerId}/pass`,
       { method: "POST", headers: commandHeaders(gameId) }
     );
-    return await readCommandResponse(res, gameId);
+    return await readCommandResponse(res, gameId, decodeActionResult);
   },
 };
