@@ -641,7 +641,53 @@ realtime, component and scene dependencies.
 There are no REST, event-envelope/destination, Redis, MariaDB, board-asset,
 Three.js or layout changes in this milestone.
 
-## 22. Git, documentation and risk
+## 22. FE-REVAMP-008 pure presentation models
+
+The implemented presentation boundary is deliberately three modules under
+`sindopoly-front/src/features/game/presentation/`:
+
+- `gameViewModel.js` builds the top-level game projection and its player, turn,
+  action, property and completion slices.
+- `eventViewModel.js` projects one already validated event for a future history
+  consumer; it neither stores nor deduplicates history.
+- `connectionViewModel.js` maps an explicit caller-owned connection state and
+  never estimates connection health from snapshot age.
+
+All builders are pure, immutable, framework-free functions. They consume decoded
+snapshot/event facts, the FE-REVAMP-005 ownership projection, FE-REVAMP-007 Greek
+content and optional explicit command/connection state. They have no network,
+subscription, component, scene, persistence or animation dependency. No selector
+library or memoization is introduced; later measured component/controller work may
+memoize at accepted snapshot identity or version if justified.
+
+Viewer identity is an exact positive numeric player ID. An absent, stale or
+malformed viewer never falls back to another member and receives no gameplay
+action. Player order remains snapshot order, nicknames remain display-only, and
+property counts use resolved ownership so a cross-player conflict remains unowned.
+Property names are accepted only as optional caller-supplied display metadata; no
+board catalog is duplicated.
+
+Action presentation fails closed. A purchase or jail-exit action requires exact
+`gameId`, `stateVersion`, active `playerTurn` and viewer `playerId` agreement with
+the decoded `optionalAction`. Decline/pass is exposed only when `declinable` is
+true. Pending command or explicit non-command-capable connection state disables a
+proven action without erasing its authoritative kind. The current backend roll
+contract permits `ROLL` only for an `inProgress` active member when no optional
+action exists. This includes a jailed active member: that command materializes the
+server-owned jail option rather than deriving jail mechanics in the model.
+
+Completion exposes only snapshot `winner` identity/name. It does not calculate
+asset value, final capital, order or a fallback winner. The legacy `Board.jsx`
+completion calculation remains isolated pending FE-REVAMP-019. Other retained
+legacy boundaries include `boardFromSnapshot`, Board-local state, direct scene
+state and existing modal rendering. The only current consumer migration is the
+observer notification, which now renders `eventViewModel` text while retaining
+its existing queue and non-actionable behavior.
+
+There are no REST, STOMP, Redis, MariaDB, background, board asset, Three.js,
+layout or gameplay-rule changes in this milestone.
+
+## 23. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

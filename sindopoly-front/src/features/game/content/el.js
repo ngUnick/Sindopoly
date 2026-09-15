@@ -87,6 +87,7 @@ export const GAMEPLAY_CONTENT = Object.freeze({
 });
 
 export const CONNECTION_CONTENT = Object.freeze({
+  connected: "Η σύνδεση είναι ενεργή.",
   sessionLoading: "Έλεγχος συνεδρίας…",
   gameLoading: "Φόρτωση παιχνιδιού…",
   commandPending: "Η ενέργεια είναι σε εξέλιξη…",
@@ -154,6 +155,12 @@ export function formatTurnHandoff(nextPlayerName = null) {
 
 export function formatPurchaseAction(amount) {
   return Number.isFinite(amount) ? `Αγορά για ${formatMoney(amount)}` : "Αγορά";
+}
+
+export function formatJailPaymentAction(amount) {
+  return Number.isFinite(amount)
+    ? `Πληρωμή ${formatMoney(amount)} και ρίψη`
+    : "Πληρωμή και ρίψη";
 }
 
 export const GAME_EVENT_FACT_TYPES = Object.freeze({

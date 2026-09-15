@@ -9,7 +9,8 @@ const names = id => ({ 1: "Άννα", 2: "Νίκος" }[id] ?? `Παίκτης $
 const squares = id => ({ 2: "ΚΑΡΤΑ ΑΠΟΦΑΣΗΣ", 7: "ΚΑΡΤΑ ΕΝΤΟΛΗΣ", 9: "ΣΤΑΣΗ ΤΕΡΜΑΤΙΚΟΥ" }[id] ?? `#${id}`);
 
 test("renders another player's card text without action authority", () => {
-  const event = { eventId: "event-1", payload: { actorPlayerId: 1, details: [
+  const event = { eventId: "event-1", stateVersion: 1, occurredAt: "2026-09-01T10:00:00Z", payload: {
+    reason: "ROLL_COMPLETED", actorPlayerId: 1, details: [
     { type: "DICE_ROLLED", dice: 7 },
     { type: "LANDED_ON_TILE", squareId: 2 },
     { type: "CARD_DRAWN", card: { title: "Community Chest", text: "Βρήκες ένα τάλιρο.", effect: "money", amount: 5 } },
@@ -22,7 +23,8 @@ test("renders another player's card text without action authority", () => {
 });
 
 test("observer property offer is informational and contains no controls", () => {
-  const event = { eventId: "event-2", payload: { actorPlayerId: 1, details: [
+  const event = { eventId: "event-2", stateVersion: 2, occurredAt: "2026-09-01T10:01:00Z", payload: {
+    reason: "ROLL_COMPLETED", actorPlayerId: 1, details: [
     { type: "DICE_ROLLED", dice: 4 }, { type: "LANDED_ON_TILE", squareId: 9 },
     { type: "PROPERTY_AVAILABLE", squareId: 9, amount: 120 },
   ] } };
