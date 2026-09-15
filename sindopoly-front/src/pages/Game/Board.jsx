@@ -21,6 +21,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import API_BASE_URL      from "../../apis/apiConfig";
 import honeyJam from "../../assets/audio/massobeats-honey_jam.mp3";
 import boardGLB from "../../assets/models/board.glb?url";  // ⬅ forces asset handling
+import diceModelUrl from "../../assets/models/Dice.glb?url";
 import moneyImg from "../../assets/images/monopoly_money.png";
 
 
@@ -890,7 +891,7 @@ const Board = () => {
     const loader2 = new GLTFLoader();
 
     // Load the dice model
-    loader2.load("src/assets/models/Dice.glb", (gltf) => {
+    loader2.load(diceModelUrl, (gltf) => {
       dice1 = gltf.scene.clone(); // Create a copy of the dice model
       dice2 = gltf.scene.clone(); // Create another copy for the second dice
 
@@ -1085,7 +1086,6 @@ const Board = () => {
       <button className="property-btn volume" onClick={toggleIcons}>
         <FontAwesomeIcon icon={faVolumeHigh} className={isVolumeVisible ? 'hidden' : ''}/>
         <FontAwesomeIcon icon={faVolumeXmark} className={isVolumeVisible ? '' : 'hidden'}/>
-        <audio src="src/assets/audio/massobeats-honey_jam.mp3" />
       </button>
 
         <button

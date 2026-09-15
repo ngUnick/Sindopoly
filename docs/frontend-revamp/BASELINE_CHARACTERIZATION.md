@@ -47,6 +47,14 @@ made.
 | `pawns/TopHat.glb` | 17,956 | Not emitted or loaded |
 | `public/favicon.ico` | 145,198 | copied unchanged to `/favicon.ico` |
 
+FE-REVAMP-004 verification (2026-09-15): the historical baseline above is
+preserved. The dice loader now consumes a Vite-resolved module URL and the
+production build emits `/assets/Dice-Bt-FvjiW.glb` (429,856 bytes). Background
+audio has one imported URL, emitted as
+`/assets/massobeats-honey_jam-K0XxbSNt.mp3` (3,031,386 bytes); the duplicate raw
+`<audio>` source was removed. This stabilizes asset loading only—the dice remain
+hidden after preload and no dice animation was enabled.
+
 The current background is measurement-only and remains visually unchanged. The
 current board remains preserve-by-default.
 
