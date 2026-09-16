@@ -983,7 +983,81 @@ graph until a later one-owner migration imports the HUD barrel. A runtime game
 smoke is therefore optional for this milestone; render tests and the production
 source contract instead prove that no duplicate HUD is mounted.
 
-## 28. Git, documentation and risk
+## 28. FE-REVAMP-014 board calibration and visual-route contract
+
+`src/features/game/board/boardCalibration.js` is the pure geometry boundary for
+the existing 3D board. It imports no React, Three.js, transport, controller,
+presentation, CSS or game-rule module. The backend remains the sole authority
+for a player's destination; calibration only maps a validated numeric position
+to world space, and `buildForwardRoute` only describes a possible forward
+visual path between two already-confirmed positions.
+
+The GLB was inspected directly without changing or exporting it. After the
+existing Board transform (`scale = 0.035`, position at the world origin and a
+Y-axis rotation of `PI / 2`), its bounds are approximately
+`x=-26.25..26.25`, `y=-0.131355..0.043661` and
+`z=-25.709161..26.790839`. The playable plane is therefore 52.5 by 52.5 world
+units, with X horizontal, Z depth, Y up and a model center at
+`(x=0, z=0.540839)`. Board currently places primitive pawn centers at Y 0.5
+for cube/cone, 0.7 for sphere and 0.8 for torus. Calibration uses a consistent
+base pawn-center elevation of Y 0.5; a future scene adapter may apply a
+model-origin correction without changing square geometry.
+
+The forty anchors are generated mathematically rather than stored as forty
+unrelated literals. The legacy path's 6-unit corner-to-tile spacing and
+4.15-unit ordinary spacing satisfy `6 + (8 * 4.15) + 6 = 45.2`; calibration
+centers that closed perimeter on the inspected model with a 22.6 half-span.
+This leaves a 3.65-unit inset from each 26.25-unit outer edge and removes the
+legacy drift caused by starting near `(22,-22)` but completing a lap near
+`(23.2,-23.2)`. Every anchor and collection is frozen, uses finite coordinates
+and has one identity from 0 through 39.
+
+Position 0 is Start at positive X/negative Z. Positions 1–9 move in positive Z
+to position 10 (Jail) at positive X/positive Z. Positions 11–19 move in negative
+X to position 20 (Parking) at negative X/positive Z. Positions 21–29 move in
+negative Z to position 30 (Go to Jail) at negative X/negative Z. Positions
+31–39 move in positive X back toward Start. This matches the frontend square
+list, the backend's forty-row square seed (`0 START`, `10 JAIL`, `20 PARKING`,
+`30 GOJAIL`) and `MovementService.BOARD_SIZE = 40` with increasing modulo
+movement.
+
+`getPawnAnchor(position, slotIndex)` accepts one explicit slot from 0 through 3.
+It applies a 2-by-2, 0.55-unit local layout whose tangent and inward axes rotate
+on each board edge. The four results stay within 0.8 units of the square center,
+including corners. Calibration deliberately does not assign players to slots:
+the future presentation coordinator must provide a stable assignment that does
+not depend on transient snapshot order.
+
+`buildForwardRoute(from, to)` validates both inputs, excludes `from`, includes
+the confirmed destination and increments through positions 0–39. Thus 5 to 8
+is `[6,7,8]`, while 38 to 2 is `[39,0,1,2]`. Crossing position zero is a visual
+wrap fact only and does not imply a Start reward. Equal positions return an
+empty frozen route because no full lap has been proven. Invalid external
+positions or slots return `null`; strings, non-integers and non-finite values
+are never normalized with modulo.
+
+Initial mount, reconnect, recovery and stale-state reconciliation should call
+`getPawnAnchor` for the accepted snapshot position and snap directly, without
+replaying local route history. Current `ROLL_COMPLETED` events contain a
+`PLAYER_MOVED` old/final pair plus landing/card/jail details, but do not carry an
+explicit presentation movement mode. Card transport and Go-to-Jail may also
+make the final position differ from the first landed square. Calibration does
+not infer normal, direct or snap behavior from those facts; that selection
+belongs to the future presentation coordinator, which will pass either a
+forward route or a direct anchor to `BoardSceneAdapter`.
+
+The existing Board movement was inspected but not changed. Its forty-step and
+increasing-position convention is canonical; the step sizes are approximate
+but visually established; position math is duplicated between incremental
+movement and server snapshots; same-position recovery does not snap; direct
+movement semantics are not distinguished; and initial coordinates/elevations
+are coupled to four primitive pawn shapes. Production does not import the new
+module, so Board, camera, lighting, models, animation, HUD, background and
+visible behavior remain unchanged. No browser calibration overlay was used;
+anchor placement is verified from source math and inspected GLB bounds, leaving
+texture-level visual centering for FE-REVAMP-015 parity checks.
+
+## 29. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn
