@@ -86,6 +86,16 @@ export const GAMEPLAY_CONTENT = Object.freeze({
   acknowledge: "Εντάξει",
 });
 
+export const HUD_CONTENT = Object.freeze({
+  matchStatus: "Κατάσταση παιχνιδιού",
+  players: "Παίκτες",
+  availableActions: "Διαθέσιμες ενέργειες",
+  you: "Εσύ",
+  activePlayer: "Παίζει τώρα",
+  bankrupt: "Χρεοκοπία",
+  away: "Απών",
+});
+
 export const CONNECTION_CONTENT = Object.freeze({
   connected: "Η σύνδεση είναι ενεργή.",
   sessionLoading: "Έλεγχος συνεδρίας…",
@@ -128,6 +138,15 @@ export function formatMoney(amount) {
   if (!Number.isFinite(amount)) return "—";
   const normalized = Object.is(amount, -0) ? 0 : amount;
   return `${greekNumber.format(normalized)}€`;
+}
+
+export function formatPropertyCount(count) {
+  if (!Number.isSafeInteger(count) || count < 0) return "—";
+  return count === 1 ? "1 ιδιοκτησία" : `${greekNumber.format(count)} ιδιοκτησίες`;
+}
+
+export function formatPlayerIdentity(playerId) {
+  return Number.isSafeInteger(playerId) && playerId > 0 ? `#${playerId}` : "—";
 }
 
 export function formatSignedMoney(amount) {

@@ -1,0 +1,277 @@
+.match-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.match-status-header__turn {
+  min-width: 0;
+}
+
+.match-status-header__primary,
+.match-status-header__secondary {
+  margin: 0;
+}
+
+.match-status-header__primary {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+}
+
+.match-status-header__secondary {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.game-connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  padding: var(--space-1) var(--space-3);
+  color: var(--color-status-information-text);
+  background: var(--color-status-information-surface);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.game-connection-status__indicator {
+  width: var(--space-2);
+  height: var(--space-2);
+  background: currentColor;
+  border-radius: var(--radius-pill);
+}
+
+.game-connection-status[data-connection-status="ready"] {
+  color: var(--color-status-success-text);
+  background: var(--color-status-success-surface);
+}
+
+.game-connection-status[data-connection-status="warning"],
+.game-connection-status[data-connection-status="progress"] {
+  color: var(--color-status-warning-text);
+  background: var(--color-status-warning-surface);
+}
+
+.game-connection-status[data-connection-status="error"] {
+  color: var(--color-status-error-text);
+  background: var(--color-status-error-surface);
+}
+
+.player-rail__heading,
+.context-panel__heading {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+}
+
+.player-rail__list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.player-card {
+  padding: var(--space-3);
+  color: var(--color-text-primary);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-structural);
+  border-radius: var(--radius-control);
+}
+
+.player-card--self {
+  background: var(--color-self-surface);
+  border-color: var(--color-self-border);
+}
+
+.player-card--active {
+  background: var(--color-active-player-surface);
+  border-color: var(--color-active-player-border);
+}
+
+.player-card__identity-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.player-card__marker {
+  flex: 0 0 auto;
+  color: var(--color-text-inverse);
+  background: var(--color-surface-strong);
+  border-radius: var(--radius-pill);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+}
+
+.player-card__name {
+  overflow-wrap: anywhere;
+  font-weight: var(--font-weight-bold);
+}
+
+.player-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.player-card__badge {
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-status-information-text);
+  background: var(--color-status-information-surface);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.player-card__badge[data-badge-kind="active"],
+.player-card__badge[data-badge-kind="warning"] {
+  color: var(--color-status-warning-text);
+  background: var(--color-status-warning-surface);
+}
+
+.player-card__badge[data-badge-kind="error"] {
+  color: var(--color-status-error-text);
+  background: var(--color-status-error-surface);
+}
+
+.player-card__facts {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-3) 0 0;
+}
+
+.player-card__facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.player-card__facts dt {
+  color: var(--color-text-secondary);
+}
+
+.player-card__facts dd {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  text-align: end;
+}
+
+.context-panel__content {
+  color: var(--color-text-secondary);
+}
+
+.action-tray {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.action-tray__copy,
+.action-tray__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.action-tray__status,
+.action-tray__error {
+  margin: 0;
+}
+
+.action-tray__status {
+  color: var(--color-text-secondary);
+}
+
+.action-tray__error {
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-status-error-text);
+  background: var(--color-status-error-surface);
+  border-radius: var(--radius-control);
+  font-weight: var(--font-weight-semibold);
+}
+
+.action-tray__primary,
+.action-tray__secondary {
+  min-height: var(--control-min-height);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-control);
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+.action-tray__primary {
+  color: var(--color-text-inverse);
+  background: var(--color-action-primary);
+  border-color: var(--color-action-primary);
+}
+
+.action-tray__primary:hover:not(:disabled) {
+  background: var(--color-action-primary-hover);
+}
+
+.action-tray__primary:active:not(:disabled) {
+  background: var(--color-action-primary-active);
+}
+
+.action-tray__secondary {
+  color: var(--color-text-primary);
+  background: var(--color-action-secondary);
+}
+
+.action-tray__primary:disabled,
+.action-tray__secondary:disabled {
+  color: var(--color-text-subdued);
+  background: var(--color-surface-hover);
+  cursor: not-allowed;
+}
+
+@media (min-width: 761px) and (max-width: 1100px) {
+  .player-rail__list {
+    grid-auto-columns: minmax(13rem, 1fr);
+    grid-auto-flow: column;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .match-status-header,
+  .action-tray {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .game-connection-status {
+    align-self: flex-start;
+  }
+
+  .player-rail__list {
+    grid-auto-columns: minmax(11rem, 80vw);
+    grid-auto-flow: column;
+    overflow-x: auto;
+  }
+
+  .action-tray__copy,
+  .action-tray__controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .action-tray__primary,
+  .action-tray__secondary {
+    width: 100%;
+  }
+}

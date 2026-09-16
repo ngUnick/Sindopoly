@@ -913,7 +913,77 @@ to have no React, HTTP, STOMP, DOM, CSS, Three.js, Greek-content, backend or
 game-rule dependency. Redis, REST/STOMP protocols, MariaDB, Board, GameShell,
 background, packages and visible application behavior are unchanged.
 
-## 27. Git, documentation and risk
+## 27. FE-REVAMP-013 presentational HUD component boundary
+
+The `src/features/game/hud` boundary now contains `MatchStatusHeader`,
+`ConnectionStatus`, `PlayerRail`, `PlayerCard`, `ActionTray` and a generic
+`ContextPanel`. This is the smallest set that satisfies the committed
+FE-REVAMP-013 action/player/context/connection component suite and the target
+game-shell header. Event-history UI, property-detail UI, audio settings, card
+reveal and dialogs remain outside this milestone. The barrel is the only owner
+of the co-located `GameHud.css` import; individual component modules remain
+directly renderable in Node contract tests.
+
+The components consume only FE-REVAMP-008 presentation facts or explicit
+caller-owned content. `MatchStatusHeader` accepts the turn and connection view
+models. `PlayerRail` accepts the ordered player view models and preserves their
+order; `PlayerCard` renders the supplied nickname, formatted balance, property
+count and state flags. Because no authoritative pawn-identity mapping exists,
+cards use a neutral `#playerId` marker plus readable nickname/state text rather
+than binding the four candidate identity colors to transient array positions.
+`ActionTray` accepts the action view model and renders a primary control only
+when the model says an authorized action exists. A decline control appears only
+when the model supplies both `canDecline` and a secondary label. The generic
+`ContextPanel` renders only real caller-owned children and returns no content
+for an absent child.
+
+Intent flows upward through `onPrimaryAction` and `onSecondaryAction`. Disabled,
+pending or unwired controls have no click handler, and each enabled handler
+invokes its callback once. The HUD does not fetch, subscribe, poll, reconnect,
+generate command IDs, inspect versions, accept snapshots, calculate rules or
+touch Three.js. The future controller/orchestration layer remains responsible
+for mapping an emitted intent to an authoritative command and reconciliation.
+
+HUD-only structural copy lives in the Greek content boundary as the separately
+tree-shakeable `HUD_CONTENT` object. Property-count and neutral-identity
+formatters also live there. Component CSS uses FE-REVAMP-010 semantic color,
+spacing, radius, typography, elevation and control-size tokens without a new
+palette. Connection, self, active, jail, AFK and bankruptcy states are always
+expressed in text as well as styling. Player cards are non-focusable semantic
+list items, actions are native buttons, status text does not use continuous
+live announcements, errors use a bounded alert, and no component moves focus.
+
+The rail is vertical at desktop widths. At the existing tablet and phone
+breakpoints it becomes a controlled horizontal list, while the header and
+action controls stack on phones. Action controls retain the shared 44px minimum
+target token. These rules prepare the components for the existing GameShell
+slots without attempting the final responsive game composition.
+
+Production deliberately remains `Game -> GameShell(legacy) -> Board`. No new
+HUD component is mounted, so Board remains the single live owner of player and
+turn display, dice control, property list/modal, audio control, observer toast,
+result dialog and end-game navigation. This avoids a second roll, purchase,
+jail, property or turn UI before controller integration can replace each owner
+one for one. The current Board HUD inventory is classified as follows:
+
+- presentational candidates: player names/money/turn emphasis, visual action
+  controls, property summary, audio status, observer feedback and result copy;
+- controller-dependent responsibilities: current-turn refresh, command
+  pending/eligibility, roll/purchase/jail execution, property snapshot reads
+  and end-game navigation;
+- Board/Three.js-coupled responsibilities: canvas sizing, scene/camera, dice
+  and pawn objects, movement and animation;
+- legacy retirement candidates: imperative card DOM manipulation, duplicated
+  local turn/player indices and Board-local HUD positioning.
+
+`Board.jsx`, `GameShell`, the route, background, board and Dice GLBs, materials,
+lighting, camera, pawns, animation, REST/STOMP contracts, Redis, MariaDB and
+packages are unchanged. The extracted CSS is not in the production module
+graph until a later one-owner migration imports the HUD barrel. A runtime game
+smoke is therefore optional for this milestone; render tests and the production
+source contract instead prove that no duplicate HUD is mounted.
+
+## 28. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn
