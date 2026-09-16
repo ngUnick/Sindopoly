@@ -1057,7 +1057,81 @@ visible behavior remain unchanged. No browser calibration overlay was used;
 anchor placement is verified from source math and inspected GLB bounds, leaving
 texture-level visual centering for FE-REVAMP-015 parity checks.
 
-## 29. Git, documentation and risk
+## 29. FE-REVAMP-015 BoardSceneAdapter lifecycle
+
+`BoardSceneAdapter` now owns the production Three.js lifecycle that previously
+lived in `Board.jsx`: scene, perspective camera, renderer and canvas, the board
+and Dice GLTF loaders/instances, ambient and directional lights, the four
+primitive pawn meshes, the stable current player-to-pawn map, resize and mouse
+listeners, render invalidation, and disposal. Before extraction, Board retained
+all of these objects in React refs or effect locals. Its cleanup cancelled the
+continuous RAF and removed listeners, but did not dispose the renderer, render
+lists, geometries, materials, textures or late GLTF results. Both loaders could
+therefore attach resources after route teardown.
+
+The production imperative API is deliberately small: `mount(container)`,
+`resize(width?, height?, pixelRatio?)`, `orientCameraForPosition(position)`,
+`setPawnPositions(players)`, `setPawnPosition(playerId, position)`, and
+`dispose()`. Calls before mount or after disposal fail safely, a second mount on
+one live/disposed instance is rejected, and `dispose()` is idempotent. React
+owns the container ref and adapter lifetime and passes only accepted visual
+facts. Board continues to own REST, STOMP, polling, snapshots, commands, React
+state, modals, navigation, observer feedback and `Audio(honeyJam)`.
+
+Visual constants remain the established production values: transparent clear,
+75-degree camera at the same four side presets, board scale `0.035` and Y
+rotation `π/2`, existing light colors/intensities/shadow camera, unchanged
+primitive pawn shapes/material colors/initial offsets, and two scale-10 hidden
+Dice clones. Sizing temporarily preserves legacy window behavior: initial
+renderer size is `innerWidth × innerHeight*0.99`; a mounted resize listener uses
+`innerWidth × innerHeight*0.92`, updates the camera projection and caps pixel
+ratio at 2. Container-derived sizing is deferred to avoid a viewport redesign.
+The current window-level mouse drag orbit is likewise preserved, but its named
+handlers now belong to and are removed by the adapter.
+
+The committed backlog requires idle RAF zero, which is stricter than merely
+bounding the former continuous loop. Mount and each camera, pawn, resize or
+model-load invalidation schedule at most one coalesced frame. The frame renders
+once and does not reschedule itself. Disposal cancels a pending frame, and a
+disposed adapter cannot invalidate again.
+
+Every GLTF callback captures the adapter generation. A callback that arrives
+after disposal never touches the cleared scene/container/renderer and instead
+disposes the newly loaded hierarchy. Normal teardown walks the owned scene once
+and deduplicates shared geometry, material and texture identities, including
+material arrays and texture uniforms. It then disposes render lists and the
+renderer and removes the adapter-owned canvas. `forceContextLoss()` is not used:
+normal deterministic disposal is sufficient and avoids deliberately forcing a
+context-loss event during routine route navigation.
+
+FE-REVAMP-014 is consumed only for validated forward-route geometry. Static
+pawn placement continues to use the visually established incremental
+coordinates, so the unverified canonical anchors do not enter production and
+texture-level anchor centering remains deferred. No square-by-square animation,
+Dice roll animation, camera choreography, ownership marker, pawn GLB or final
+player-slot orchestration was added.
+
+Node lifecycle/resource tests cover mount, resize, one-frame invalidation,
+listeners, duplicate mount, pre/post-mount safety, idempotent disposal, nested
+and shared resources, material arrays/textures, normal board/Dice hierarchy
+cleanup, late callbacks and StrictMode-style fresh remount. A live current-stack
+smoke created two authenticated players, created/joined/started a disposable
+game, rendered the board and primitive pawns, completed one authoritative roll,
+and exercised mouse orbit. Board and Dice assets produced no fresh console
+warning/error. A clean browser tab had exactly one canvas. Five
+Game→Home→Game cycles each measured one canvas while mounted and zero while
+unmounted, then one after remount; no duplicate rendering or WebGL context
+warning was observed. Exact GPU-memory proof was not available.
+
+Remaining lifecycle debt outside this adapter includes Board polling/STOMP and
+command timers, audio teardown/autoplay policy, the legacy window-size split,
+incremental pawn-coordinate drift and presentation movement semantics. GLTF
+requests are not transport-aborted because the current loader has no simple
+abort contract; generation checks and late-result disposal provide the bounded
+ownership guarantee. This change adds no REST/STOMP/Redis/MariaDB contract,
+authority, authentication or gameplay-rule surface.
+
+## 30. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

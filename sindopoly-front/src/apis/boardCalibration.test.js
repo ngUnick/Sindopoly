@@ -18,6 +18,7 @@ const [calibrationSource, boardSource] = await Promise.all([
   readFile(new URL("features/game/board/boardCalibration.js", sourceRoot), "utf8"),
   readFile(new URL("pages/Game/Board.jsx", sourceRoot), "utf8"),
 ]);
+const adapterSource = await readFile(new URL("features/game/board/BoardSceneAdapter.js", sourceRoot), "utf8");
 
 test("calibration exposes exactly forty canonical anchors", () => {
   assert.equal(BOARD_POSITION_COUNT, 40);
@@ -278,8 +279,10 @@ test("model transform and inspected bounds remain explicit calibration evidence"
   assert.deepEqual(BOARD_CALIBRATION.modelWorldBounds.max, { x: 26.25, y: 0.043661, z: 26.790839 });
 });
 
-test("legacy production Board does not import the calibration foundation yet", () => {
+test("production Board does not own calibration while the scene adapter consumes route geometry only", () => {
   assert.doesNotMatch(boardSource, /boardCalibration|BOARD_ANCHORS|buildForwardRoute|getPawnAnchor/);
+  assert.match(adapterSource, /buildForwardRoute/);
+  assert.doesNotMatch(adapterSource, /getPawnAnchor|BOARD_ANCHORS/);
 });
 
 function distanceXZ(left, right) {

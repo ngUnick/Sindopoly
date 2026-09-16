@@ -8,12 +8,14 @@ const sourceRoot = fileURLToPath(new URL("../", import.meta.url));
 
 test("dice model uses a Vite-resolved URL for the existing loader", async () => {
   const board = await source("pages/Game/Board.jsx");
+  const adapter = await source("features/game/board/BoardSceneAdapter.js");
 
   assert.match(
     board,
     /import\s+diceModelUrl\s+from\s+["']\.\.\/\.\.\/assets\/models\/Dice\.glb\?url["']/,
   );
-  assert.match(board, /loader2\.load\(diceModelUrl,/);
+  assert.match(board, /new BoardSceneAdapter\(\{ boardModelUrl: boardGLB, diceModelUrl \}\)/);
+  assert.match(adapter, /this\.createLoader\(\)\.load\(\s*this\.diceModelUrl,/);
   assert.doesNotMatch(board, rawAssetPathPattern("models/Dice.glb"));
 });
 
@@ -48,10 +50,12 @@ test("active frontend source contains neither broken game-asset runtime path", a
 
 test("working board and background asset conventions remain unchanged", async () => {
   const board = await source("pages/Game/Board.jsx");
+  const adapter = await source("features/game/board/BoardSceneAdapter.js");
   const tailwind = await readFile(`${frontendRoot}/tailwind.config.js`, "utf8");
 
   assert.match(board, /import\s+boardGLB\s+from\s+["']\.\.\/\.\.\/assets\/models\/board\.glb\?url["']/);
-  assert.match(board, /loader\.load\(\s*boardGLB,/);
+  assert.match(board, /new BoardSceneAdapter\(\{ boardModelUrl: boardGLB, diceModelUrl \}\)/);
+  assert.match(adapter, /this\.createLoader\(\)\.load\(\s*this\.boardModelUrl,/);
   assert.match(tailwind, /['"]pic['"]:\s*['"]url\(\.\/src\/assets\/images\/monopoly_bg\.png\)['"]/);
 });
 

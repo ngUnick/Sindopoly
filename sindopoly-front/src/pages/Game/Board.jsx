@@ -1,12 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { GamePlayAPI, boardFromSnapshot } from "../../apis/GamePlayAPI";
 import {
   applyOwnershipToSquares, deriveOwnershipProjection, propertyIdsForPlayer,
 } from "../../apis/ownershipProjection";
 import {
-  assignPawnRefsByPlayerId, enqueueNotification, movePawnForPlayer, observerNotification,
+  enqueueNotification, observerNotification,
 } from "../../apis/gameEvents";
 import {
   isOptionalTurnChoice, OBSERVER_NOTIFICATION_DURATION_MS, ObserverNotificationToast, TurnResultModal,
@@ -26,6 +24,7 @@ import honeyJam from "../../assets/audio/massobeats-honey_jam.mp3";
 import boardGLB from "../../assets/models/board.glb?url";  // ⬅ forces asset handling
 import diceModelUrl from "../../assets/models/Dice.glb?url";
 import moneyImg from "../../assets/images/monopoly_money.png";
+import { BoardSceneAdapter } from "../../features/game/board/BoardSceneAdapter.js";
 
 
 function reportOwnershipIssues(ownership) {
@@ -52,22 +51,8 @@ const Board = () => {
   const playerId = playerParam ? parseInt(playerParam, 10) : null;
 
   // Declarations and Initializations ---------------------------------------------------------------------------------------------
-  const canvasRef = useRef(null);
-  const sceneRef = useRef(null);
-  const cameraRef = useRef(null);
-  const rendererRef = useRef(null);
-  const sphereRef = useRef(null);
-  const torusRef = useRef(null);
-  const cubeRef = useRef(null);
-  const coneRef = useRef(null);
-  const pawnRefsByPlayerId = useRef(new Map());
-  // const ironRef = useRef(null);
-
-  const pawnRefs = [ cubeRef, sphereRef, torusRef, coneRef ];
-  
-
-  const rWidth = window.innerWidth; // Percentage of screen that will be used by the canvas
-  const rHeight = window.innerHeight * 0.99; // Percentage of screen that will be used by the canvas
+  const sceneContainerRef = useRef(null);
+  const sceneAdapterRef = useRef(null);
 
   const [posInput, setposInput] = useState(0); // State to store the numeric value entered
   const [isMyTurn, setIsMyTurn] = useState(false);
@@ -318,197 +303,6 @@ const Board = () => {
   // Example usage:
   // filterAndDisplayNames();
 
-  // Handle Movement -------------------------------------------------------------------------------------------------------------
-  const findSteps = (player, position) => {
-    let stepInput;
-
-    if (position > player.userData.stepCounter) {
-      stepInput = position - player.userData.stepCounter;
-      movePlayer(player, stepInput);
-    } else if (position < player.userData.stepCounter) {
-      stepInput = 40 + position - player.userData.stepCounter;
-      movePlayer(player, stepInput);
-    }
-  };
-
-  const movePlayer = (player, steps) => {
-    const MAX_STEPS = 10; // Maximum steps before making a turn
-
-    let remainingSteps = steps; // Remaining steps for a single move
-
-    while (remainingSteps > 0) {
-      // If the player hasn't reached the maximum steps, continue moving in the current direction
-      if (
-        player.userData.stepCounter % MAX_STEPS !== 0 ||
-        player.userData.stepCounter == 0
-      ) {
-        // Update position and steps taken
-        remainingSteps--;
-        handleMove(player);
-      } else {
-        // Update direction, then update position and steps taken
-        handleTurn(player);
-        remainingSteps--;
-        handleMove(player);
-      }
-    }
-
-    getPos(player);
-  };
-
-  const handleMove = (player) => {
-    let stepSize;
-
-    if (player) {
-      if (
-        player.userData.stepCounter % 10 == 0 ||
-        player.userData.stepCounter % 10 == 9
-      ) {
-        stepSize = 6;
-      } else {
-        stepSize = 4.15;
-      }
-    }
-
-    switch (player.userData.caseNumber) {
-      case 1:
-        if (player) {
-          player.position.z += stepSize; // Move the player 1 unit along the Z-axis backward
-        }
-        break;
-
-      case 2:
-        if (player) {
-          player.position.x -= stepSize; // Move the player 1 unit along the X-axis backward
-        }
-        break;
-
-      case 3:
-        if (player) {
-          player.position.z -= stepSize; // Move the player 1 unit along the Z-axis forward
-        }
-        break;
-
-      case 4:
-        if (player) {
-          player.position.x += stepSize; // Move the player 1 unit along the X-axis forward
-        }
-        break;
-
-      default:
-        break;
-    }
-
-    player.userData.stepCounter++;
-  };
-
-  const handleTurn = (player) => {
-    if (player.userData.stepCounter == 40) {
-      player.userData.stepCounter = 0; // Make the counter 0 if we reach 40 steps
-    }
-
-    if (player.userData.caseNumber >= 1 && player.userData.caseNumber <= 3) {
-      // Circle caseNumber from 1 to 4 and back
-      player.userData.caseNumber += 1;
-    } else {
-      player.userData.caseNumber = 1;
-    }
-
-  };
-
-  const getPos = (player) => {
-    return player.userData.stepCounter;
-  };
-
-  // Handle Dice Rolls --------------------------------------------------------------------------------------------------
-  let dice1;
-  let dice2;
-
-  // Assuming you have the 'dice' loaded and available
-
-  const randomDiceThrow = (dice, dresult) => {
-    if (!dice) {
-      console.error("Dice model not loaded yet");
-      return;
-    }
-
-    // Randomize velocities
-    let yVel = -19;
-    if (dresult == 3) {
-      yVel = -18.2;
-    } else if (dresult == 4) {
-      yVel = -19.9;
-    }
-
-    const rand = Math.random() * 20;
-    const xVel = 5 + rand;
-    const zVel = 5 + rand;
-    let velocity = new THREE.Vector3(xVel, yVel, zVel);
-
-    const angularList = [
-      [12.6, 9.45, 11.0], // 1
-      [11, 9.45, 11.05], // 2
-      [6.25, 9.45, 9.4], // 3
-      [12.55, 9.45, 12.55], // 4
-      [7.85, 9.45, 10.7], // 5
-      [9.4, 9.45, 11.05], // 6
-    ];
-
-    const selectedAng = angularList[dresult - 1];
-
-    const angularVel = new THREE.Vector3(
-      selectedAng[0], // First value from the selected group
-      selectedAng[1], // Second value from the selected group
-      selectedAng[2] // Third value from the selected group
-    );
-
-    let angularVelocity = angularVel;
-
-    // Use these values for the dice animation
-    const duration = 1000; // Duration of the animation in milliseconds
-    const startTime = performance.now();
-
-    const animateRoll = (timestamp) => {
-      const elapsed = timestamp - startTime;
-      const progress = Math.min(elapsed / duration, 1); // Normalize the progress between 0 and 1
-
-      // Apply random velocities for position and rotation
-      const x = velocity.x * progress - 10;
-      const y = velocity.y * progress + 20;
-      const z = velocity.z * progress - 10;
-      dice.position.set(x, y, z);
-
-      const rotX = angularVelocity.x * progress;
-      const rotY = angularVelocity.y * progress;
-      const rotZ = angularVelocity.z * progress;
-      dice.rotation.set(rotX, rotY, rotZ);
-
-      if (elapsed < duration) {
-        requestAnimationFrame(animateRoll);
-      }
-    };
-
-    // Reveal dices
-    dice.visible = true;
-    // dice2.visible = true;
-
-    // Hide dices after 5 seconds
-    setTimeout(() => {
-      dice.visible = false;
-      // dice2.visible = false;
-    }, 5000);
-
-    // Start the animation
-    requestAnimationFrame(animateRoll);
-  };
-
-  // const rollDiceWithRandomValues = (dice) => {
-    
-  // };
-
-  // Call the roll animation function when needed
-  // randomDiceThrow();
-
   // Function to add the "disable" class to the button with id "dice"
   function disableDice() {
     const diceButton = document.getElementById('dice');
@@ -558,9 +352,6 @@ const Board = () => {
       if (!snapshot) return;
       const board = boardFromSnapshot(snapshot);
       if (!board.length) return;
-      pawnRefsByPlayerId.current = assignPawnRefsByPlayerId(
-        board, pawnRefs, pawnRefsByPlayerId.current
-      );
 
       const ownership = deriveOwnershipProjection(snapshot);
       reportOwnershipIssues(ownership);
@@ -582,18 +373,8 @@ const Board = () => {
       // ── 0. re-orient camera to the side YOU are on ──────────────────
       if (myIndex >= 0) {
         const myPos = board[myIndex].position;  // 0–39
-        const cam   = cameraRef.current;
-        if (myPos <= 10) {
-          cam.position.set(40, 25, 0);
-        } else if (myPos <= 20) {
-          cam.position.set(0, 25, 40);
-        } else if (myPos <= 30) {
-          cam.position.set(-40, 25, 0);
-        } else {
-          cam.position.set(0, 25, -40);
-     }
-     cam.lookAt(0, 0, 0);
-   }
+        sceneAdapterRef.current?.orientCameraForPosition(myPos);
+      }
 
 
 
@@ -666,18 +447,7 @@ const Board = () => {
       }
 
 
-      // hide all pawns, then show+move exactly as many as players
-      pawnRefs.forEach(ref => {
-        if (ref.current) ref.current.visible = false;
-      });
-
-      board.forEach(p => {
-        movePawnForPlayer(p.player_id, pawnRefsByPlayerId.current, p.position, (pawn, position) => {
-          pawn.visible = true;
-          findSteps(pawn, position);
-        });
-
-      });
+      sceneAdapterRef.current?.setPawnPositions(board);
   };
 
   const handleRealtimeEvent = event => {
@@ -696,255 +466,9 @@ const Board = () => {
       console.error("Board.jsx: missing or invalid gameId");
       return undefined;
     }
-
-      // document.addEventListener("click", function (event) {
-      //   // Event listener for closing the card when clicked outside of it
-      //   const overlay = document.querySelector("#overlay");
-      //   if (overlay.contains(event.target)) {
-      //     closeCard();
-      //   }
-      // });
-
-
-
-    // Board Creation --------------------------------------------------------------------------------------------------------
-    const scene = new THREE.Scene(); // Create a Three.js scene
-    sceneRef.current = scene;
-    const camera = new THREE.PerspectiveCamera(
-      75,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      100
-    ); // Create a perspective camera
-    cameraRef.current = camera;
-    const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current }); // Create a WebGL renderer and attach it to the canvas
-    renderer.setClearColor(0x000000, 0); // Make the scene fully transparent
-
-    rendererRef.current = renderer;
-    renderer.setSize(rWidth, rHeight);
-
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1); // Add ambient light to the scene
-    ambientLight.position.set(0, 250, 0);
-    scene.add(ambientLight);
-
-    const dirLight = new THREE.DirectionalLight(0xfff0cf, 6);
-    dirLight.position.set(10, 40, -10);
-    dirLight.castShadow = true;
-    dirLight.shadow.camera.top = 2;
-    dirLight.shadow.camera.bottom = -2;
-    dirLight.shadow.camera.left = -2;
-    dirLight.shadow.camera.right = 2;
-    dirLight.shadow.camera.near = 0.1;
-    dirLight.shadow.camera.far = 40;
-    scene.add(dirLight);
-
-    const loader = new GLTFLoader();
-
-    // Load the GLB file
-    loader.load(
-      boardGLB,
-      (gltf) => {
-        const board = gltf.scene.clone();
-
-        const newScale = 0.035; // Set the new scale factor
-
-        // You may need to scale, position, or rotate the board as needed
-        board.scale.set(newScale, newScale, newScale); // Adjust the scale if needed
-        board.position.set(0, 0, 0); // Adjust the position if needed
-        board.rotation.set(0, Math.PI / 2, 0); // Adjust the rotation if needed
-
-        scene.add(board); // Add the loaded board to the scene
-      },
-      undefined,
-      (error) => {
-        console.error("Error loading GLB model", error);
-      }
-    );
-
-    // Player Creation --------------------------------------------------------------------------------------------------
-
-    // loader.load(
-    //   'src/assets/models/pawns/Iron.glb',
-    //   (gltf) => {
-    //     // Get the loaded model from the result
-    //     const iron = gltf.scene.clone();
-
-    //     const newScale = 0.035; // Set the new scale factor
-
-    //     // You may need to scale, position, or rotate the board as needed
-    //     iron.scale.set(newScale, newScale, newScale); // Adjust the scale if needed
-
-    //     // Set initial position of the model
-    //     iron.position.set(0, 22.8, 0);
-
-    //     iron.rotation.set(0, 0, 0); // Adjust the rotation if needed
-
-    //     // Add the model to the scene
-    //     scene.add(iron);
-
-    //     // Add additional properties to the model's userData
-    //     iron.userData.stepCounter = 0;
-    //     iron.userData.caseNumber = 1;
-    //     // iron.userData.money = 1500;
-
-    //     // Store a reference to the model for later use if needed
-    //     ironRef.current = iron;
-    //   },
-    //   undefined,
-    //   (error) => {
-    //     console.error('Error loading model:', error);
-    //   }
-    // );
-
-    const cubeGeometry = new THREE.BoxGeometry(); // Create a cube geometry and material
-    const cubeMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
-    const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-    cube.position.set(22, 0.5, -22); // Position of the cube on the board (x, y, z)
-    cubeRef.current = cube;
-    cube.userData.stepCounter = 0; // stepCounter for the specific player
-    cube.userData.caseNumber = 1; // caseNumber for the specific player
-    cube.userData.money = 1500; // money for the specific player
-    scene.add(cube);
-
-    const sphereGeometry = new THREE.SphereGeometry(0.5, 32, 32); // Create a sphere geometry and material
-    const sphereMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
-    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-    sphere.position.set(23, 0.7, -23); // Position of the sphere on the board (x, y, z)
-    sphereRef.current = sphere;
-    sphere.userData.stepCounter = 0; // stepCounter for the specific player
-    sphere.userData.caseNumber = 1; // caseNumber for the specific player
-    sphere.userData.money = 1500; // money for the specific player
-    scene.add(sphere);
-
-    const torusGeometry = new THREE.TorusGeometry(0.5, 0.2, 16, 100); // Create a torus geometry and material
-    const torusMaterial = new THREE.MeshPhongMaterial({ color: 0x0000ff });
-    const torus = new THREE.Mesh(torusGeometry, torusMaterial);
-    torus.position.set(21.5, 0.8, -23); // Position of the torus on the board (x, y, z)
-    torusRef.current = torus;
-    torus.userData.stepCounter = 0; // stepCounter for the specific player
-    torus.userData.caseNumber = 1; // caseNumber for the specific player
-    torus.userData.money = 1500; // money for the specific player
-    scene.add(torus);
-
-    // Create a cone geometry and material
-    const coneGeometry = new THREE.ConeGeometry(0.5, 1, 32);
-    const coneMaterial = new THREE.MeshPhongMaterial({ color: 0xf2ff00 });
-    const cone = new THREE.Mesh(coneGeometry, coneMaterial);
-    cone.position.set(23.5, 0.5, -22); // Position of the cone on the board (x, y, z)
-    coneRef.current = cone;
-    cone.userData.stepCounter = 0; // stepCounter for the specific player
-    cone.userData.caseNumber = 1; // caseNumber for the specific player
-    cone.userData.money = 1500; // money for the specific player
-    scene.add(cone);
-
-    // Camera Adjustment -----------------------------------------------------------------------------------------------------
-    camera.position.set(40, 25, 0); // Adjust the camera's height      ready-to-play: 40-60 15-25 0    to-see-floor-interactions:50 5 0
-    camera.lookAt(0, 0, 0); // Make the camera look at the center of the scene (0, 0, 0)
-
-    let isDragging = false;
-    let previousMouseX = 0;
-    const target = new THREE.Vector3(0, 0, 0); // Set a target point for the camera to orbit around
-
-    const onMouseDown = (event) => {
-      isDragging = true;
-      previousMouseX = event.clientX;
-    };
-
-    const onMouseMove = (event) => {
-      if (isDragging) {
-        const deltaMoveX = event.clientX - previousMouseX;
-        const sensitivity = 0.003; // Adjust the sensitivity for circular movement
-
-        // Calculate the new position of the camera in a circular motion around the target point
-        const angle = deltaMoveX * sensitivity;
-        const newX =
-          target.x +
-          Math.cos(angle) * (camera.position.x - target.x) -
-          Math.sin(angle) * (camera.position.z - target.z);
-        const newZ =
-          target.z +
-          Math.sin(angle) * (camera.position.x - target.x) +
-          Math.cos(angle) * (camera.position.z - target.z);
-
-        camera.position.set(newX, camera.position.y, newZ); // Update the camera's position
-        camera.lookAt(0, 0, 0); // Make the camera look at the center of the scene (0, 0, 0)
-
-        previousMouseX = event.clientX;
-      }
-    };
-
-    const onMouseUp = () => {
-      isDragging = false;
-    };
-
-    const onResize = () => {
-      const width = window.innerWidth;
-      const height = window.innerHeight * 0.92;
-      if (!canvasRef.current) return;
-      canvasRef.current.width = width;
-      canvasRef.current.height = height;
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      renderer.setSize(width, height);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.render(scene, camera);
-    };
-
-    window.addEventListener("mousedown", onMouseDown, false);
-    window.addEventListener("mousemove", onMouseMove, false);
-    window.addEventListener("mouseup", onMouseUp, false);
-    window.addEventListener("resize", onResize);
-
-    // Load Dice ---------------------------------------------------------------------------------------------
-    const loader2 = new GLTFLoader();
-
-    // Load the dice model
-    loader2.load(diceModelUrl, (gltf) => {
-      dice1 = gltf.scene.clone(); // Create a copy of the dice model
-      dice2 = gltf.scene.clone(); // Create another copy for the second dice
-
-      // Set individual positions for each dice
-      dice1.scale.set(10, 10, 10);
-      dice1.position.set(10, 20, -20);
-      scene.add(dice1); // Add the first dice to the scene
-
-      dice2.scale.set(10, 10, 10);
-      dice2.position.set(0, 25, -20);
-      scene.add(dice2); // Add the second dice to the scene
-
-      // Hide dice1
-      dice1.visible = false;
-
-      // Hide dice2
-      dice2.visible = false;
-    });
-
-    let animationFrameId;
-    const animate = () => {
-      // Function for animation rendering
-      renderer.render(scene, camera);
-      animationFrameId = requestAnimationFrame(animate);
-    };
-
-    animate(); // Start animation
-
-    const HideUnnecessaryPlayers = (playersAmount) => {
-        if(playersAmount == 2)
-        {
-          torusRef.current.visible = false;
-          coneRef.current.visible = false;
-          disableMoney('money3');
-          disableMoney('money4');
-        }
-        else if(playersAmount == 3)
-        {
-          coneRef.current.visible = false;
-          disableMoney('money4');
-        }    
-    }
-
-    
-
+    const adapter = new BoardSceneAdapter({ boardModelUrl: boardGLB, diceModelUrl });
+    sceneAdapterRef.current = adapter;
+    adapter.mount(sceneContainerRef.current);
 
     let polling = false;
     const poll = async () => {
@@ -959,11 +483,8 @@ const Board = () => {
     const id = setInterval(poll, 15000);
     return () => {
       clearInterval(id);
-      cancelAnimationFrame(animationFrameId);
-      window.removeEventListener("mousedown", onMouseDown, false);
-      window.removeEventListener("mousemove", onMouseMove, false);
-      window.removeEventListener("mouseup", onMouseUp, false);
-      window.removeEventListener("resize", onResize);
+      adapter.dispose();
+      if (sceneAdapterRef.current === adapter) sceneAdapterRef.current = null;
     };
   }, [gameId, playerId, navigate]);
 
@@ -985,10 +506,8 @@ const Board = () => {
       // disable UI & show dice
       setIsMyTurn(false);
       setDice(dice);
-      // randomDiceThrow(dice1, dice);
       await new Promise(r => setTimeout(r, 1000));
-      // Pawn ownership is resolved by immutable player ID; array position is only a visual slot.
-      movePawnForPlayer(playerId, pawnRefsByPlayerId.current, newPosition, findSteps);
+      sceneAdapterRef.current?.setPawnPosition(playerId, newPosition);
 
       // 2️⃣ always show modal with the raw result
       setTurnResult(tr);
@@ -1030,7 +549,7 @@ const Board = () => {
   // UI Elements ----------------------------------------------------------------------------------------------------
   return (
     <div className="relative h-screen w-screen">
-      <canvas ref={canvasRef} />
+      <div ref={sceneContainerRef} className="absolute inset-0" />
 
       <div className="first-nav">
         {playersData.map((p, idx) => (

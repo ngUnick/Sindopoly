@@ -15,13 +15,14 @@ test("Board consumes the structured ownership projection without property string
 
 test("Board scene cleanup bounds active window listeners and the render RAF", async () => {
   const board = await source("pages/Game/Board.jsx");
+  const adapter = await source("features/game/board/BoardSceneAdapter.js");
 
   for (const event of ["mousedown", "mousemove", "mouseup", "resize"]) {
-    assert.match(board, new RegExp(`window\\.addEventListener\\(["']${event}["']`));
-    assert.match(board, new RegExp(`window\\.removeEventListener\\(["']${event}["']`));
+    assert.match(adapter, new RegExp(`["']${event}["']`));
   }
-  assert.match(board, /cancelAnimationFrame\(animationFrameId\)/);
-  assert.doesNotMatch(board, /window\.addEventListener\(["']resize["'],\s*\(\)\s*=>/);
+  assert.match(adapter, /cancelAnimationFrame\(this\.rafId\)/);
+  assert.match(board, /adapter\.dispose\(\)/);
+  assert.doesNotMatch(board, /addEventListener|requestAnimationFrame|cancelAnimationFrame/);
 });
 
 test("legacy board adapter remains only as the current non-ownership compatibility boundary", async () => {
@@ -36,10 +37,12 @@ test("legacy board adapter remains only as the current non-ownership compatibili
 
 test("ownership and lifecycle work preserves stabilized game assets", async () => {
   const board = await source("pages/Game/Board.jsx");
+  const adapter = await source("features/game/board/BoardSceneAdapter.js");
 
   assert.match(board, /new Audio\(honeyJam\)/);
-  assert.match(board, /loader\.load\(\s*boardGLB,/);
-  assert.match(board, /loader2\.load\(diceModelUrl,/);
+  assert.match(board, /new BoardSceneAdapter\(\{ boardModelUrl: boardGLB, diceModelUrl \}\)/);
+  assert.match(adapter, /this\.boardModelUrl/);
+  assert.match(adapter, /this\.diceModelUrl/);
 });
 
 async function source(relativePath) {
