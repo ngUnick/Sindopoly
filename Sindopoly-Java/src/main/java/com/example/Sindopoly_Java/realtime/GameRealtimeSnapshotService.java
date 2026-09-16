@@ -37,7 +37,8 @@ public class GameRealtimeSnapshotService {
                 .toList();
         Map<String, String> game = snapshot.game();
         return new GameRealtimeSnapshot(gameId, snapshot.stateVersion(), game.get("status"),
-                nullableInteger(game.get("playerTurn")), nullableInteger(game.get("winner")),
+                nullableInteger(game.get("playerTurn")), nullableLong(game.get("turnDeadlineEpochMs")),
+                nullableInteger(game.get("winner")),
                 game.get("visibility"), game.get("inviteCode"), optionalAction(game.get("optionalAction")),
                 playerSnapshots);
     }
@@ -85,5 +86,10 @@ public class GameRealtimeSnapshotService {
     private Integer nullableInteger(String raw) {
         if (raw == null || "null".equalsIgnoreCase(raw)) return null;
         return Integer.valueOf(raw);
+    }
+
+    private Long nullableLong(String raw) {
+        if (raw == null || "null".equalsIgnoreCase(raw)) return null;
+        return Long.valueOf(raw);
     }
 }

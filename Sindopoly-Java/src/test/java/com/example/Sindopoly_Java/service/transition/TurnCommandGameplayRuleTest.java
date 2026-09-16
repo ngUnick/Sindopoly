@@ -24,6 +24,9 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.security.access.AccessDeniedException;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,6 +46,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class TurnCommandGameplayRuleTest {
+    private static final Instant NOW = Instant.parse("2026-09-17T10:00:00Z");
+    private static final String RENEWED_DEADLINE = String.valueOf(NOW.plusSeconds(60).toEpochMilli());
 
     @Mock RedisGameTransitionStore store;
     @Mock DiceService dice;
@@ -56,7 +61,7 @@ class TurnCommandGameplayRuleTest {
     @BeforeEach
     void setUp() {
         service = new TurnCommandService(store, dice, squares, cards, mapper, events,
-                new GameTimingService(java.time.Clock.systemUTC(), new GameLifecycleProperties()));
+                new GameTimingService(Clock.fixed(NOW, ZoneOffset.UTC), new GameLifecycleProperties()));
         when(store.replayIfPresent(anyInt(), any(), anyString())).thenReturn(Optional.empty());
         when(store.commit(anyInt(), any(), anyString(), any(), any(JsonNode.class))).thenAnswer(invocation -> {
             CommandMetadata metadata = invocation.getArgument(1);
@@ -76,7 +81,9 @@ class TurnCommandGameplayRuleTest {
 
         assertThat(result.data()).isEqualTo(200);
         assertThat(plan.playerPuts().get(41).get("money")).isEqualTo("1300");
-        assertThat(plan.gamePuts()).containsEntry("playerTurn", "7").doesNotContainKey("optionalAction");
+        assertThat(plan.gamePuts()).containsEntry("playerTurn", "7")
+                .containsEntry("turnDeadlineEpochMs", RENEWED_DEADLINE)
+                .doesNotContainKey("optionalAction");
     }
 
     @Test
@@ -130,7 +137,8 @@ class TurnCommandGameplayRuleTest {
         assertThat(pending.playerId()).isEqualTo(41);
         assertThat(pending.stateVersion()).isEqualTo(1);
         assertThat(pending.cost()).isEqualTo(60);
-        assertThat(plan.gamePuts()).doesNotContainKey("playerTurn");
+        assertThat(plan.gamePuts()).containsEntry("turnDeadlineEpochMs", RENEWED_DEADLINE)
+                .doesNotContainKey("playerTurn");
         ArgumentCaptor<GameEventPayload> event = ArgumentCaptor.forClass(GameEventPayload.class);
         verify(events).publish(eq(41), eq(1L), eq(GameEventType.TURN_UPDATED), event.capture());
         assertThat(event.getValue().details()).extracting(detail -> detail.type())
@@ -245,9 +253,11 @@ class TurnCommandGameplayRuleTest {
         when(store.load(41)).thenReturn(snapshot(0, jailed, player(0, 1500, "[]"), List.of()));
 
         ThrowResultDto offered = service.throwDice(41, 41, metadata(0));
-        String option = committedPlan().gamePuts().get("optionalAction");
+        GameTransitionPlan offeredPlan = committedPlan();
+        String option = offeredPlan.gamePuts().get("optionalAction");
 
         assertThat(offered.squareType()).isEqualTo(10);
+        assertThat(offeredPlan.gamePuts()).containsEntry("turnDeadlineEpochMs", RENEWED_DEADLINE);
         verify(dice, never()).roll();
 
         org.mockito.Mockito.reset(store, dice, squares, cards, events);
@@ -258,6 +268,7 @@ class TurnCommandGameplayRuleTest {
         GameTransitionPlan paid = committedPlan();
 
         assertThat(result.nextPlayerId()).isEqualTo(41);
+        assertThat(paid.gamePuts()).containsEntry("turnDeadlineEpochMs", RENEWED_DEADLINE);
         assertThat(paid.playerPuts().get(41)).containsEntry("money", "1450")
                 .containsEntry("jail", "false").containsEntry("jailTime", "0");
     }
@@ -301,7 +312,8 @@ class TurnCommandGameplayRuleTest {
         service.throwDice(41, 41, metadata(4));
 
         GameTransitionPlan plan = committedPlan();
-        assertThat(plan.gamePuts()).containsEntry("playerTurn", "7");
+        assertThat(plan.gamePuts()).containsEntry("playerTurn", "7")
+                .containsEntry("turnDeadlineEpochMs", RENEWED_DEADLINE);
         PendingOptionalAction pending = mapper.readValue(
                 plan.gamePuts().get("optionalAction"), PendingOptionalAction.class);
         assertThat(pending.type()).isEqualTo(PendingOptionalAction.Type.PAY_JAIL_EXIT);

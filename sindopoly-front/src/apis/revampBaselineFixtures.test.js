@@ -12,22 +12,30 @@ import {
 
 const snapshotKeys = [
   "gameId", "inviteCode", "optionalAction", "playerTurn", "players",
-  "stateVersion", "status", "visibility", "winner",
+  "stateVersion", "status", "turnDeadlineEpochMs", "visibility", "winner",
 ];
 const playerKeys = [
   "afk", "bankrupt", "jailTurnsRemaining", "jailed", "money", "nickname",
   "playerId", "position", "properties",
 ];
 
-test("baseline snapshots preserve the current DTO shape without future projections", () => {
+test("baseline snapshots preserve the current DTO shape with only the deadline projection", () => {
   for (const snapshot of snapshotFixtures) {
     assert.deepEqual(Object.keys(snapshot).sort(), snapshotKeys);
     assert.equal("die1" in snapshot, false);
     assert.equal("die2" in snapshot, false);
-    assert.equal("turnDeadlineEpochMs" in snapshot, false);
+    assert.equal("turnDeadlineEpochMs" in snapshot, true);
     assert.equal("finalResult" in snapshot, false);
     snapshot.players.forEach(player => assert.deepEqual(Object.keys(player).sort(), playerKeys));
   }
+});
+
+test("baseline deadline fixtures preserve backend lifecycle semantics", () => {
+  assert.equal(snapshotFixtures[0].turnDeadlineEpochMs, null);
+  assert.equal(inProgressSnapshot.turnDeadlineEpochMs, 1789661234567);
+  assert.equal(purchaseOptionalActionSnapshot.turnDeadlineEpochMs, 1789661294567);
+  assert.equal(jailedPlayerSnapshot.turnDeadlineEpochMs, 1789661594567);
+  assert.equal(snapshotFixtures.at(-1).turnDeadlineEpochMs, null);
 });
 
 test("baseline optional actions retain current server-owned identity and value types", () => {

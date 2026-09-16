@@ -388,7 +388,7 @@ history or client presentation state is added.
 | Contract | Exact boundary | Service/storage impact | Compatibility and tests |
 | --- | --- | --- | --- |
 | Dice pair | Add `die1`, `die2`, `total` to `ThrowResultDto` and `DICE_ROLLED` `GameEventDetail`; temporarily retain `dice=total` | `DiceService` returns a pair; command replay stores the expanded existing result JSON; `lastDice` may remain total | Additive JSON; old clients use `dice`; rule, DTO, replay, event and frontend decoder tests. Redis schema: **None**. MariaDB: **None** |
-| Turn deadline | Add nullable `turnDeadlineEpochMs` to `GameRealtimeSnapshot` | Snapshot service reads existing `game:{gameId}` field | Additive; snapshot authorization/absent/completed tests. Redis schema: **None**. MariaDB: **None** |
+| Turn deadline | Nullable `turnDeadlineEpochMs` on `GameRealtimeSnapshot` | Snapshot service reads the existing `game:{gameId}` field in the stable version-bracketed read | Additive; absolute epoch milliseconds, `null` when absent, frontend display-only authority. Redis schema: **None**. MariaDB: **None** |
 | Current game | Add `GET /api/session/current-game` returning `CurrentGameDto(gameId,status,stateVersion,visibility)` or 204; visibility preserves the existing public/private lobby route | Authenticated discovery returns candidates then validates membership/stable game snapshots | Keep boolean endpoint for compatibility; self-session, none, stale candidate and multi-game race tests. Redis schema: **None**. MariaDB: **None** |
 | Board metadata | Add `GET /api/board/squares` returning ordered `BoardSquareDto(id,type,displayNameEl,price,rent)` | New read service/repository projection; add Flyway migration for `square.display_name_el` and seed 40 names | Additive endpoint; order/completeness/auth/cache tests. Redis schema: **None**. MariaDB: **add nullable-then-backfilled name column, then enforce non-null if verified** |
 | Completion | Add nullable `finalResult` to ended `GameRealtimeSnapshot`, with ordered `{playerId,nickname,cash,propertyValue,totalValue,rank,winner}` | Server derives values from retained authoritative player state and existing Square prices; fetch prices in one query | Additive; winner/rank/tie/reconnect/terminal TTL tests. Redis schema: **None**. MariaDB schema: **None** |
@@ -579,7 +579,7 @@ ownership, eligibility, prices, rent, movement outcomes or presentation copy.
 | --- | --- | --- |
 | Session player | `{id,nickname}` | Positive numeric ID and string nickname required |
 | Current game | `{gameId,status,stateVersion,visibility}`; 204 means none | Only current resumable statuses and visibilities accepted; 204 is explicit success |
-| Recovery snapshot | `{gameId,stateVersion,status,playerTurn,winner,visibility,inviteCode,optionalAction,players}` | Required identity/version/state fields validated; additive fields ignored |
+| Recovery snapshot | `{gameId,stateVersion,status,playerTurn,turnDeadlineEpochMs,winner,visibility,inviteCode,optionalAction,players}` | Required identity/version/state fields validated; deadline must be `null` or a positive safe integer; additive fields ignored |
 | Snapshot player | `{playerId,nickname,position,money,properties,jailed,jailTurnsRemaining,bankrupt,afk}` | Canonical numeric IDs, copied numeric property array, strict booleans, unique player IDs |
 | Optional action | `PURCHASE_PROPERTY` or `PAY_JAIL_EXIT` with game/player/version identity, square, cost and `declinable` | Known shapes only; unknown command-bearing types fail closed |
 | Throw result | `{dice,newPosition,passedGo,squareType,data,stateVersion,replayed,card}` | Current fields validated; no `die1`/`die2` inference |
@@ -1131,7 +1131,42 @@ abort contract; generation checks and late-result disposal provide the bounded
 ownership guarantee. This change adds no REST/STOMP/Redis/MariaDB contract,
 authority, authentication or gameplay-rule surface.
 
-## 30. Git, documentation and risk
+## 30. FE-REVAMP-016 authoritative turn-deadline projection
+
+`GET /api/game-state/{gameId}/snapshot` now exposes nullable
+`turnDeadlineEpochMs` on `GameRealtimeSnapshot`. A non-null value is the
+server-generated absolute Unix epoch deadline in milliseconds already stored as
+a decimal string in the `turnDeadlineEpochMs` field of the authoritative
+`game:{gameId}` HASH. Lobby snapshots have no deadline. Started games create one;
+ordinary turn handoff, purchase-option creation, jail-option creation/payment and
+timeout handoff renew it according to the existing transition rules. Completion
+deletes it before retained terminal snapshots are served. Compatibility state
+with a missing field therefore projects `null` rather than inventing a deadline.
+
+Projection uses `RedisGameTransitionStore.loadStable`: the deadline, status,
+active player, optional action and `stateVersion` all come from the same game
+HASH read bracketed by equal version reads. No timer lookup or extra Redis round
+trip is added, so a snapshot cannot combine version N with a deadline fetched
+separately from N+1. Redis key/type/serializer/TTL and every timing rule remain
+unchanged; there is no new key family, MariaDB state, event field or STOMP
+destination.
+
+The frontend transport decoder requires the field because backend and frontend
+ship together. It accepts only `null` or a positive JavaScript safe integer and
+rejects missing, string, fractional, non-finite, zero and negative values. The
+pure turn presentation model carries the unchanged absolute value as
+`turn.turnDeadlineEpochMs`; the lifecycle reducer keeps it only inside the
+accepted immutable snapshot, so its existing newer/older/equal-version rules
+also govern deadline replacement. No countdown, timer hook or visible copy is
+introduced.
+
+A future countdown may compare the absolute deadline with browser wall-clock
+time. Modest client/server clock skew can therefore affect displayed seconds,
+but visual zero is never timeout authority: the UI must wait for the backend
+transition and authoritative recovery snapshot. Existing STOMP events remain
+wake-up signals that trigger that recovery rather than carrying deadline data.
+
+## 31. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

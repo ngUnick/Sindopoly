@@ -130,18 +130,19 @@ export function buildTurnViewModel({
 } = {}) {
   if (snapshot?.status === "ended") {
     return turnModel(TURN_STATES.GAME_COMPLETE, snapshot.playerTurn, activePlayer, false,
-      GAMEPLAY_CONTENT.gameCompleted, null);
+      GAMEPLAY_CONTENT.gameCompleted, null, snapshot.turnDeadlineEpochMs);
   }
   if (snapshot?.status !== "inProgress" || !activePlayer) {
     return turnModel(TURN_STATES.NO_ACTIVE_PLAYER, null, null, false,
-      formatWaitingForPlayer(), formatWaitingForPlayer());
+      formatWaitingForPlayer(), formatWaitingForPlayer(), snapshot?.turnDeadlineEpochMs ?? null);
   }
   if (viewerPresent && viewerPlayerId === activePlayer.playerId) {
     return turnModel(TURN_STATES.OWN_TURN, activePlayer.playerId, activePlayer, true,
-      formatCurrentTurn(), null);
+      formatCurrentTurn(), null, snapshot.turnDeadlineEpochMs);
   }
   return turnModel(TURN_STATES.OTHER_PLAYER_TURN, activePlayer.playerId, activePlayer, false,
-    formatPlayingNow(activePlayer.nickname), formatWaitingForPlayer(activePlayer.nickname));
+    formatPlayingNow(activePlayer.nickname), formatWaitingForPlayer(activePlayer.nickname),
+    snapshot.turnDeadlineEpochMs);
 }
 
 export function buildActionViewModel({
@@ -285,7 +286,15 @@ function buildCompletionViewModel(snapshot, playersById) {
   });
 }
 
-function turnModel(state, activePlayerId, activePlayer, canShowActions, statusText, waitingText) {
+function turnModel(
+  state,
+  activePlayerId,
+  activePlayer,
+  canShowActions,
+  statusText,
+  waitingText,
+  turnDeadlineEpochMs,
+) {
   return Object.freeze({
     state,
     activePlayerId,
@@ -293,6 +302,7 @@ function turnModel(state, activePlayerId, activePlayer, canShowActions, statusTe
     statusText,
     waitingText,
     canShowActions,
+    turnDeadlineEpochMs,
   });
 }
 

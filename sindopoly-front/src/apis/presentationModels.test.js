@@ -127,6 +127,7 @@ test("turn model describes the viewer's own turn", () => {
   const turn = gameModel(inProgressSnapshot, 101).turn;
   assert.equal(turn.state, TURN_STATES.OWN_TURN);
   assert.equal(turn.statusText, "Η σειρά σου");
+  assert.equal(turn.turnDeadlineEpochMs, 1789661234567);
 });
 
 test("turn model describes another player's turn", () => {
@@ -139,12 +140,19 @@ test("turn model handles no active player", () => {
   const turn = gameModel(lobbySnapshot).turn;
   assert.equal(turn.state, TURN_STATES.NO_ACTIVE_PLAYER);
   assert.equal(turn.activePlayerId, null);
+  assert.equal(turn.turnDeadlineEpochMs, null);
 });
 
 test("turn model describes a completed game", () => {
   const turn = gameModel(endedGameSnapshot).turn;
   assert.equal(turn.state, TURN_STATES.GAME_COMPLETE);
   assert.equal(turn.canShowActions, false);
+  assert.equal(turn.turnDeadlineEpochMs, null);
+});
+
+test("optional-action turn models preserve the raw authoritative deadline", () => {
+  assert.equal(gameModel(purchaseOptionalActionSnapshot).turn.turnDeadlineEpochMs, 1789661294567);
+  assert.equal(gameModel(jailedPlayerSnapshot).turn.turnDeadlineEpochMs, 1789661594567);
 });
 
 test("purchase action is exposed to its exact viewer", () => {

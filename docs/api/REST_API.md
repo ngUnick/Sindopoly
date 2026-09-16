@@ -114,10 +114,15 @@ administrative APIs.
 ## Snapshot and realtime relationship
 
 The game snapshot contains `gameId`, `stateVersion`, lifecycle status, active
-player, winner, visibility/invite metadata, typed optional action, and bounded
-players (`playerId`, nickname, position, money, properties, jail/bankrupt/AFK
-fields). Internal replay/finalization values are excluded. STOMP notifications
-are ephemeral wake-up signals; clients fetch this snapshot on connect, reconnect,
+player, nullable `turnDeadlineEpochMs`, winner, visibility/invite metadata,
+typed optional action, and bounded players (`playerId`, nickname, position,
+money, properties, jail/bankrupt/AFK fields). The deadline is a server-generated
+absolute epoch-millisecond value read from `game:{gameId}` in the same stable
+state read as the snapshot version. It is `null` when no authoritative deadline
+exists, including lobby, retained terminal, and compatibility-missing state.
+The browser may present this value but never declares or submits a timeout.
+Internal replay/finalization values are excluded. STOMP notifications are
+ephemeral wake-up signals; clients fetch this snapshot on connect, reconnect,
 newer version, gap, or ambiguity. See `../architecture/REALTIME_SYNCHRONIZATION.md`.
 
 ## Errors

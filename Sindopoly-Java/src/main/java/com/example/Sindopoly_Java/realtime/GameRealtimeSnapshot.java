@@ -9,6 +9,7 @@ public record GameRealtimeSnapshot(
         long stateVersion,
         String status,
         Integer playerTurn,
+        Long turnDeadlineEpochMs,
         Integer winner,
         String visibility,
         String inviteCode,

@@ -48,6 +48,10 @@ export function decodeGameSnapshot(value) {
     stateVersion,
     status: value.status,
     playerTurn: nullablePositiveId(value.playerTurn, "snapshot.playerTurn"),
+    turnDeadlineEpochMs: nullablePositiveInteger(
+      value.turnDeadlineEpochMs,
+      "snapshot.turnDeadlineEpochMs",
+    ),
     winner: nullablePositiveId(value.winner, "snapshot.winner"),
     visibility,
     inviteCode,
@@ -224,6 +228,10 @@ function nullableInteger(value, path) {
 
 function nullablePositiveId(value, path) {
   return value === null ? null : positiveId(value, path);
+}
+
+function nullablePositiveInteger(value, path) {
+  return value === null ? null : positiveInteger(value, path);
 }
 
 function version(value, path) {

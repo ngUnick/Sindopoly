@@ -104,6 +104,16 @@ test("newer authoritative snapshot replaces accepted truth", () => {
   assert.equal(state.acceptedVersion, 3);
 });
 
+test("newer authoritative snapshot replaces the accepted turn deadline", () => {
+  const previous = controllerWithSnapshot();
+  const newer = acceptedSnapshot({ stateVersion: 3, turnDeadlineEpochMs: 1789661294567 });
+  const state = reduce(previous, {
+    type: GAME_CONTROLLER_ACTIONS.SNAPSHOT_ACCEPTED,
+    snapshot: newer,
+  });
+  assert.equal(state.snapshot.turnDeadlineEpochMs, 1789661294567);
+});
+
 test("older snapshot is rejected without state mutation", () => {
   const state = controllerWithSnapshot({ stateVersion: 4 });
   const result = reduce(state, {
@@ -111,6 +121,16 @@ test("older snapshot is rejected without state mutation", () => {
     snapshot: acceptedSnapshot({ stateVersion: 3 }),
   });
   assert.equal(result, state);
+});
+
+test("older snapshot cannot roll the accepted turn deadline backward", () => {
+  const state = controllerWithSnapshot({ stateVersion: 4, turnDeadlineEpochMs: 1789661414567 });
+  const result = reduce(state, {
+    type: GAME_CONTROLLER_ACTIONS.SNAPSHOT_ACCEPTED,
+    snapshot: acceptedSnapshot({ stateVersion: 3, turnDeadlineEpochMs: 1789661294567 }),
+  });
+  assert.equal(result, state);
+  assert.equal(result.snapshot.turnDeadlineEpochMs, 1789661414567);
 });
 
 test("equal-version snapshot is idempotent and cannot replace accepted truth", () => {
@@ -122,6 +142,16 @@ test("equal-version snapshot is idempotent and cannot replace accepted truth", (
   });
   assert.equal(result, state);
   assert.equal(result.snapshot.playerTurn, 101);
+});
+
+test("equal-version snapshot cannot replace the accepted turn deadline", () => {
+  const state = controllerWithSnapshot();
+  const result = reduce(state, {
+    type: GAME_CONTROLLER_ACTIONS.SNAPSHOT_ACCEPTED,
+    snapshot: acceptedSnapshot({ turnDeadlineEpochMs: 1789661294567 }),
+  });
+  assert.equal(result, state);
+  assert.equal(result.snapshot.turnDeadlineEpochMs, 1789661234567);
 });
 
 test("wrong-game snapshot is rejected", () => {

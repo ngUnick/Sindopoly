@@ -23,6 +23,28 @@ test("decodes valid lobby, in-progress, and ended snapshots", () => {
   }
 });
 
+test("decodes authoritative deadline values and explicit no-deadline states", () => {
+  assert.equal(decodeGameSnapshot(inProgressSnapshot).turnDeadlineEpochMs, 1789661234567);
+  assert.equal(decodeGameSnapshot(lobbySnapshot).turnDeadlineEpochMs, null);
+  assert.equal(decodeGameSnapshot(endedGameSnapshot).turnDeadlineEpochMs, null);
+  assert.equal(
+    decodeGameSnapshot({
+      ...inProgressSnapshot,
+      turnDeadlineEpochMs: Number.MAX_SAFE_INTEGER,
+    }).turnDeadlineEpochMs,
+    Number.MAX_SAFE_INTEGER,
+  );
+});
+
+test("rejects missing or malformed authoritative deadlines", () => {
+  const missing = structuredClone(inProgressSnapshot);
+  delete missing.turnDeadlineEpochMs;
+  assertInvalid(() => decodeGameSnapshot(missing));
+  for (const deadline of ["1789661234567", 1.5, -1, 0, NaN, Infinity]) {
+    assertInvalid(() => decodeGameSnapshot({ ...inProgressSnapshot, turnDeadlineEpochMs: deadline }));
+  }
+});
+
 test("decodes the same snapshot for active and inactive viewers", () => {
   assert.deepEqual(
     decodeGameSnapshot(inProgressViewerScenarios.active.snapshot),

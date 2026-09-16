@@ -32,6 +32,7 @@ export const lobbySnapshot = {
   stateVersion: 1,
   status: "lobby",
   playerTurn: null,
+  turnDeadlineEpochMs: null,
   winner: null,
   visibility: "public",
   inviteCode: null,
@@ -47,6 +48,7 @@ export const inProgressSnapshot = {
   stateVersion: 2,
   status: "inProgress",
   playerTurn: 101,
+  turnDeadlineEpochMs: 1789661234567,
   winner: null,
   visibility: "public",
   inviteCode: null,
@@ -63,6 +65,7 @@ export const inProgressViewerScenarios = {
 export const purchaseOptionalActionSnapshot = {
   ...inProgressSnapshot,
   stateVersion: 3,
+  turnDeadlineEpochMs: 1789661294567,
   optionalAction: {
     type: "PURCHASE_PROPERTY",
     gameId: 101,
@@ -77,6 +80,7 @@ export const purchaseOptionalActionSnapshot = {
 export const jailedPlayerSnapshot = {
   ...inProgressSnapshot,
   stateVersion: 8,
+  turnDeadlineEpochMs: 1789661594567,
   optionalAction: {
     type: "PAY_JAIL_EXIT",
     gameId: 101,
@@ -97,12 +101,20 @@ export const endedGameSnapshot = {
   stateVersion: 21,
   status: "ended",
   playerTurn: 102,
+  turnDeadlineEpochMs: null,
   winner: 101,
   optionalAction: null,
   players: [
     { ...host, money: 5000, properties: [1, 5] },
     guest,
   ],
+};
+
+export const postTimeoutSnapshot = {
+  ...inProgressSnapshot,
+  stateVersion: 9,
+  playerTurn: 102,
+  turnDeadlineEpochMs: 1789661654567,
 };
 
 export const turnUpdatedEvent = {
@@ -209,6 +221,7 @@ export const snapshotFixtures = [
   inProgressSnapshot,
   purchaseOptionalActionSnapshot,
   jailedPlayerSnapshot,
+  postTimeoutSnapshot,
   endedGameSnapshot,
 ];
 
