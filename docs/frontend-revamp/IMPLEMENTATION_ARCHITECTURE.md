@@ -791,7 +791,55 @@ Future scrim and property-color tokens exist but are not applied to the
 background or 3D board. There are no gameplay, route, REST, STOMP, Redis,
 MariaDB, package or persistence changes.
 
-## 25. Git, documentation and risk
+## 25. FE-REVAMP-011 responsive GameShell scaffold
+
+`GameShell` is the page-composition boundary for the game route. It owns only
+the responsive grid, shell spacing, optional region surfaces, landmarks and
+outer sizing. It does not fetch snapshots, subscribe to STOMP, issue commands,
+derive presentation models, retain event history, own player state or manage
+Three.js resources. The public slot contract requires `board` and accepts
+optional `header`, `players`, `context` and `actions` React nodes. An optional
+region is not emitted when its node is absent, so it reserves no decorative box
+or grid track and cannot expose a hidden focus target.
+
+The production route is now `Game -> GameShell -> Board`, guarded by the local
+`GAME_SHELL_ENABLED` switch. It supplies only the existing Board through an
+explicit `legacy` compatibility modifier. Compatibility mode removes shell
+inset and gap so the current viewport-sized canvas, HUD, notifications and
+dialogs remain the single gameplay experience. No future player, event, turn,
+money, property or action content is fabricated. This path is temporary: later
+milestones populate real slots and eventually retire the Board-owned HUD, but
+must not duplicate a gameplay action while the legacy control remains live.
+
+The desktop grid activates the future player and context tracks only when those
+slots are populated. At 1501px and above their target widths are 236px and
+304px; from 1101px through 1500px they are 208px and 286px. The board-only path
+uses one shrink-safe `minmax(0, 1fr)` track. Tablet (761–1100px) and phone
+(760px and below) collapse populated regions to one column in DOM order so
+keyboard focus order remains predictable. Desktop targets viewport height;
+smaller layouts retain normal page flow rather than creating clipped or nested
+scroll regions. Insets and gaps use the FE-REVAMP-010 spacing tokens, and future
+region surfaces use the canonical surface, structural-border, radius and shadow
+tokens.
+
+`Game.jsx` remains the sole owner of `monopoly_bg.png`, its existing
+`background-size: cover` behavior and vignette. GameShell adds no background
+asset or full-page opaque surface. `Board.jsx`, the board and Dice GLBs, scene
+materials, lighting, camera, pawns, movement, audio, controls and lifecycle are
+unchanged. The shell removes the page-level fixed 800px wrapper and supplies
+`min-width: 0`, but the legacy Board still owns a viewport-sized root/canvas and
+absolutely positioned HUD. Those Board-internal assumptions remain a deliberate
+boundary for the HUD and scene-adapter milestones; functional phone parity is
+not claimed by this scaffold.
+
+Future migration should supply the real `MatchStatusHeader`, `PlayerRail`,
+`ContextPanel`/event history and `ActionTray` through these slots after the
+authoritative controller exists. GameShell must continue to consume rendered
+children only and must never become a second owner of game or transport state.
+There are no Redis, REST, STOMP, MariaDB, package or backend changes in this
+milestone.
+
+## 26. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn
