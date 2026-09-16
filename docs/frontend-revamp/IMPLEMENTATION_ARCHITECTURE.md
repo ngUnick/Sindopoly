@@ -732,7 +732,66 @@ state, and has no localStorage/sessionStorage, REST, STOMP protocol, Redis,
 MariaDB, background, board, Three.js or package impact. The server remains
 authoritative.
 
-## 24. Git, documentation and risk
+## 24. FE-REVAMP-010 design tokens and application theme bridge
+
+The implemented visual foundation keeps values in one pure JavaScript source,
+`src/styles/designTokens.js`. This is a necessary refinement of the earlier
+“CSS owns values” wording: Ant Design 5.12 derives palettes in JavaScript, and a
+local algorithm check showed that passing `var(--color-action-primary)` as a
+seed resolves derivative primary colors to black. The Ant bridge therefore
+consumes literal values from the canonical object. `tokens.css` is the
+test-synchronized, no-JavaScript custom-property artifact and remains the stable
+interface for future custom UI. Contract tests compare every root property with
+the canonical source so the two cannot drift silently.
+
+The semantic layer includes all approved foundation, text, action, interaction,
+status, active/self, four-player and property-group colors; the 4–48px spacing
+scale; control/panel/major/pill radii; 12–36px type scale; weights and line
+heights; low/high shadows; surface opacity and future scrims; 100–460ms motion
+with standard easing; reduced-motion values; and documented board through
+completion z-index layers. Focus uses the approved `#075EE8` 3px ring with a
+3px offset. The global rule applies only to `:focus-visible`; it never removes a
+native outline without replacement. Selection, tabular-number and future
+reduced-motion contracts are available without changing Board animation.
+
+`Noto Sans` is the first family in the interface stack, followed by Segoe UI,
+Arial and sans-serif. No font binary, web-font request or loading claim is added;
+systems without Noto Sans use the fallback. Existing legacy typography is not
+globally migrated in this milestone.
+
+One root Ant `ConfigProvider` now maps the canonical primary, text, surface,
+border, status, focus, radius, 44px control, font, shadow, motion and popup-layer
+decisions. The three page-local providers remain temporarily: Home and Search
+retain their established gold primary, while Game retains its green primary.
+Removing them now would create a broad visual regression. Existing global
+`.ant-*` rules in `index.css` also remain a legacy override boundary for later
+screen migration.
+
+Tailwind keeps preflight disabled and now exposes a deliberately small set of
+semantic CSS-variable aliases for surfaces, text, borders, actions, spacing,
+radii, shadows, interface font and layers. It remains the layout/responsive
+tool. Future complex gameplay states use co-located component CSS and semantic
+variables. Static colors, spacing, typography, radii and shadows should not be
+added as inline styles; inline styles remain valid for calculated scene/layout
+values or CSS-variable assignment. Existing arbitrary utilities and static
+inline declarations are retained until their owning screens migrate.
+
+Current styling ownership remains mixed by design during the strangler
+migration: `index.css` owns the reset, legacy Roboto rule, global Ant overrides,
+legacy Board/navigation, end-game and fireworks rules; page JSX owns Tailwind
+utilities and approximately twenty-one inline-style declarations; `App.css` is
+unused starter CSS; the nested providers own three legacy primary colors; and
+`Board.jsx` owns Three.js materials, lighting, camera and scene values. None of
+those legacy areas was broadly cleaned up here.
+
+The token stylesheet is imported once at the application root. The current
+`monopoly_bg.png` imports, Tailwind background alias, cover behavior, vignette,
+board/Dice GLB URLs, scene code, materials, lighting and camera are unchanged.
+Future scrim and property-color tokens exist but are not applied to the
+background or 3D board. There are no gameplay, route, REST, STOMP, Redis,
+MariaDB, package or persistence changes.
+
+## 25. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

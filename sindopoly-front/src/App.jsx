@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ConfigProvider } from 'antd';
 import {
   BrowserRouter as Router,
   Routes,
@@ -14,12 +15,14 @@ import { AuthProvider } from './AuthContext/AuthContext';
 import { ProtectedRoute } from './AuthContext/ProtectedRoute';
 import Statistics from './pages/Statistics/Statistics';
 import Lobby from './pages/Lobby/Lobby';
+import { APP_ANT_THEME } from './styles/antTheme.js';
 
 
 function App() {
   return (
-    <div className="flex flex-col min-h-screen m-0 p-0">
-      <Router>
+    <ConfigProvider theme={APP_ANT_THEME}>
+      <div className="flex flex-col min-h-screen m-0 p-0">
+        <Router>
             {/* <Navbar /> */}
             <AuthProvider>
               <Routes>
@@ -32,8 +35,9 @@ function App() {
                 <Route path="/statistics" element={<ProtectedRoute><Statistics /></ProtectedRoute>}/>
               </Routes>
             </AuthProvider>
-      </Router>
-    </div>
+        </Router>
+      </div>
+    </ConfigProvider>
   );
 }
 

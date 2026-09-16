@@ -1,0 +1,122 @@
+/* Values mirror designTokens.js; the token contract test prevents source drift. */
+:root {
+  --color-shell: #172522;
+  --color-surface: #FFF8E8;
+  --color-surface-elevated: #FFFCF4;
+  --color-surface-strong: #233D38;
+  --color-border-structural: #C8BAA2;
+  --color-border-control: #81725F;
+  --color-text-primary: #1B2927;
+  --color-text-secondary: #435754;
+  --color-text-subdued: #5F706D;
+  --color-text-inverse: #FFF9EF;
+  --color-action-primary: #0F6B62;
+  --color-action-primary-hover: #0B5B54;
+  --color-action-primary-active: #084A45;
+  --color-action-secondary: #EFE6D6;
+  --color-action-destructive: #A33A35;
+  --color-focus: #075EE8;
+  --color-selection: #D7EFEA;
+  --color-surface-hover: #F2E9D9;
+  --color-status-success-text: #176B47;
+  --color-status-success-surface: #E3F3E9;
+  --color-status-warning-text: #754A00;
+  --color-status-warning-surface: #FFF0C2;
+  --color-status-error-text: #8B2C29;
+  --color-status-error-surface: #F9E1DE;
+  --color-status-information-text: #245C78;
+  --color-status-information-surface: #E2F0F5;
+  --color-active-player-surface: #FFF0B8;
+  --color-active-player-border: #B27600;
+  --color-self-surface: #DCEFEB;
+  --color-self-border: #32786F;
+  --color-player-1: #00796B;
+  --color-player-2: #B23A48;
+  --color-player-3: #3F60B5;
+  --color-player-4: #8B5A00;
+  --color-property-brown: #7A4F35;
+  --color-property-cyan: #2E7D91;
+  --color-property-magenta: #A13D73;
+  --color-property-orange: #B65D1E;
+  --color-property-red: #B23A48;
+  --color-property-yellow: #9A7400;
+  --color-property-green: #34744B;
+  --color-property-blue: #3F60B5;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --radius-control: 8px;
+  --radius-panel: 12px;
+  --radius-major: 18px;
+  --radius-pill: 999px;
+  --font-family-interface: "Noto Sans", "Segoe UI", Arial, sans-serif;
+  --font-weight-regular: 400;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 20px;
+  --font-size-xl: 28px;
+  --font-size-display: 36px;
+  --line-height-compact: 1.4;
+  --line-height-default: 1.5;
+  --line-height-relaxed: 1.65;
+  --shadow-low: 0 2px 8px rgba(23, 37, 34, 0.16);
+  --shadow-high: 0 12px 30px rgba(23, 37, 34, 0.24);
+  --surface-opacity-standard: 0.96;
+  --surface-opacity-elevated: 0.98;
+  --color-scrim-board-stage: rgba(23, 37, 34, 0.78);
+  --color-scrim-background-wide: rgba(23, 37, 34, 0.42);
+  --motion-duration-instant: 100ms;
+  --motion-duration-short: 180ms;
+  --motion-duration-medium: 280ms;
+  --motion-duration-long: 460ms;
+  --motion-duration-reduced: 1ms;
+  --motion-easing-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --layer-board: 0;
+  --layer-annotations: 10;
+  --layer-chrome: 20;
+  --layer-action-tray: 30;
+  --layer-popover: 1000;
+  --layer-modal: 1100;
+  --layer-toast: 1200;
+  --layer-completion: 1300;
+  --focus-ring-width: 3px;
+  --focus-ring-offset: 3px;
+  --control-min-height: 44px;
+}
+
+::selection {
+  color: var(--color-text-primary);
+  background: var(--color-selection);
+}
+
+:where(
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.u-tabular-numbers {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-instant: var(--motion-duration-reduced);
+    --motion-duration-short: var(--motion-duration-reduced);
+    --motion-duration-medium: var(--motion-duration-reduced);
+    --motion-duration-long: var(--motion-duration-reduced);
+  }
+}
