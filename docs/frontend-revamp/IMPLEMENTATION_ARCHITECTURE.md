@@ -839,7 +839,81 @@ children only and must never become a second owner of game or transport state.
 There are no Redis, REST, STOMP, MariaDB, package or backend changes in this
 milestone.
 
-## 26. Git, documentation and risk
+## 26. FE-REVAMP-012 authoritative controller reducer
+
+`src/features/game/controller/gameControllerReducer.js` is the pure,
+framework-independent state machine intended to sit beneath the future
+`useAuthoritativeGame` hook. Its bounded state contains one immutable game
+identity, the accepted decoded snapshot and version, connection status, command
+lifecycle, recovery reason/event-gap metadata, a snapshot-refresh signal and the
+latest observed event version. It stores no viewer identity, React values, API
+or STOMP clients, timers, promises, DOM/Three.js objects, presentation history
+or Redis concepts.
+
+The explicit reducer inputs are `SNAPSHOT_ACCEPTED`, `COMMAND_STARTED`,
+`COMMAND_SUCCEEDED`, `COMMAND_FAILED`, `CONNECTION_CHANGED`,
+`REALTIME_EVENT_RECEIVED`, `RECOVERY_STARTED` and `RESET`. Command IDs are
+injected by the future orchestration layer; the reducer never generates an ID or
+submits/retries a command. Command lifecycle states are `IDLE`, `PENDING`,
+`AWAITING_SNAPSHOT`, `FAILED`, `STALE` and `BLOCKED`. The pure
+`canSubmitGameCommand` selector means only that controller/transport lifecycle
+is safe; backend snapshots and presentation models still decide whether a roll,
+purchase or other gameplay action is authorized.
+
+Only a same-game validated snapshot may advance authoritative frontend truth.
+A version newer than the accepted version replaces the snapshot, an older
+version is rejected by identity, and an equal version confirms recovery
+freshness without replacing the already accepted snapshot object. Command
+results may record a reconciliation target but never advance `acceptedVersion`
+or the expected command version. After success, the controller remains
+`AWAITING_SNAPSHOT` until an accepted snapshot reaches the result version. This
+prevents a response DTO from masquerading as complete game truth.
+
+A normalized `STALE_STATE` failure blocks commands, requests a snapshot and is
+never blind-retried. `NETWORK`, `SERVER`, `INVALID_PAYLOAD` and `UNKNOWN` leave
+the command outcome ambiguous and likewise require snapshot reconciliation.
+`VALIDATION` and ordinary `CONFLICT` retain the accepted snapshot as safe and
+permit a later explicit intent. `UNAUTHENTICATED`, `FORBIDDEN` and `NOT_FOUND`
+enter a blocking lifecycle for later session/navigation handling. The reducer
+stores only bounded error facts: code, HTTP status, reason, state version and
+retriability; it excludes messages, causes, diagnostics and backend details.
+
+Connection status is explicit (`CONNECTED`, `DEGRADED`, `RECONNECTING`,
+`OFFLINE`, `RECOVERED`) and never inferred from snapshot age or animation.
+Degraded, reconnecting and offline transitions disable commands and require an
+authoritative recovery read when a snapshot was already accepted. Changing
+connection status does not mutate snapshot truth or clear recovery; an accepted
+snapshot performs reconciliation, and a connected/recovered status then permits
+commands if every other lifecycle gate is safe.
+
+Validated realtime events remain notifications that authoritative state may
+have changed. Same/older or cross-game events are ignored. A contiguous newer
+version requests a snapshot refresh; a jump beyond the accepted/observed
+version records bounded `{ stateVersion, occurredAt }` gap metadata and a
+recovery reason. Event payload details never update the snapshot. Contiguous
+bursts retain only the newest observed version, and snapshot acceptance clears
+the refresh/gap signal only after it catches up. The gap metadata can be passed
+to FE-REVAMP-009 `markEventHistoryGap` without placing presentation history in
+controller state or fabricating missed events.
+
+`RESET` constructs fresh state for an explicitly supplied valid game identity
+and clears snapshot/version, command, recovery, refresh and event metadata.
+Invalid identities fail at construction and cannot silently switch a live
+controller. State transitions shallow-copy and freeze the bounded lifecycle
+objects; already decoded immutable snapshots remain compatible with the
+ownership projection and FE-REVAMP-008 `GameViewModel`.
+
+The legacy module-level `gameCommandState.js` maps/sets, `realtimeSync.js`,
+`useGameRealtime`, Board/Lobby polling, snapshot reads and STOMP ownership remain
+the live compatibility path. Nothing is wired to the new reducer yet. The
+backlog row's broader mock HTTP/STOMP race, retry, cleanup and polling acceptance
+belongs to the future gateway/hook orchestration that mounts this reducer; this
+bounded milestone deliberately adds no side effects. The reducer must continue
+to have no React, HTTP, STOMP, DOM, CSS, Three.js, Greek-content, backend or
+game-rule dependency. Redis, REST/STOMP protocols, MariaDB, Board, GameShell,
+background, packages and visible application behavior are unchanged.
+
+## 27. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn
