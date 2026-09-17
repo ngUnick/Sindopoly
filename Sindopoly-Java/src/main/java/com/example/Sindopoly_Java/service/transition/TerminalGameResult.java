@@ -23,5 +23,20 @@ public record TerminalGameResult(
         }
     }
 
-    public record TerminalPlayerResult(int playerId, int money, boolean winner) { }
+    /**
+     * Value fields are nullable only for the brief compatibility window of terminal JSON
+     * written before FE-REVAMP-019; all newly completed games freeze them atomically.
+     */
+    public record TerminalPlayerResult(
+            int playerId,
+            int money,
+            Integer propertyValue,
+            Integer totalValue,
+            Integer rank,
+            boolean winner) {
+
+        public TerminalPlayerResult(int playerId, int money, boolean winner) {
+            this(playerId, money, null, null, null, winner);
+        }
+    }
 }

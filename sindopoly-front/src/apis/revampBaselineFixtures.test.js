@@ -11,7 +11,7 @@ import {
 } from "../test-fixtures/gameRealtimeFixtures.js";
 
 const snapshotKeys = [
-  "gameId", "inviteCode", "optionalAction", "playerTurn", "players",
+  "finalResult", "gameId", "inviteCode", "optionalAction", "playerTurn", "players",
   "stateVersion", "status", "turnDeadlineEpochMs", "visibility", "winner",
 ];
 const playerKeys = [
@@ -19,13 +19,13 @@ const playerKeys = [
   "playerId", "position", "properties",
 ];
 
-test("baseline snapshots preserve the current DTO shape with only the deadline projection", () => {
+test("baseline snapshots preserve the current DTO shape with deadline and terminal result projections", () => {
   for (const snapshot of snapshotFixtures) {
     assert.deepEqual(Object.keys(snapshot).sort(), snapshotKeys);
     assert.equal("die1" in snapshot, false);
     assert.equal("die2" in snapshot, false);
     assert.equal("turnDeadlineEpochMs" in snapshot, true);
-    assert.equal("finalResult" in snapshot, false);
+    assert.equal("finalResult" in snapshot, true);
     snapshot.players.forEach(player => assert.deepEqual(Object.keys(player).sort(), playerKeys));
   }
 });

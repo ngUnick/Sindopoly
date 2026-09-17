@@ -4,6 +4,7 @@ import com.example.Sindopoly_Java.exception.GameNotFoundException;
 import com.example.Sindopoly_Java.model.Player;
 import com.example.Sindopoly_Java.repository.PlayerRepository;
 import com.example.Sindopoly_Java.service.transition.GameSnapshot;
+import com.example.Sindopoly_Java.service.transition.GameCompletionResultService;
 import com.example.Sindopoly_Java.service.transition.RedisGameTransitionStore;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -19,11 +20,14 @@ import java.util.Map;
 public class GameRealtimeSnapshotService {
     private final RedisGameTransitionStore store;
     private final PlayerRepository players;
+    private final GameCompletionResultService completionResults;
     private final ObjectMapper mapper;
 
-    public GameRealtimeSnapshotService(RedisGameTransitionStore store, PlayerRepository players, ObjectMapper mapper) {
+    public GameRealtimeSnapshotService(RedisGameTransitionStore store, PlayerRepository players,
+                                       GameCompletionResultService completionResults, ObjectMapper mapper) {
         this.store = store;
         this.players = players;
+        this.completionResults = completionResults;
         this.mapper = mapper;
     }
 
@@ -36,9 +40,13 @@ public class GameRealtimeSnapshotService {
                 .map(id -> player(id, names.getOrDefault(id, "Unknown"), snapshot.players().get(id)))
                 .toList();
         Map<String, String> game = snapshot.game();
+        Integer winner = nullableInteger(game.get("winner"));
+        GameCompletionResult finalResult = "ended".equalsIgnoreCase(game.get("status"))
+                ? completionResults.project(snapshot, names, requiredWinner(winner), game.get("terminalResult"))
+                : null;
         return new GameRealtimeSnapshot(gameId, snapshot.stateVersion(), game.get("status"),
                 nullableInteger(game.get("playerTurn")), nullableLong(game.get("turnDeadlineEpochMs")),
-                nullableInteger(game.get("winner")),
+                winner, finalResult,
                 game.get("visibility"), game.get("inviteCode"), optionalAction(game.get("optionalAction")),
                 playerSnapshots);
     }
@@ -91,5 +99,10 @@ public class GameRealtimeSnapshotService {
     private Long nullableLong(String raw) {
         if (raw == null || "null".equalsIgnoreCase(raw)) return null;
         return Long.valueOf(raw);
+    }
+
+    private int requiredWinner(Integer winner) {
+        if (winner == null) throw new IllegalStateException("Terminal winner is missing");
+        return winner;
     }
 }

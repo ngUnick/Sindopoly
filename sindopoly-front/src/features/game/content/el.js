@@ -86,6 +86,17 @@ export const GAMEPLAY_CONTENT = Object.freeze({
   acknowledge: "Εντάξει",
 });
 
+export const END_GAME_CONTENT = Object.freeze({
+  title: "Τέλος Παιχνιδιού",
+  winner: "Νικητής",
+  finalBalance: "Τελικό υπόλοιπο",
+  propertyValue: "Αξία ιδιοκτησιών",
+  totalValue: "Συνολικό κεφάλαιο",
+  rank: "Κατάταξη",
+  returnHome: "Πίσω στην Αρχική",
+  resultUnavailable: "Το έγκυρο τελικό αποτέλεσμα δεν είναι διαθέσιμο.",
+});
+
 export const HUD_CONTENT = Object.freeze({
   matchStatus: "Κατάσταση παιχνιδιού",
   players: "Παίκτες",
@@ -147,6 +158,10 @@ export function formatPropertyCount(count) {
 
 export function formatPlayerIdentity(playerId) {
   return Number.isSafeInteger(playerId) && playerId > 0 ? `#${playerId}` : "—";
+}
+
+export function formatRank(rank) {
+  return Number.isSafeInteger(rank) && rank > 0 ? `${greekNumber.format(rank)}η θέση` : "—";
 }
 
 export function formatSignedMoney(amount) {

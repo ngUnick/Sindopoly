@@ -36,6 +36,58 @@ test("decodes authoritative deadline values and explicit no-deadline states", ()
   );
 });
 
+test("decodes an immutable authoritative terminal result and explicit non-terminal null", () => {
+  assert.equal(decodeGameSnapshot(inProgressSnapshot).finalResult, null);
+  const decoded = decodeGameSnapshot(endedGameSnapshot);
+  assert.equal(decoded.finalResult.winnerPlayerId, 101);
+  assert.deepEqual(decoded.finalResult.standings, endedGameSnapshot.finalResult.standings);
+  assert.equal(Object.isFrozen(decoded.finalResult), true);
+  assert.equal(Object.isFrozen(decoded.finalResult.standings), true);
+  assert.equal(Object.isFrozen(decoded.finalResult.standings[0]), true);
+});
+
+test("rejects winner contradictions, malformed values, arithmetic mismatches, and duplicate identities", () => {
+  const mutate = callback => {
+    const fixture = structuredClone(endedGameSnapshot);
+    callback(fixture);
+    assertInvalid(() => decodeGameSnapshot(fixture));
+  };
+  mutate(fixture => { fixture.finalResult.winnerPlayerId = 102; });
+  mutate(fixture => { fixture.finalResult.standings[0].playerId = "101"; });
+  mutate(fixture => { fixture.finalResult.standings[0].cash = "5000"; });
+  mutate(fixture => { fixture.finalResult.standings[0].propertyValue = -1; });
+  mutate(fixture => { fixture.finalResult.standings[0].totalValue += 1; });
+  mutate(fixture => { fixture.finalResult.standings[1].playerId = 101; });
+  mutate(fixture => { fixture.finalResult.standings = {}; });
+  mutate(fixture => { fixture.finalResult.standings[1].winner = true; });
+});
+
+test("rejects missing results, invalid ordering and ranks, but tolerates unknown additive fields", () => {
+  const missing = structuredClone(endedGameSnapshot);
+  delete missing.finalResult;
+  assertInvalid(() => decodeGameSnapshot(missing));
+  assertInvalid(() => decodeGameSnapshot({ ...inProgressSnapshot, finalResult: endedGameSnapshot.finalResult }));
+
+  const outOfOrder = structuredClone(endedGameSnapshot);
+  outOfOrder.finalResult.standings.reverse();
+  assertInvalid(() => decodeGameSnapshot(outOfOrder));
+  const invalidRank = structuredClone(endedGameSnapshot);
+  invalidRank.finalResult.standings[1].rank = 3;
+  assertInvalid(() => decodeGameSnapshot(invalidRank));
+
+  const additive = structuredClone(endedGameSnapshot);
+  additive.finalResult.futureField = true;
+  additive.finalResult.standings[0].futureField = true;
+  assert.deepEqual(decodeGameSnapshot(additive), endedGameSnapshot);
+});
+
+test("terminal result decoding does not mutate its input", () => {
+  const raw = structuredClone(endedGameSnapshot);
+  const before = structuredClone(raw);
+  decodeGameSnapshot(raw);
+  assert.deepEqual(raw, before);
+});
+
 test("rejects missing or malformed authoritative deadlines", () => {
   const missing = structuredClone(inProgressSnapshot);
   delete missing.turnDeadlineEpochMs;

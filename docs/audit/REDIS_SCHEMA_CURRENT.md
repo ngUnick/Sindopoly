@@ -58,8 +58,12 @@ single Redis deployment; Redis Cluster slot-safe operation is not supported.
 
 `turnDeadlineEpochMs` is the server-owned deadline for the current actionable
 phase. `terminalResult` is bounded JSON containing all durable finalization
-inputs. Completion removes the deadline and retains terminal state for the
-terminal TTL; polling and retries do not refresh it.
+inputs plus the terminal money, canonical property value, total value,
+competition rank, and winner flag used by the public completion projection.
+FE-REVAMP-019 extended this existing JSON value without adding a key or field;
+older retained money/winner-only rows remain readable for their bounded TTL.
+Completion removes the deadline and retains terminal state for the terminal TTL;
+polling and retries do not refresh it.
 
 `stateVersion` is a base-10 integer. `turnOrder` is a JSON array of one to four
 unique positive decimal player IDs, for example `[41,7,103]`; it is created as

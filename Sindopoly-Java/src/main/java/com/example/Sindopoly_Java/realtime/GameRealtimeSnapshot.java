@@ -11,6 +11,7 @@ public record GameRealtimeSnapshot(
         Integer playerTurn,
         Long turnDeadlineEpochMs,
         Integer winner,
+        GameCompletionResult finalResult,
         String visibility,
         String inviteCode,
         JsonNode optionalAction,

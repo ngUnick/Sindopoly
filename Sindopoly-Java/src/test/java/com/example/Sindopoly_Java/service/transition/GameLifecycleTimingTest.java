@@ -46,22 +46,26 @@ class GameLifecycleTimingTest {
     void elapsedLimitIsNotTerminalBeforeBoundaryAndCompletesAtBoundary() {
         RedisGameTransitionStore store = mock(RedisGameTransitionStore.class);
         GameFinalizationService finalization = mock(GameFinalizationService.class);
-        SquareRepository squares = mock(SquareRepository.class);
+        GameCompletionResultService completionResults = mock(GameCompletionResultService.class);
         GameEventPublisher events = mock(GameEventPublisher.class);
         Instant start = Instant.parse("2026-08-25T10:00:00Z");
         GameSnapshot snapshot = snapshot("inProgress", 0, Map.of(
                 "creationTime", "2026-08-25T09:59:00Z", "startTime", start.toString(),
                 "maxTime", "60", "maxMoney", "5000", "turnDeadlineEpochMs", "1"));
         when(store.load(41)).thenReturn(snapshot);
+        when(completionResults.calculate(snapshot)).thenReturn(new GameCompletionResultService.CalculatedResult(
+                41, List.of(
+                new GameCompletionResultService.CalculatedStanding(41, 100, 0, 100, 1, true),
+                new GameCompletionResultService.CalculatedStanding(42, 100, 0, 100, 1, false))));
 
-        GameLifecycleCommandService before = new GameLifecycleCommandService(store, squares, finalization,
+        GameLifecycleCommandService before = new GameLifecycleCommandService(store, completionResults, finalization,
                 timing(start.plusSeconds(59)), mapper, events);
         assertThat(before.processScheduledGame(41)).isFalse();
         verify(store, never()).commit(anyInt(), any(), any(), any(), any());
 
         when(store.commit(anyInt(), any(), any(), any(), any())).thenReturn(new TransitionExecution(
                 TransitionExecution.Status.APPLIED, 1, mapper.createObjectNode()));
-        GameLifecycleCommandService boundary = new GameLifecycleCommandService(store, squares, finalization,
+        GameLifecycleCommandService boundary = new GameLifecycleCommandService(store, completionResults, finalization,
                 timing(start.plusSeconds(60)), mapper, events);
         assertThat(boundary.processScheduledGame(41)).isTrue();
         ArgumentCaptor<GameTransitionPlan> plan = ArgumentCaptor.forClass(GameTransitionPlan.class);

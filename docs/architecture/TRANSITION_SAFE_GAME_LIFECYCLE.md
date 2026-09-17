@@ -29,7 +29,11 @@ Elapsed game time is `Clock.now - startTime`; legacy `timer` is not an
 authority. Completion freezes status, winner, version, and bounded
 `terminalResult` JSON in one CAS, and removes the deadline/optional action.
 The JSON contains deterministic finalization/game identity, completion time,
-duration, winner, and at most four player money/winner inputs.
+duration, winner, and at most four player rows. Each new row freezes money,
+canonical owned-property purchase value, total value, competition rank, and
+winner status. This reuses the existing field and key lifecycle; it adds no
+Redis key or hash field. Older retained JSON containing only money/winner remains
+readable and is recalculated server-side during the bounded compatibility window.
 
 `sindopoly.game.terminal-retention-seconds` defaults to 300 seconds. Completion
 applies it to the game, membership, command replay, and deck keys. Redis expiry

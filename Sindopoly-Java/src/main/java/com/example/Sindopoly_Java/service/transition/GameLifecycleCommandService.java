@@ -1,9 +1,6 @@
 package com.example.Sindopoly_Java.service.transition;
 
-import com.example.Sindopoly_Java.model.Square;
-import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -26,18 +22,18 @@ import java.util.UUID;
 public class GameLifecycleCommandService {
     private static final Logger log = LoggerFactory.getLogger(GameLifecycleCommandService.class);
     private final RedisGameTransitionStore store;
-    private final SquareRepository squares;
+    private final GameCompletionResultService completionResults;
     private final GameFinalizationService finalization;
     private final GameTimingService timing;
     private final ObjectMapper mapper;
     private final GameEventPublisher events;
 
     @Autowired
-    public GameLifecycleCommandService(RedisGameTransitionStore store, SquareRepository squares,
+    public GameLifecycleCommandService(RedisGameTransitionStore store, GameCompletionResultService completionResults,
                                        GameFinalizationService finalization, GameTimingService timing,
                                        ObjectMapper mapper, GameEventPublisher events) {
         this.store = store;
-        this.squares = squares;
+        this.completionResults = completionResults;
         this.finalization = finalization;
         this.timing = timing;
         this.mapper = mapper;
@@ -61,8 +57,9 @@ public class GameLifecycleCommandService {
 
     private void complete(GameSnapshot snapshot) {
         long version = snapshot.stateVersion();
-        int winner = winner(snapshot);
-        TerminalGameResult terminal = terminalResult(snapshot, winner);
+        GameCompletionResultService.CalculatedResult calculated = completionResults.calculate(snapshot);
+        int winner = calculated.winnerPlayerId();
+        TerminalGameResult terminal = terminalResult(snapshot, calculated);
         String commandId = UUID.nameUUIDFromBytes(
                 ("scheduler:end:" + snapshot.gameId() + ":" + version).getBytes(StandardCharsets.UTF_8)).toString();
         CommandMetadata metadata = new CommandMetadata(commandId, version);
@@ -98,16 +95,8 @@ public class GameLifecycleCommandService {
                 || snapshot.players().values().stream().anyMatch(player -> money(player) >= maxMoney);
     }
 
-    private int winner(GameSnapshot snapshot) {
-        List<Integer> order = TurnOrder.parseRequired(mapper, snapshot);
-        return snapshot.members().stream().map(Integer::parseInt)
-                .max(Comparator.comparingInt((Integer id) -> assetValue(snapshot.players().get(id)))
-                        .thenComparingInt(id -> money(snapshot.players().get(id)))
-                        .thenComparingInt(id -> -order.indexOf(id)))
-                .orElseThrow(() -> new IllegalStateException("Cannot complete a game without players"));
-    }
-
-    private TerminalGameResult terminalResult(GameSnapshot snapshot, int winner) {
+    private TerminalGameResult terminalResult(GameSnapshot snapshot,
+                                              GameCompletionResultService.CalculatedResult calculated) {
         Instant created = requiredInstant(snapshot, "creationTime");
         Instant started = requiredInstant(snapshot, "startTime");
         Instant completed = timing.now();
@@ -115,13 +104,13 @@ public class GameLifecycleCommandService {
         if (duration > Integer.MAX_VALUE) throw new IllegalStateException("Game duration exceeds Stats capacity");
         String identity = "game-finalization:" + snapshot.gameId() + ":" + created;
         String finalizationId = UUID.nameUUIDFromBytes(identity.getBytes(StandardCharsets.UTF_8)).toString();
-        List<TerminalGameResult.TerminalPlayerResult> players = TurnOrder.parseRequired(mapper, snapshot).stream()
-                .filter(id -> snapshot.members().contains(String.valueOf(id)))
-                .map(id -> new TerminalGameResult.TerminalPlayerResult(
-                        id, money(snapshot.players().get(id)), id == winner))
+        List<TerminalGameResult.TerminalPlayerResult> players = calculated.standings().stream()
+                .map(player -> new TerminalGameResult.TerminalPlayerResult(
+                        player.playerId(), player.cash(), player.propertyValue(), player.totalValue(),
+                        player.rank(), player.winner()))
                 .toList();
         return new TerminalGameResult(finalizationId, snapshot.gameId(), created.toEpochMilli(),
-                completed.toEpochMilli(), (int) duration, winner, players);
+                completed.toEpochMilli(), (int) duration, calculated.winnerPlayerId(), players);
     }
 
     private void finalizeDurably(TerminalGameResult result) { finalization.finalizeGame(result); }
@@ -142,23 +131,9 @@ public class GameLifecycleCommandService {
         }
     }
 
-    private int assetValue(Map<String, String> player) {
-        int total = money(player);
-        for (Integer id : properties(player)) {
-            Integer price = squares.findById(id).map(Square::getPrice).orElse(0);
-            total += price == null ? 0 : price;
-        }
-        return total;
-    }
-
     private int money(Map<String, String> player) {
         if (player == null) throw new IllegalStateException("Terminal player state is missing");
         return Integer.parseInt(player.getOrDefault("money", "0"));
-    }
-
-    private List<Integer> properties(Map<String, String> player) {
-        try { return mapper.readValue(player.getOrDefault("properties", "[]"), new TypeReference<>() { }); }
-        catch (JsonProcessingException exception) { throw new IllegalStateException("Malformed properties JSON", exception); }
     }
 
     private String json(Object value) {

@@ -7,6 +7,7 @@ import {
   formatGameEventFact,
   formatJailPaymentAction,
   formatMoney,
+  formatRank,
   formatPlayingNow,
   formatPurchaseAction,
   formatWaitingForPlayer,
@@ -98,7 +99,7 @@ export function buildGameViewModel({
       activePlayerId: activePlayer?.playerId ?? null,
       boardMetadata,
     }),
-    completion: buildCompletionViewModel(snapshot, playersById),
+    completion: buildCompletionViewModel(snapshot),
     connection,
   });
 }
@@ -273,25 +274,74 @@ export function buildPropertyViewModels({
   }));
 }
 
-function buildCompletionViewModel(snapshot, playersById) {
+export function buildCompletionViewModel(snapshot) {
   if (snapshot.status !== "ended") {
     return Object.freeze({
       completed: false,
+      available: false,
       winnerPlayerId: null,
       winnerName: null,
       statusText: null,
+      standings: Object.freeze([]),
     });
   }
-  const winnerName = playersById.get(snapshot.winner)?.nickname ?? null;
+  const result = snapshot.finalResult;
+  if (!result || result.winnerPlayerId !== snapshot.winner || !Array.isArray(result.standings)) {
+    return Object.freeze({
+      completed: true,
+      available: false,
+      winnerPlayerId: snapshot.winner,
+      winnerName: null,
+      statusText: GAMEPLAY_CONTENT.gameCompleted,
+      standings: Object.freeze([]),
+    });
+  }
+  const standings = Object.freeze(result.standings.map(standing => Object.freeze({
+    playerId: standing.playerId,
+    nickname: standing.nickname,
+    cash: standing.cash,
+    cashText: formatMoney(standing.cash),
+    propertyValue: standing.propertyValue,
+    propertyValueText: formatMoney(standing.propertyValue),
+    totalValue: standing.totalValue,
+    totalValueText: formatMoney(standing.totalValue),
+    rank: standing.rank,
+    rankText: formatRank(standing.rank),
+    winner: standing.winner,
+  })));
+  const winnerName = standings.find(standing => standing.winner)?.nickname ?? null;
   return Object.freeze({
     completed: true,
-    winnerPlayerId: snapshot.winner,
+    available: true,
+    winnerPlayerId: result.winnerPlayerId,
     winnerName,
     statusText: formatGameEventFact({
       type: GAME_EVENT_FACT_TYPES.COMPLETION,
       winnerName,
     }),
+    standings,
   });
+}
+
+/** Defensively copies the already formatted route state; it never reconstructs result values. */
+export function readCompletionNavigationState(state) {
+  const completion = state?.completion;
+  if (!completion?.completed || !completion.available || !Array.isArray(completion.standings)
+      || !Number.isSafeInteger(completion.winnerPlayerId)) return null;
+  const standings = completion.standings.map(standing => {
+    if (!Number.isSafeInteger(standing?.playerId) || typeof standing.nickname !== "string"
+        || !Number.isSafeInteger(standing.cash) || typeof standing.cashText !== "string"
+        || !Number.isSafeInteger(standing.propertyValue) || typeof standing.propertyValueText !== "string"
+        || !Number.isSafeInteger(standing.totalValue) || typeof standing.totalValueText !== "string"
+        || !Number.isSafeInteger(standing.rank) || typeof standing.rankText !== "string"
+        || typeof standing.winner !== "boolean") return null;
+    return Object.freeze({ ...standing });
+  });
+  if (standings.some(standing => standing == null)
+      || standings.filter(standing => standing.winner).length !== 1
+      || !standings.some(standing => standing.winner
+        && standing.playerId === completion.winnerPlayerId)) return null;
+  return Object.freeze({ ...completion, standings: Object.freeze(standings) });
 }
 
 function turnModel(

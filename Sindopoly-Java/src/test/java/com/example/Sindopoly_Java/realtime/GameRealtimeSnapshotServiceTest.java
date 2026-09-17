@@ -3,7 +3,9 @@ package com.example.Sindopoly_Java.realtime;
 import com.example.Sindopoly_Java.model.Player;
 import com.example.Sindopoly_Java.repository.PlayerRepository;
 import com.example.Sindopoly_Java.service.transition.GameSnapshot;
+import com.example.Sindopoly_Java.service.transition.GameCompletionResultService;
 import com.example.Sindopoly_Java.service.transition.RedisGameTransitionStore;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
 
 class GameRealtimeSnapshotServiceTest {
     private static final long DEADLINE = 1_789_661_234_567L;
@@ -39,6 +45,7 @@ class GameRealtimeSnapshotServiceTest {
         assertEquals(DEADLINE, projected.turnDeadlineEpochMs());
         assertEquals(List.of(9, 4), projected.players().stream().map(GamePlayerSnapshot::playerId).toList());
         assertEquals(List.of(1, 3), projected.players().get(0).properties());
+        assertNull(projected.finalResult());
         verify(fixture.store(), times(1)).loadStable(7);
     }
 
@@ -47,10 +54,12 @@ class GameRealtimeSnapshotServiceTest {
         Fixture fixture = fixture(
                 snapshot("lobby", 1, Map.of("turnOrder", "[9,4]")),
                 snapshot("ended", 21, Map.of(
-                        "playerTurn", "4", "winner", "9", "turnOrder", "[9,4]")));
+                        "playerTurn", "4", "winner", "9", "turnOrder", "[9,4]",
+                        "terminalResult", "{}")));
 
         assertNull(fixture.service().load(7).turnDeadlineEpochMs());
         assertNull(fixture.service().load(7).turnDeadlineEpochMs());
+        assertEquals(9, fixture.completion().winnerPlayerId());
     }
 
     @Test
@@ -132,16 +141,41 @@ class GameRealtimeSnapshotServiceTest {
         assertTrue(lobbyJson.get("turnDeadlineEpochMs").isNull());
         assertEquals(1, activeJson.properties().stream()
                 .filter(entry -> entry.getKey().equals("turnDeadlineEpochMs")).count());
+        assertTrue(activeJson.has("finalResult"));
+        assertTrue(activeJson.get("finalResult").isNull());
+    }
+
+    @Test
+    void serializesExactAuthoritativeTerminalResultFieldNames() throws Exception {
+        Fixture fixture = fixture(snapshot("ended", 21, Map.of(
+                "playerTurn", "4", "winner", "9", "turnOrder", "[9,4]",
+                "terminalResult", "{}")));
+
+        JsonNode json = mapper.readTree(mapper.writeValueAsString(fixture.service().load(7)));
+
+        assertEquals(9, json.path("finalResult").path("winnerPlayerId").asInt());
+        JsonNode first = json.path("finalResult").path("standings").get(0);
+        assertEquals(Set.of("playerId", "nickname", "cash", "propertyValue", "totalValue", "rank", "winner"),
+                mapper.convertValue(first, new TypeReference<Map<String, Object>>() { }).keySet());
+        assertEquals(1600, first.path("cash").asInt());
+        assertEquals(220, first.path("propertyValue").asInt());
+        assertEquals(1820, first.path("totalValue").asInt());
     }
 
     private Fixture fixture(GameSnapshot first, GameSnapshot... remaining) {
         RedisGameTransitionStore store = mock(RedisGameTransitionStore.class);
         PlayerRepository repository = mock(PlayerRepository.class);
+        GameCompletionResultService completionResults = mock(GameCompletionResultService.class);
         Player firstPlayer = player(9, "First");
         Player secondPlayer = player(4, "Second");
         when(repository.findAllById(Set.of(4, 9))).thenReturn(List.of(secondPlayer, firstPlayer));
+        GameCompletionResult completion = new GameCompletionResult(9, List.of(
+                new GameCompletionStanding(9, "First", 1600, 220, 1820, 1, true),
+                new GameCompletionStanding(4, "Second", 1400, 0, 1400, 2, false)));
+        when(completionResults.project(any(), anyMap(), anyInt(), anyString())).thenReturn(completion);
         when(store.loadStable(7)).thenReturn(first, remaining);
-        return new Fixture(store, new GameRealtimeSnapshotService(store, repository, mapper));
+        return new Fixture(store, new GameRealtimeSnapshotService(store, repository, completionResults, mapper),
+                completion);
     }
 
     private GameSnapshot snapshot(String status, long version, Map<String, String> additions) {
@@ -162,5 +196,6 @@ class GameRealtimeSnapshotServiceTest {
         return player;
     }
 
-    private record Fixture(RedisGameTransitionStore store, GameRealtimeSnapshotService service) { }
+    private record Fixture(RedisGameTransitionStore store, GameRealtimeSnapshotService service,
+                           GameCompletionResult completion) { }
 }

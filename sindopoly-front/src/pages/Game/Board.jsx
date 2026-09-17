@@ -26,6 +26,7 @@ import diceModelUrl from "../../assets/models/Dice.glb?url";
 import moneyImg from "../../assets/images/monopoly_money.png";
 import { BoardSceneAdapter } from "../../features/game/board/BoardSceneAdapter.js";
 import { buildDicePresentationModel } from "../../features/game/presentation/dicePresentationModel.js";
+import { buildCompletionViewModel } from "../../features/game/presentation/gameViewModel.js";
 
 
 function reportOwnershipIssues(ownership) {
@@ -371,7 +372,7 @@ const Board = () => {
       setSelfIdx(  myIndex);
       setTurnIdx( turnIndex);
 
-      const { gameStatus: status, playerTurn, winner, ...me } = board[0];
+      const { gameStatus: status, playerTurn, ...me } = board[0];
 
 
 
@@ -419,35 +420,12 @@ const Board = () => {
 
       // completed?
       if (status === "ended") {
-        // winner might be a string, p.player_id might be a number (or vice-versa)
-        const winRow = board.find(p => String(p.player_id) === String(winner));
-        if (!winRow) {
-          console.error("Could not locate winner in board array:", winner, board);
+        const completion = buildCompletionViewModel(snapshot);
+        if (!completion.available) {
+          console.error("Authoritative completion result is unavailable");
           return;
         }
-
-        // safely grab their cash (default to 0 if missing)
-        const cash = winRow.money != null ? winRow.money : 0;
-
-        // parse his properties (assumes properties is a JSON string of an array of ids)
-        let props = []
-        try { props = JSON.parse(winRow.properties) } catch(e){}
-
-        // static price map: fill in your real prices here
-        const priceMap = {
-          1: 100,   3: 120,   5: 150,   /* … etc … */  
-          // for every position→purchase‐price
-        }
-
-        // sum up property values
-        const propValue = props.reduce((sum,id) => sum + (priceMap[id]||0), 0)
-
-        const totalCapital = cash + propValue
-
-        navigate(
-          `/endgame?winner=${encodeURIComponent(winRow.nickname)}&capital=${totalCapital}`,
-          { replace: true }
-        )
+        navigate("/endgame", { replace: true, state: { completion } });
         return
       }
 

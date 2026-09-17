@@ -24,6 +24,8 @@ import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.model.dto.ActionResultDto;
 import com.example.Sindopoly_Java.realtime.GameEventEnvelope;
 import com.example.Sindopoly_Java.realtime.GameEventPublisher;
+import com.example.Sindopoly_Java.realtime.GameRealtimeSnapshot;
+import com.example.Sindopoly_Java.realtime.GameRealtimeSnapshotService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.flywaydb.core.Flyway;
@@ -166,6 +168,9 @@ class IntegrationInfrastructureIT {
 
     @Autowired
     private GameLifecycleCommandService gameLifecycle;
+
+    @Autowired
+    private GameRealtimeSnapshotService realtimeSnapshots;
 
     @Autowired
     private StatsRepository statsRepository;
@@ -448,6 +453,16 @@ class IntegrationInfrastructureIT {
                         assertThat(terminal.path("stateVersion").asLong()).isEqualTo(7);
                         assertThat(terminal.path("status").asText()).isEqualTo("ended");
                         assertThat(terminal.path("winner").asInt()).isEqualTo(gameId);
+                        assertThat(terminal.path("finalResult").path("winnerPlayerId").asInt())
+                                .isEqualTo(gameId);
+                        assertThat(terminal.path("finalResult").path("standings").size()).isEqualTo(2);
+                        JsonNode winnerStanding = terminal.path("finalResult").path("standings").get(0);
+                        assertThat(winnerStanding.path("playerId").asInt()).isEqualTo(gameId);
+                        assertThat(winnerStanding.path("cash").asInt()).isEqualTo(5000);
+                        assertThat(winnerStanding.path("propertyValue").asInt()).isZero();
+                        assertThat(winnerStanding.path("totalValue").asInt()).isEqualTo(5000);
+                        assertThat(winnerStanding.path("rank").asInt()).isEqualTo(1);
+                        assertThat(winnerStanding.path("winner").asBoolean()).isTrue();
                         assertThat(jdbc.queryForObject(
                                 "SELECT COUNT(*) FROM game_finalization WHERE game_id = ?",
                                 Integer.class, gameId)).isEqualTo(1);
@@ -735,7 +750,7 @@ class IntegrationInfrastructureIT {
     void terminalTransitionFreezesRecoveryAndNeverShortensPlayerHashes() {
         int winner = insertPlayer("TerminalWinner");
         int loser = insertPlayer("TerminalLoser");
-        seedActiveGame(winner, loser, 0, "[]", "[]");
+        seedActiveGame(winner, loser, 0, "[1]", "[]");
         redis.opsForHash().putAll("game:" + winner, java.util.Map.of(
                 "creationTime", "2026-08-25T10:00:00Z", "startTime", "2026-08-25T10:00:00Z",
                 "maxTime", "1200", "maxMoney", "5000", "turnDeadlineEpochMs", "0"));
@@ -749,6 +764,14 @@ class IntegrationInfrastructureIT {
         assertThat(redis.opsForHash().get("game:" + winner, "status")).isEqualTo("ended");
         assertThat(redis.opsForHash().get("game:" + winner, "terminalResult")).isNotNull();
         assertThat(redis.opsForHash().get("game:" + winner, "turnDeadlineEpochMs")).isNull();
+        int purchasePrice = squareRepository.findById(1).orElseThrow().getPrice();
+        GameRealtimeSnapshot firstResult = realtimeSnapshots.load(winner);
+        GameRealtimeSnapshot repeatedResult = realtimeSnapshots.load(winner);
+        assertThat(firstResult.finalResult()).isEqualTo(repeatedResult.finalResult());
+        assertThat(firstResult.finalResult().standings().get(0).playerId()).isEqualTo(winner);
+        assertThat(firstResult.finalResult().standings().get(0).cash()).isEqualTo(5000);
+        assertThat(firstResult.finalResult().standings().get(0).propertyValue()).isEqualTo(purchasePrice);
+        assertThat(firstResult.finalResult().standings().get(0).totalValue()).isEqualTo(5000 + purchasePrice);
         assertThat(redis.getExpire("game:" + winner)).isBetween(1L, 300L);
         long playerTtlAfter = redis.getExpire("player:" + winner);
         if (playerTtlBefore < 0) assertThat(playerTtlAfter).isEqualTo(playerTtlBefore);

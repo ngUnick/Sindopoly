@@ -676,9 +676,8 @@ contract permits `ROLL` only for an `inProgress` active member when no optional
 action exists. This includes a jailed active member: that command materializes the
 server-owned jail option rather than deriving jail mechanics in the model.
 
-Completion exposes only snapshot `winner` identity/name. It does not calculate
-asset value, final capital, order or a fallback winner. The legacy `Board.jsx`
-completion calculation remains isolated pending FE-REVAMP-019. Other retained
+FE-REVAMP-019 replaces the former winner-only completion slice with the nullable
+authoritative `finalResult` described below. Other retained
 legacy boundaries include `boardFromSnapshot`, Board-local state, direct scene
 state and existing modal rendering. The only current consumer migration is the
 observer notification, which now renders `eventViewModel` text while retaining
@@ -1246,15 +1245,59 @@ or changing the current Board lifecycle.
 
 Legacy catalog retirement is explicit. `Board.jsx#gamePositions` remains a
 temporary presentation dependency until the controller/board vertical slice;
-it is no longer the intended metadata authority. Its incomplete `priceMap`
-remains tracked mechanics debt for FE-REVAMP-019's authoritative completion
-projection. `boardCalibration` stays the geometry authority and
+it is no longer the intended metadata authority. Its incomplete completion
+`priceMap` was retired by FE-REVAMP-019. `boardCalibration` stays the geometry authority and
 `ownershipProjection` stays the live ownership authority. The extracted HUD is
 still unmounted. A later single-owner integration must replace the remaining
 Board catalog reads before deleting them; this item does not broaden into that
 runtime migration.
 
-## 33. Git, documentation and risk
+## 33. FE-REVAMP-019 authoritative completion result
+
+`GET /api/game-state/{gameId}/snapshot` now includes nullable `finalResult`.
+Lobby and in-progress snapshots expose `null`. An ended snapshot exposes
+`winnerPlayerId` plus ordered immutable standings with exactly
+`{playerId,nickname,cash,propertyValue,totalValue,rank,winner}`. Numeric player
+ID remains identity; nickname is display data.
+
+The backend formula is `totalValue = terminal Redis cash + sum(canonical
+MariaDB purchase price for each terminal owned-property ID)`. It reads the full
+validated 40-square board projection once per completion calculation, rather
+than querying each property or creating a Redis metadata cache. Unknown,
+special, duplicated, malformed, or unpriced ownership fails closed. Negative
+cash remains valid; property value is non-negative; checked integer addition
+rejects overflow. Bankrupt participants remain represented because completion
+does not redefine membership.
+
+The existing winner rule remains highest total value, then higher cash, then
+earlier turn order. Standings use total value descending; exact totals share
+competition rank (`1,1,3`) and retain turn order only for stable display. Thus a
+cash tie-break may mark the second row within a shared rank as winner without
+misrepresenting either fact. Nickname never selects or orders a player.
+
+The calculation is frozen into the existing `game:{gameId}.terminalResult` JSON
+by the same CAS that writes `status=ended`, winner, and the incremented
+`stateVersion`. Repeated recovery snapshots project that frozen result and add
+MariaDB player nicknames. The additive stored JSON remains compatible with the
+brief terminal-retention window from pre-FE-REVAMP-019 instances by recomputing
+missing value fields on the server. No Redis key/hash field, MariaDB migration,
+REST endpoint, STOMP payload, timer, polling, board asset, scene, dice, or game
+rule changes were introduced.
+
+The frontend decoder requires null before completion and a complete consistent
+result after completion. It rejects winner contradictions, duplicate IDs,
+non-numeric values, arithmetic mismatches, malformed ranks/order, and participant
+or nickname contradictions. Terminal cash deliberately comes from the frozen
+result rather than a shared player hash that a later game may reuse. The
+presentation model only formats supplied cash, property value, total, and rank
+through the Greek content boundary.
+`Board.jsx` passes this model as React Router state to the legacy EndGame screen;
+the incomplete client price map, property summation, winner lookup, and result
+query parameters are gone. Direct navigation or reload at `/endgame` cannot
+reconstruct the game identity under the current route contract, so it displays
+a safe unavailable-result message rather than estimating or persisting a value.
+
+## 34. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

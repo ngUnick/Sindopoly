@@ -71,9 +71,12 @@ no observer text.
 ## Snapshot and client ordering
 
 The snapshot endpoint requires a current game member. It returns game ID, numeric
-version, lifecycle status, active player, winner, visibility/invite metadata,
-typed optional action, and bounded public player projections. Replay records and
-terminal-finalization data are excluded. The store brackets its multi-key read
+version, lifecycle status, active player, winner, nullable authoritative
+`finalResult`, visibility/invite metadata, typed optional action, and bounded
+public player projections. `finalResult` is null before completion and exposes
+the completion-CAS-frozen ordered standings after completion; the completion
+notification remains only a wake-up signal. Replay records and internal
+terminal-finalization identity are excluded. The store brackets its multi-key read
 with `stateVersion`; changing reads retry up to three times and then fail as a
 retryable conflict.
 

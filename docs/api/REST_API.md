@@ -177,14 +177,32 @@ administrative APIs.
 ## Snapshot and realtime relationship
 
 The game snapshot contains `gameId`, `stateVersion`, lifecycle status, active
-player, nullable `turnDeadlineEpochMs`, winner, visibility/invite metadata,
-typed optional action, and bounded players (`playerId`, nickname, position,
-money, properties, jail/bankrupt/AFK fields). The deadline is a server-generated
+player, nullable `turnDeadlineEpochMs`, winner, nullable `finalResult`,
+visibility/invite metadata, typed optional action, and bounded players
+(`playerId`, nickname, position, money, properties, jail/bankrupt/AFK fields).
+`finalResult` is `null` before completion. An ended snapshot exposes the stored
+winner ID and ordered standings shaped as
+`{playerId,nickname,cash,propertyValue,totalValue,rank,winner}`. `cash` is the
+terminal Redis balance, `propertyValue` is the sum of canonical MariaDB
+`square.price` purchase values for the player's terminal owned-property IDs,
+and `totalValue = cash + propertyValue`; all are unformatted integers.
+Standings sort by total value descending. Equal totals share competition rank
+(`1,1,3`) and retain turn order only as a stable, non-competitive display tie
+break. The `winner` flag and `winnerPlayerId` preserve the existing winner rule:
+highest total value, then cash, then earlier turn order.
+
+Completion values are calculated once from the terminal transition input and
+the one-read canonical board projection, then frozen in the existing
+`game:{gameId}.terminalResult` field by the same Redis CAS that writes ended
+status, winner, and the next `stateVersion`. The member-only snapshot read adds
+nicknames and exposes that frozen result; it never accepts result values from a
+client. Terminal JSON written before this additive format is recalculated on
+the server during its short retention window. The deadline is a server-generated
 absolute epoch-millisecond value read from `game:{gameId}` in the same stable
 state read as the snapshot version. It is `null` when no authoritative deadline
 exists, including lobby, retained terminal, and compatibility-missing state.
 The browser may present this value but never declares or submits a timeout.
-Internal replay/finalization values are excluded. STOMP notifications are
+Internal replay/finalization identity is excluded. STOMP notifications are
 ephemeral wake-up signals; clients fetch this snapshot on connect, reconnect,
 newer version, gap, or ambiguity. See `../architecture/REALTIME_SYNCHRONIZATION.md`.
 

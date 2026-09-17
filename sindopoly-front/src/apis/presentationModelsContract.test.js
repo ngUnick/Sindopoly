@@ -24,13 +24,28 @@ test("game presentation depends on ownership projection and Greek content", asyn
   assert.match(source, /content\/el\.js/);
 });
 
-test("presentation models contain no capital, ranking, affordability, or rule calculation", async () => {
+test("presentation models format authoritative completion values without rule calculation", async () => {
   const source = (await Promise.all([
     readPresentation("gameViewModel.js"),
     readPresentation("eventViewModel.js"),
     readPresentation("eventHistory.js"),
   ])).join("\n");
-  assert.doesNotMatch(source, /priceMap|totalCapital|propertyValue|ranking|afford|money\s*[<>]=?|calculateRent/iu);
+  assert.doesNotMatch(
+    source,
+    /priceMap|totalCapital|properties\s*\.\s*reduce|purchasePrice\s*[+*]|afford|money\s*[<>]=?|calculateRent/iu,
+  );
+});
+
+test("production completion path retires query-string and hard-coded price authority", async () => {
+  const sourceRoot = new URL("../", import.meta.url);
+  const [board, endGame] = await Promise.all([
+    readFile(new URL("pages/Game/Board.jsx", sourceRoot), "utf8"),
+    readFile(new URL("pages/Game/EndGame.jsx", sourceRoot), "utf8"),
+  ]);
+  assert.doesNotMatch(`${board}\n${endGame}`, /priceMap|totalCapital|properties\s*\.\s*reduce/iu);
+  assert.doesNotMatch(endGame, /useSearchParams|searchParams|get\(["']capital|BoardAPI/iu);
+  assert.match(board, /buildCompletionViewModel\(snapshot\)/);
+  assert.match(board, /state:\s*\{\s*completion\s*\}/);
 });
 
 test("presentation models introduce no state or memoization library", async () => {

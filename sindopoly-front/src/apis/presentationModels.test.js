@@ -6,6 +6,7 @@ import {
   buildActionViewModel,
   buildGameViewModel,
   buildPropertyViewModels,
+  readCompletionNavigationState,
 } from "../features/game/presentation/gameViewModel.js";
 import {
   CONNECTION_STATES,
@@ -318,30 +319,46 @@ test("conflicting ownership remains unresolved", () => {
   assert.equal(property.isOwned, false);
 });
 
-test("completion exposes only the authoritative winner", () => {
+test("completion formats the supplied authoritative result without recalculating it", () => {
   const completion = gameModel(endedGameSnapshot).completion;
   assert.deepEqual(completion, {
     completed: true,
+    available: true,
     winnerPlayerId: 101,
     winnerName: "BaselineHost",
     statusText: "Το παιχνίδι ολοκληρώθηκε. Κέρδισε: BaselineHost",
+    standings: [
+      {
+        playerId: 101, nickname: "BaselineHost", cash: 5000, cashText: "5.000€",
+        propertyValue: 250, propertyValueText: "250€", totalValue: 5250,
+        totalValueText: "5.250€", rank: 1, rankText: "1η θέση", winner: true,
+      },
+      {
+        playerId: 102, nickname: "BaselineGuest", cash: 1560, cashText: "1.560€",
+        propertyValue: 120, propertyValueText: "120€", totalValue: 1680,
+        totalValueText: "1.680€", rank: 2, rankText: "2η θέση", winner: false,
+      },
+    ],
   });
 });
 
-test("completion model has no client capital or ranking projection", () => {
+test("completion preserves the backend-supplied order and values", () => {
   const completion = gameModel(endedGameSnapshot).completion;
-  assert.equal("capital" in completion, false);
-  assert.equal("ranking" in completion, false);
-  assert.equal("propertyValue" in completion, false);
+  assert.deepEqual(completion.standings.map(row => row.playerId), [101, 102]);
+  assert.equal(completion.standings[0].totalValue, 5250);
+  assert.equal(completion.standings[0].propertyValue, 250);
+  assert.equal(Object.isFrozen(completion.standings), true);
+  assert.equal(Object.isFrozen(completion.standings[0]), true);
 });
 
-test("completion does not invent a fallback winner", () => {
-  const fixture = structuredClone(endedGameSnapshot);
-  fixture.winner = 999;
-  const completion = gameModel(fixture).completion;
-  assert.equal(completion.winnerPlayerId, 999);
-  assert.equal(completion.winnerName, null);
-  assert.equal(completion.statusText, "Το παιχνίδι ολοκληρώθηκε");
+test("completion navigation accepts only the supplied immutable presentation model", () => {
+  const completion = gameModel(endedGameSnapshot).completion;
+  const routed = readCompletionNavigationState({ completion });
+  assert.deepEqual(routed, completion);
+  assert.notEqual(routed, completion);
+  assert.equal(Object.isFrozen(routed.standings), true);
+  assert.equal(readCompletionNavigationState(null), null);
+  assert.equal(readCompletionNavigationState({ completion: { ...completion, standings: [] } }), null);
 });
 
 const playerName = id => ({ 101: "BaselineHost", 102: "BaselineGuest" }[id] ?? null);

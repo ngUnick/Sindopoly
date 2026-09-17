@@ -79,6 +79,13 @@ export function decodeGameSnapshot(value) {
     fail("snapshot.players.playerId");
   }
 
+  const winner = nullablePositiveId(value.winner, "snapshot.winner");
+  const finalResult = decodeFinalResult(value.finalResult, {
+    status: value.status,
+    winner,
+    players,
+  });
+
   return Object.freeze({
     gameId,
     stateVersion,
@@ -88,11 +95,73 @@ export function decodeGameSnapshot(value) {
       value.turnDeadlineEpochMs,
       "snapshot.turnDeadlineEpochMs",
     ),
-    winner: nullablePositiveId(value.winner, "snapshot.winner"),
+    winner,
+    finalResult,
     visibility,
     inviteCode,
     optionalAction: decodeOptionalAction(value.optionalAction, { gameId, stateVersion }),
     players: Object.freeze(players),
+  });
+}
+
+/** Validates an authoritative terminal result without deriving or repairing any value. */
+export function decodeFinalResult(value, { status, winner, players } = {}) {
+  if (status !== "ended") return requireNull(value, "snapshot.finalResult");
+  requireRecord(value, "snapshot.finalResult");
+  const winnerPlayerId = positiveId(
+    value.winnerPlayerId,
+    "snapshot.finalResult.winnerPlayerId",
+  );
+  if (winnerPlayerId !== winner) fail("snapshot.finalResult.winnerPlayerId");
+  if (!Array.isArray(value.standings) || value.standings.length !== players.length) {
+    fail("snapshot.finalResult.standings");
+  }
+  const standings = value.standings.map((standing, index) =>
+    decodeCompletionStanding(standing, index));
+  const ids = standings.map(standing => standing.playerId);
+  if (new Set(ids).size !== ids.length) fail("snapshot.finalResult.standings.playerId");
+  const playersById = new Map(players.map((player, index) => [player.playerId, { player, index }]));
+  if (ids.some(id => !playersById.has(id))) fail("snapshot.finalResult.standings.playerId");
+  if (standings.filter(standing => standing.winner).length !== 1
+      || !standings.some(standing => standing.playerId === winnerPlayerId && standing.winner)) {
+    fail("snapshot.finalResult.standings.winner");
+  }
+  for (let index = 0; index < standings.length; index += 1) {
+    const standing = standings[index];
+    const player = playersById.get(standing.playerId).player;
+    if (standing.nickname !== player.nickname) {
+      fail(`snapshot.finalResult.standings[${index}]`);
+    }
+    if (standing.totalValue !== standing.cash + standing.propertyValue) {
+      fail(`snapshot.finalResult.standings[${index}].totalValue`);
+    }
+    if (index > 0) {
+      const previous = standings[index - 1];
+      if (standing.totalValue > previous.totalValue) fail("snapshot.finalResult.standings");
+      const expectedRank = standing.totalValue === previous.totalValue ? previous.rank : index + 1;
+      if (standing.rank !== expectedRank) fail(`snapshot.finalResult.standings[${index}].rank`);
+      if (standing.totalValue === previous.totalValue
+          && playersById.get(standing.playerId).index < playersById.get(previous.playerId).index) {
+        fail("snapshot.finalResult.standings");
+      }
+    } else if (standing.rank !== 1) {
+      fail("snapshot.finalResult.standings[0].rank");
+    }
+  }
+  return Object.freeze({ winnerPlayerId, standings: Object.freeze(standings) });
+}
+
+function decodeCompletionStanding(value, index) {
+  const path = `snapshot.finalResult.standings[${index}]`;
+  requireRecord(value, path);
+  return Object.freeze({
+    playerId: positiveId(value.playerId, `${path}.playerId`),
+    nickname: string(value.nickname, `${path}.nickname`),
+    cash: integer(value.cash, `${path}.cash`),
+    propertyValue: nonNegativeInteger(value.propertyValue, `${path}.propertyValue`),
+    totalValue: integer(value.totalValue, `${path}.totalValue`),
+    rank: positiveInteger(value.rank, `${path}.rank`),
+    winner: boolean(value.winner, `${path}.winner`),
   });
 }
 
