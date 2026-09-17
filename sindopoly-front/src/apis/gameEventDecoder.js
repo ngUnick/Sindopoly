@@ -1,4 +1,4 @@
-import { decodeCard } from "./transportDecoders.js";
+import { decodeCard, decodeDicePair } from "./transportDecoders.js";
 import { invalidPayloadError } from "./transportError.js";
 
 const EVENT_TYPES = new Set([
@@ -96,7 +96,12 @@ function decodeDetail(value, index) {
 
   switch (value.type) {
     case "DICE_ROLLED":
-      return detail(value.type, { dice: integer(value.dice, `${path}.dice`) });
+      {
+        const pair = decodeDicePair(value, path);
+        const dice = integer(value.dice, `${path}.dice`);
+        if (dice !== pair.total) fail(`${path}.dice`);
+        return detail(value.type, { dice, ...pair });
+      }
     case "PLAYER_MOVED":
       return detail(value.type, {
         fromPosition: nonNegativeInteger(value.fromPosition, `${path}.fromPosition`),

@@ -10,6 +10,7 @@ import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.repository.CardRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.service.core.DiceService;
+import com.example.Sindopoly_Java.service.core.DiceRoll;
 import com.example.Sindopoly_Java.service.core.MovementService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -81,7 +82,8 @@ public class TurnCommandService {
             return offerJailExit(gameId, actorId, metadata, fingerprint, snapshot, actor);
         }
 
-        int rolled = dice.roll();
+        DiceRoll roll = dice.roll();
+        int rolled = roll.total();
         int oldPosition = integer(actor, "position");
         MovementService.MovementResult movementResult = movement.move(oldPosition, rolled);
         int money = integer(actor, "money") + (movementResult.passedGo() ? START_REWARD : 0);
@@ -101,7 +103,8 @@ public class TurnCommandService {
         if (resolution.deck() != null) plan.replaceDeck(resolution.deck());
         plan.putPlayer(actorId, actor);
 
-        ThrowResultDto result = new ThrowResultDto(rolled, integer(actor, "position"), passedStart,
+        ThrowResultDto result = new ThrowResultDto(rolled, roll.die1(), roll.die2(), roll.total(),
+                integer(actor, "position"), passedStart,
                 resolution.squareType(), resolution.data(), snapshot.stateVersion() + 1, false, resolution.card());
         GameEventPayload event = rollEvent(actorId, oldPosition, movementResult.newPosition(), result,
                 resolution, nextPlayerId, movementResult.passedGo());
@@ -197,8 +200,9 @@ public class TurnCommandService {
                 .putGame("optionalAction", json(option))
                 .putGame("turnDeadlineEpochMs", String.valueOf(timing.newTurnDeadlineEpochMs()))
                 .putPlayer(actorId, actor);
-        ThrowResultDto result = new ThrowResultDto(0, integer(actor, "position"), false, 10,
-                JAIL_EXIT_COST, snapshot.stateVersion() + 1, false);
+        ThrowResultDto result = new ThrowResultDto(0, null, null, null,
+                integer(actor, "position"), false, 10, JAIL_EXIT_COST,
+                snapshot.stateVersion() + 1, false, null);
         GameEventPayload event = new GameEventPayload(GameEventReason.ROLL_COMPLETED, actorId,
                 List.of(GameEventDetail.jailExitAvailable(JAIL_EXIT_COST)));
         return commitThrow(gameId, metadata, fingerprint, plan, result, event);
@@ -469,7 +473,8 @@ public class TurnCommandService {
     private ThrowResultDto throwResult(TransitionExecution execution, boolean replayed) {
         try {
             ThrowResultDto value = mapper.treeToValue(execution.semanticResult(), ThrowResultDto.class);
-            return new ThrowResultDto(value.dice(), value.newPosition(), value.passedGo(), value.squareType(), value.data(),
+            return new ThrowResultDto(value.dice(), value.die1(), value.die2(), value.total(),
+                    value.newPosition(), value.passedGo(), value.squareType(), value.data(),
                     execution.stateVersion(), replayed, value.card());
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Invalid roll replay", exception);
@@ -566,7 +571,7 @@ public class TurnCommandService {
     private GameEventPayload rollEvent(int actorId, int oldPosition, int landingPosition, ThrowResultDto result,
                                        RollResolution resolution, int nextPlayerId, boolean crossedStartByDice) {
         List<GameEventDetail> details = new ArrayList<>();
-        details.add(GameEventDetail.diceRolled(result.dice()));
+        details.add(GameEventDetail.diceRolled(result.die1(), result.die2(), result.total()));
         details.add(GameEventDetail.playerMoved(oldPosition, result.newPosition()));
         details.add(GameEventDetail.landedOn(landingPosition));
         switch (result.squareType()) {

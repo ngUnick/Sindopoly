@@ -13,13 +13,9 @@ public class DiceService {
         this.rng = rng;
     }
 
-    /**
-     * Roll two six-sided dice and return their sum (2–12).
-     */
-    public int roll() {
-        int d1 = rng.nextDie();  // 1–6
-        int d2 = rng.nextDie();  // 1–6
-        return d1 + d2;           // now 2–12
+    /** Generates the authoritative pair once; consumers must not reconstruct it from the total. */
+    public DiceRoll roll() {
+        return new DiceRoll(rng.nextDie(), rng.nextDie());
     }
 }
 

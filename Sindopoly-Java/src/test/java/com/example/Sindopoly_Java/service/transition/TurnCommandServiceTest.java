@@ -5,6 +5,7 @@ import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.repository.CardRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.service.core.DiceService;
+import com.example.Sindopoly_Java.service.core.DiceRoll;
 import com.example.Sindopoly_Java.realtime.GameEventPublisher;
 import com.example.Sindopoly_Java.realtime.GameEventPayload;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
@@ -55,8 +57,8 @@ class TurnCommandServiceTest {
     void publishesVersionedNotificationOnlyAfterAppliedRedisCommit() {
         when(store.replayIfPresent(anyInt(), any(), anyString())).thenReturn(Optional.empty());
         when(store.load(1)).thenReturn(snapshot());
-        when(dice.roll()).thenReturn(1);
-        when(squares.findById(1)).thenReturn(Optional.of(square));
+        when(dice.roll()).thenReturn(new DiceRoll(1, 1));
+        when(squares.findById(2)).thenReturn(Optional.of(square));
         when(square.getType()).thenReturn(Square.SquareType.START);
         when(store.commit(anyInt(), any(), anyString(), any(), any(JsonNode.class))).thenAnswer(invocation ->
                 new TransitionExecution(TransitionExecution.Status.APPLIED, 1, invocation.getArgument(4)));
@@ -64,15 +66,26 @@ class TurnCommandServiceTest {
         ThrowResultDto result = service.throwDice(1, 1, metadata);
 
         assertThat(result.stateVersion()).isEqualTo(1);
+        assertThat(result.die1()).isEqualTo(1);
+        assertThat(result.die2()).isEqualTo(1);
+        assertThat(result.total()).isEqualTo(2);
+        assertThat(result.dice()).isEqualTo(result.total());
         InOrder order = inOrder(store, events);
         order.verify(store).commit(anyInt(), any(), anyString(), any(), any(JsonNode.class));
         order.verify(events).publish(anyInt(), org.mockito.ArgumentMatchers.anyLong(), any(),
                 any(GameEventPayload.class));
+
+        ArgumentCaptor<GameEventPayload> payload = ArgumentCaptor.forClass(GameEventPayload.class);
+        verify(events).publish(anyInt(), org.mockito.ArgumentMatchers.anyLong(), any(), payload.capture());
+        assertThat(payload.getValue().details().get(0))
+                .extracting("die1", "die2", "total", "dice")
+                .containsExactly(1, 1, 2, 2);
     }
 
     @Test
     void sequentialReplayReturnsRecordedRollWithoutRollingOrPublishing() {
-        ThrowResultDto recorded = new ThrowResultDto(6, 6, false, 4, -1, 1, false);
+        ThrowResultDto recorded = new ThrowResultDto(6, 3, 3, 6,
+                6, false, 4, -1, 1, false, null);
         when(store.load(1)).thenReturn(snapshot());
         when(store.replayIfPresent(anyInt(), any(), anyString())).thenReturn(Optional.of(
                 new TransitionExecution(TransitionExecution.Status.REPLAY, 1, mapper.valueToTree(recorded))));
@@ -80,9 +93,13 @@ class TurnCommandServiceTest {
         ThrowResultDto result = service.throwDice(1, 1, metadata);
 
         assertThat(result.dice()).isEqualTo(6);
+        assertThat(result.die1()).isEqualTo(3);
+        assertThat(result.die2()).isEqualTo(3);
+        assertThat(result.total()).isEqualTo(6);
         assertThat(result.replayed()).isTrue();
         verify(dice, never()).roll();
         verify(store).load(1);
+        verify(store, never()).commit(anyInt(), any(), anyString(), any(), any(JsonNode.class));
         verify(events, never()).publish(anyInt(), org.mockito.ArgumentMatchers.anyLong(), any(),
                 any(GameEventPayload.class));
     }

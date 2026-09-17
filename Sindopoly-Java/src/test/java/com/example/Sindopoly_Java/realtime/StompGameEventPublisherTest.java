@@ -48,7 +48,7 @@ class StompGameEventPublisherTest {
         GameTimingService timing = mock(GameTimingService.class);
         when(timing.now()).thenReturn(Instant.EPOCH);
         GameEventPayload payload = new GameEventPayload(GameEventReason.ROLL_COMPLETED, 41, List.of(
-                GameEventDetail.diceRolled(7), GameEventDetail.playerMoved(3, 10),
+                GameEventDetail.diceRolled(3, 4, 7), GameEventDetail.playerMoved(3, 10),
                 GameEventDetail.propertyAvailable(10, 200)));
 
         new StompGameEventPublisher(broker, timing).publish(7, 4, GameEventType.TURN_UPDATED, payload);
@@ -56,6 +56,10 @@ class StompGameEventPublisherTest {
         var envelope = org.mockito.ArgumentCaptor.forClass(GameEventEnvelope.class);
         verify(broker).convertAndSend(eq("/topic/game/7"), envelope.capture());
         assertEquals(41, envelope.getValue().payload().actorPlayerId());
+        assertEquals(3, envelope.getValue().payload().details().get(0).die1());
+        assertEquals(4, envelope.getValue().payload().details().get(0).die2());
+        assertEquals(7, envelope.getValue().payload().details().get(0).total());
+        assertEquals(7, envelope.getValue().payload().details().get(0).dice());
         assertEquals(GameEventDetailType.PROPERTY_AVAILABLE,
                 envelope.getValue().payload().details().get(2).type());
     }
@@ -63,7 +67,7 @@ class StompGameEventPublisherTest {
     @Test
     void rejectsUnboundedDetailsAndPreservesGreekCardTextInJson() throws Exception {
         List<GameEventDetail> tooMany = IntStream.range(0, 13)
-                .mapToObj(ignored -> GameEventDetail.diceRolled(7)).toList();
+                .mapToObj(ignored -> GameEventDetail.diceRolled(3, 4, 7)).toList();
         assertThrows(IllegalArgumentException.class, () -> new GameEventPayload(
                 GameEventReason.ROLL_COMPLETED, 41, tooMany));
 

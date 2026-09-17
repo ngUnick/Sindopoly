@@ -8,6 +8,7 @@ import com.example.Sindopoly_Java.model.dto.ThrowResultDto;
 import com.example.Sindopoly_Java.repository.CardRepository;
 import com.example.Sindopoly_Java.repository.SquareRepository;
 import com.example.Sindopoly_Java.service.core.DiceService;
+import com.example.Sindopoly_Java.service.core.DiceRoll;
 import com.example.Sindopoly_Java.realtime.GameEventPublisher;
 import com.example.Sindopoly_Java.realtime.GameEventDetailType;
 import com.example.Sindopoly_Java.realtime.GameEventPayload;
@@ -73,7 +74,7 @@ class TurnCommandGameplayRuleTest {
     @Test
     void positiveTaxIsDeductedAutomaticallyAndTurnRotates() {
         when(store.load(41)).thenReturn(snapshot(0, player(2, 1500, "[]"), player(0, 1500, "[]"), List.of()));
-        when(dice.roll()).thenReturn(2);
+        when(dice.roll()).thenReturn(diceRoll(2));
         stubSquare(4, Square.SquareType.TAX, -200, null);
 
         ThrowResultDto result = service.throwDice(41, 41, metadata(0));
@@ -88,10 +89,10 @@ class TurnCommandGameplayRuleTest {
 
     @Test
     void rentIsOnePositiveAtomicTransfer() {
-        when(store.load(41)).thenReturn(snapshot(0, player(0, 1500, "[]"), player(0, 1500, "[1]"), List.of()));
-        when(dice.roll()).thenReturn(1);
-        stubSquare(1, Square.SquareType.BROWN, 60, 100);
-        when(squares.findIdsByColour(Square.SquareType.BROWN)).thenReturn(List.of(1, 3));
+        when(store.load(41)).thenReturn(snapshot(0, player(0, 1500, "[]"), player(0, 1500, "[2]"), List.of()));
+        when(dice.roll()).thenReturn(diceRoll(2));
+        stubSquare(2, Square.SquareType.BROWN, 60, 100);
+        when(squares.findIdsByColour(Square.SquareType.BROWN)).thenReturn(List.of(2, 3));
 
         ThrowResultDto result = service.throwDice(41, 41, metadata(0));
         GameTransitionPlan plan = committedPlan();
@@ -111,9 +112,9 @@ class TurnCommandGameplayRuleTest {
 
     @Test
     void selfOwnedPropertyDoesNotTransferRent() {
-        when(store.load(41)).thenReturn(snapshot(0, player(0, 1500, "[1]"), player(0, 1500, "[]"), List.of()));
-        when(dice.roll()).thenReturn(1);
-        stubSquare(1, Square.SquareType.BROWN, 60, 100);
+        when(store.load(41)).thenReturn(snapshot(0, player(0, 1500, "[2]"), player(0, 1500, "[]"), List.of()));
+        when(dice.roll()).thenReturn(diceRoll(2));
+        stubSquare(2, Square.SquareType.BROWN, 60, 100);
 
         service.throwDice(41, 41, metadata(0));
         GameTransitionPlan plan = committedPlan();
@@ -125,8 +126,8 @@ class TurnCommandGameplayRuleTest {
     @Test
     void affordableUnownedPropertyCreatesOnlyCanonicalPendingChoice() throws Exception {
         when(store.load(41)).thenReturn(snapshot(0, player(0, 1500, "[]"), player(0, 1500, "[]"), List.of()));
-        when(dice.roll()).thenReturn(1);
-        stubSquare(1, Square.SquareType.BROWN, 60, 2);
+        when(dice.roll()).thenReturn(diceRoll(2));
+        stubSquare(2, Square.SquareType.BROWN, 60, 2);
 
         ThrowResultDto result = service.throwDice(41, 41, metadata(0));
         GameTransitionPlan plan = committedPlan();
@@ -149,8 +150,8 @@ class TurnCommandGameplayRuleTest {
     @Test
     void unaffordablePropertyDoesNotCreateInvalidChoice() {
         when(store.load(41)).thenReturn(snapshot(0, player(0, 50, "[]"), player(0, 1500, "[]"), List.of()));
-        when(dice.roll()).thenReturn(1);
-        stubSquare(1, Square.SquareType.BROWN, 60, 2);
+        when(dice.roll()).thenReturn(diceRoll(2));
+        stubSquare(2, Square.SquareType.BROWN, 60, 2);
 
         service.throwDice(41, 41, metadata(0));
 
@@ -172,7 +173,7 @@ class TurnCommandGameplayRuleTest {
     void cardMoneyAndCyclingAreAppliedOnceInTheRollPlan() {
         Card card = card(5, Card.CardType.money, -50);
         when(store.load(41)).thenReturn(snapshot(0, player(0, 1500, "[]"), player(0, 1500, "[]"), List.of("5", "6")));
-        when(dice.roll()).thenReturn(2);
+        when(dice.roll()).thenReturn(diceRoll(2));
         stubSquare(2, Square.SquareType.CARD, null, null);
         when(cards.findById(5)).thenReturn(Optional.of(card));
 
@@ -201,7 +202,7 @@ class TurnCommandGameplayRuleTest {
     void positiveMoneyCardCreditsThePlayer() {
         Card card = card(5, Card.CardType.money, 75);
         when(store.load(41)).thenReturn(snapshot(0, player(0, 1500, "[]"), player(0, 1500, "[]"), List.of("5")));
-        when(dice.roll()).thenReturn(2);
+        when(dice.roll()).thenReturn(diceRoll(2));
         stubSquare(2, Square.SquareType.CARD, null, null);
         when(cards.findById(5)).thenReturn(Optional.of(card));
 
@@ -214,8 +215,8 @@ class TurnCommandGameplayRuleTest {
     @Test
     void transportCardCrossingStartMovesAuthoritativelyAndAwardsReward() {
         Card card = card(5, Card.CardType.transport, 5);
-        when(store.load(41)).thenReturn(snapshot(0, player(35, 1500, "[]"), player(0, 1500, "[]"), List.of("5")));
-        when(dice.roll()).thenReturn(1);
+        when(store.load(41)).thenReturn(snapshot(0, player(34, 1500, "[]"), player(0, 1500, "[]"), List.of("5")));
+        when(dice.roll()).thenReturn(diceRoll(2));
         stubSquare(36, Square.SquareType.CARD, null, null);
         when(cards.findById(5)).thenReturn(Optional.of(card));
 
@@ -231,7 +232,7 @@ class TurnCommandGameplayRuleTest {
     @Test
     void goToJailIsAutomaticWhileNormalJailIsVisiting() {
         when(store.load(41)).thenReturn(snapshot(0, player(28, 1500, "[]"), player(0, 1500, "[]"), List.of()));
-        when(dice.roll()).thenReturn(2);
+        when(dice.roll()).thenReturn(diceRoll(2));
         stubSquare(30, Square.SquareType.GOJAIL, null, null);
 
         service.throwDice(41, 41, metadata(0));
@@ -241,7 +242,7 @@ class TurnCommandGameplayRuleTest {
         org.mockito.Mockito.reset(store, dice, squares, cards, events);
         setUp();
         when(store.load(41)).thenReturn(snapshot(0, player(8, 1500, "[]"), player(0, 1500, "[]"), List.of()));
-        when(dice.roll()).thenReturn(2);
+        when(dice.roll()).thenReturn(diceRoll(2));
         stubSquare(10, Square.SquareType.JAIL, null, null);
         service.throwDice(41, 41, metadata(0));
         assertThat(committedPlan().playerPuts().get(41)).containsEntry("jail", "false").containsEntry("position", "10");
@@ -257,6 +258,10 @@ class TurnCommandGameplayRuleTest {
         String option = offeredPlan.gamePuts().get("optionalAction");
 
         assertThat(offered.squareType()).isEqualTo(10);
+        assertThat(offered.dice()).isZero();
+        assertThat(offered.die1()).isNull();
+        assertThat(offered.die2()).isNull();
+        assertThat(offered.total()).isNull();
         assertThat(offeredPlan.gamePuts()).containsEntry("turnDeadlineEpochMs", RENEWED_DEADLINE);
         verify(dice, never()).roll();
 
@@ -306,8 +311,8 @@ class TurnCommandGameplayRuleTest {
     void completingTurnMaterializesNextJailedPlayersChoiceAtCommittedVersion() throws Exception {
         Map<String, String> nextJailed = player(10, 1500, "[]", true, 2);
         when(store.load(41)).thenReturn(snapshot(4, player(0, 1500, "[]"), nextJailed, List.of()));
-        when(dice.roll()).thenReturn(1);
-        stubSquare(1, Square.SquareType.BROWN, 2000, 2);
+        when(dice.roll()).thenReturn(diceRoll(2));
+        stubSquare(2, Square.SquareType.BROWN, 2000, 2);
 
         service.throwDice(41, 41, metadata(4));
 
@@ -409,7 +414,7 @@ class TurnCommandGameplayRuleTest {
     @Test
     void totalEightHasNoDoublesSpecificFlowAndRotatesNormally() {
         when(store.load(41)).thenReturn(snapshot(0, player(0, 1500, "[8]"), player(0, 1500, "[]"), List.of()));
-        when(dice.roll()).thenReturn(8);
+        when(dice.roll()).thenReturn(new DiceRoll(4, 4));
         stubSquare(8, Square.SquareType.CYAN, 100, 6);
 
         service.throwDice(41, 41, metadata(0));
@@ -420,7 +425,7 @@ class TurnCommandGameplayRuleTest {
     private void assertMoveMoney(int from, int roll, int destination, int expectedMoney, boolean passedStart) {
         String properties = destination == 0 ? "[]" : "[" + destination + "]";
         when(store.load(41)).thenReturn(snapshot(0, player(from, 1500, properties), player(0, 1500, "[]"), List.of()));
-        when(dice.roll()).thenReturn(roll);
+        when(dice.roll()).thenReturn(diceRoll(roll));
         Square.SquareType type = destination == 0 ? Square.SquareType.START : Square.SquareType.BLUE;
         stubSquare(destination, type, 400, 50);
 
@@ -492,5 +497,10 @@ class TurnCommandGameplayRuleTest {
 
     private CommandMetadata metadata(long version) {
         return new CommandMetadata("00000000-0000-0000-0000-00000000000" + (version + 1), version);
+    }
+
+    private DiceRoll diceRoll(int total) {
+        int die1 = Math.max(1, total - 6);
+        return new DiceRoll(die1, total - die1);
     }
 }

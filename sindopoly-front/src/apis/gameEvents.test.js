@@ -11,7 +11,7 @@ const squares = id => ({ 2: "ΚΑΡΤΑ ΑΠΟΦΑΣΗΣ", 7: "ΚΑΡΤΑ ΕΝΤ
 test("renders another player's card text without action authority", () => {
   const event = { eventId: "event-1", stateVersion: 1, occurredAt: "2026-09-01T10:00:00Z", payload: {
     reason: "ROLL_COMPLETED", actorPlayerId: 1, details: [
-    { type: "DICE_ROLLED", dice: 7 },
+    { type: "DICE_ROLLED", dice: 7, die1: 3, die2: 4, total: 7 },
     { type: "LANDED_ON_TILE", squareId: 2 },
     { type: "CARD_DRAWN", card: { title: "Community Chest", text: "Βρήκες ένα τάλιρο.", effect: "money", amount: 5 } },
   ] } };
@@ -25,7 +25,8 @@ test("renders another player's card text without action authority", () => {
 test("observer property offer is informational and contains no controls", () => {
   const event = { eventId: "event-2", stateVersion: 2, occurredAt: "2026-09-01T10:01:00Z", payload: {
     reason: "ROLL_COMPLETED", actorPlayerId: 1, details: [
-    { type: "DICE_ROLLED", dice: 4 }, { type: "LANDED_ON_TILE", squareId: 9 },
+    { type: "DICE_ROLLED", dice: 4, die1: 1, die2: 3, total: 4 },
+    { type: "LANDED_ON_TILE", squareId: 9 },
     { type: "PROPERTY_AVAILABLE", squareId: 9, amount: 120 },
   ] } };
   const result = observerNotification(event, 2, names, squares);

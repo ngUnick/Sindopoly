@@ -38,7 +38,8 @@ class TurnControllerCharacterizationTest {
 
     @Test
     void throwForwardsActorAndMetadata() {
-        ThrowResultDto expected = new ThrowResultDto(7, 12, false, 5, 200, 8, false);
+        ThrowResultDto expected = new ThrowResultDto(7, 3, 4, 7,
+                12, false, 5, 200, 8, false, null);
         when(commandMetadataResolver.resolve(metadata.commandId(), "7")).thenReturn(metadata);
         when(turnCommands.throwDice(3, 4, metadata)).thenReturn(expected);
         assertEquals(expected, controller.throwDice(3, 4, authentication, metadata.commandId(), "7"));
@@ -48,7 +49,8 @@ class TurnControllerCharacterizationTest {
     void throwSerializesThematicCardMetadataThroughTheController() throws Exception {
         String text = "Ο φίλος σου που έχει αμάξι έφυγε πιο νωρίς σήμερα. Πήγαινε στη ΣΤΑΣΗ ΔΙΠΑΕ.";
         CardDrawDto card = new CardDrawDto(1, "Chance", text, "transport", 6);
-        ThrowResultDto expected = new ThrowResultDto(7, 6, true, 1, 6, 8, false, card);
+        ThrowResultDto expected = new ThrowResultDto(7, 3, 4, 7,
+                6, true, 1, 6, 8, false, card);
         when(commandMetadataResolver.resolve(metadata.commandId(), "7")).thenReturn(metadata);
         when(turnCommands.throwDice(3, 4, metadata)).thenReturn(expected);
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
@@ -58,6 +60,10 @@ class TurnControllerCharacterizationTest {
                         .header(CommandMetadata.EXPECTED_VERSION_HEADER, "7")
                         .principal(authentication))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.die1").value(3))
+                .andExpect(jsonPath("$.die2").value(4))
+                .andExpect(jsonPath("$.total").value(7))
+                .andExpect(jsonPath("$.dice").value(7))
                 .andExpect(jsonPath("$.card.cardId").value(1))
                 .andExpect(jsonPath("$.card.title").value("Chance"))
                 .andExpect(jsonPath("$.card.text").value(text))

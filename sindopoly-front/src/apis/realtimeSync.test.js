@@ -21,7 +21,9 @@ test("rejects malformed and cross-game notifications", () => {
   assert.equal(parseGameEvent({ ...event(2), gameId: 8 }, 7), null);
   assert.equal(parseGameEvent({ ...event(2), payload: { details: [] } }, 7), null);
   assert.equal(parseGameEvent({
-    ...event(2), payload: { ...event(2).payload, details: [{ type: "DICE_ROLLED", dice: "6" }] },
+    ...event(2), payload: { ...event(2).payload, details: [{
+      type: "DICE_ROLLED", dice: "6", die1: 2, die2: 4, total: 6,
+    }] },
   }, 7), null);
 });
 

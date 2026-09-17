@@ -127,7 +127,7 @@ export const turnUpdatedEvent = {
     reason: "ROLL_COMPLETED",
     actorPlayerId: 101,
     details: [
-      { type: "DICE_ROLLED", dice: 6 },
+      { type: "DICE_ROLLED", dice: 6, die1: 2, die2: 4, total: 6 },
       { type: "PLAYER_MOVED", fromPosition: 0, toPosition: 6 },
       { type: "LANDED_ON_TILE", squareId: 6 },
       { type: "TURN_CHANGED", nextPlayerId: 102 },
@@ -145,7 +145,7 @@ export const cardEvent = {
     reason: "ROLL_COMPLETED",
     actorPlayerId: 101,
     details: [
-      { type: "DICE_ROLLED", dice: 2 },
+      { type: "DICE_ROLLED", dice: 2, die1: 1, die2: 1, total: 2 },
       { type: "PLAYER_MOVED", fromPosition: 0, toPosition: 2 },
       { type: "LANDED_ON_TILE", squareId: 2 },
       {
@@ -175,8 +175,8 @@ export const rentEvent = {
     reason: "ROLL_COMPLETED",
     actorPlayerId: 101,
     details: [
-      { type: "DICE_ROLLED", dice: 1 },
-      { type: "PLAYER_MOVED", fromPosition: 0, toPosition: 1 },
+      { type: "DICE_ROLLED", dice: 2, die1: 1, die2: 1, total: 2 },
+      { type: "PLAYER_MOVED", fromPosition: 39, toPosition: 1 },
       { type: "LANDED_ON_TILE", squareId: 1 },
       { type: "RENT_PAID", squareId: 1, amount: 100, counterpartyPlayerId: 102 },
       { type: "TURN_CHANGED", nextPlayerId: 102 },
@@ -194,7 +194,7 @@ export const taxEvent = {
     reason: "ROLL_COMPLETED",
     actorPlayerId: 101,
     details: [
-      { type: "DICE_ROLLED", dice: 4 },
+      { type: "DICE_ROLLED", dice: 4, die1: 1, die2: 3, total: 4 },
       { type: "PLAYER_MOVED", fromPosition: 0, toPosition: 4 },
       { type: "LANDED_ON_TILE", squareId: 4 },
       { type: "TAX_PAID", squareId: 4, amount: 200 },

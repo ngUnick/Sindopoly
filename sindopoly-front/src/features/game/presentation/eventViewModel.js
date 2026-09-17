@@ -3,6 +3,7 @@ import {
   formatDiceResult,
   formatGameEventFact,
 } from "../content/el.js";
+import { buildDicePresentationModel } from "./dicePresentationModel.js";
 
 /** Projects one validated event; history ownership and ordering remain outside this module. */
 export function buildEventViewModel({
@@ -144,6 +145,10 @@ export function buildEventViewModel({
     actorPlayerId,
     text: textParts.join(" "),
     emphasis,
+    dice: dice == null ? null : buildDicePresentationModel({
+      ...dice,
+      presentationId: event.stateVersion,
+    }),
   });
 }
 

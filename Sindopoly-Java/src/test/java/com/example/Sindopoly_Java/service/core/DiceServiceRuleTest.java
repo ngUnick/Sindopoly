@@ -14,14 +14,14 @@ class DiceServiceRuleTest {
     void sumsTwoServerSuppliedMinimumDieValues() {
         DiceService dice = new DiceService(sequence(1, 1));
 
-        assertEquals(2, dice.roll());
+        assertEquals(new DiceRoll(1, 1, 2), dice.roll());
     }
 
     @Test
     void sumsTwoServerSuppliedMaximumDieValues() {
         DiceService dice = new DiceService(sequence(6, 6));
 
-        assertEquals(12, dice.roll());
+        assertEquals(new DiceRoll(6, 6, 12), dice.roll());
     }
 
     @Test
@@ -30,8 +30,8 @@ class DiceServiceRuleTest {
         RandomIntGenerator source = values::removeFirst;
         DiceService dice = new DiceService(source);
 
-        assertEquals(7, dice.roll());
-        assertEquals(7, dice.roll());
+        assertEquals(new DiceRoll(2, 5, 7), dice.roll());
+        assertEquals(new DiceRoll(4, 3, 7), dice.roll());
         assertEquals(0, values.size());
     }
 
@@ -39,7 +39,7 @@ class DiceServiceRuleTest {
     void doubleValuesRemainOnlyAnOrdinaryServerGeneratedTotal() {
         DiceService dice = new DiceService(sequence(4, 4));
 
-        assertEquals(8, dice.roll());
+        assertEquals(new DiceRoll(4, 4, 8), dice.roll());
     }
 
     private static RandomIntGenerator sequence(int... values) {

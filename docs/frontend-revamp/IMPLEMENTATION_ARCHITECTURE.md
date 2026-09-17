@@ -582,7 +582,7 @@ ownership, eligibility, prices, rent, movement outcomes or presentation copy.
 | Recovery snapshot | `{gameId,stateVersion,status,playerTurn,turnDeadlineEpochMs,winner,visibility,inviteCode,optionalAction,players}` | Required identity/version/state fields validated; deadline must be `null` or a positive safe integer; additive fields ignored |
 | Snapshot player | `{playerId,nickname,position,money,properties,jailed,jailTurnsRemaining,bankrupt,afk}` | Canonical numeric IDs, copied numeric property array, strict booleans, unique player IDs |
 | Optional action | `PURCHASE_PROPERTY` or `PAY_JAIL_EXIT` with game/player/version identity, square, cost and `declinable` | Known shapes only; unknown command-bearing types fail closed |
-| Throw result | `{dice,newPosition,passedGo,squareType,data,stateVersion,replayed,card}` | Current fields validated; no `die1`/`die2` inference |
+| Throw result | `{dice,die1,die2,total,newPosition,passedGo,squareType,data,stateVersion,replayed,card}` | Genuine rolls require 1–6 dice, `total=die1+die2`, and compatibility `dice=total`; a jail-choice-only response has no pair |
 | Action/pass result | `{newBalance,acquiredProperties,nextPlayerId,stateVersion,replayed}` | Numeric values and copied property IDs validated |
 | Game event | `{eventId,eventType,gameId,stateVersion,occurredAt,payload:{reason,actorPlayerId,details}}` | Envelope identity/version validated before existing recovery/display flow |
 | Event detail | Fourteen current detail discriminators from `GameEventDetailType`; type-specific nullable fields omitted on the wire | Known details validate their exact fields; unknown details become bounded unsupported markers |
@@ -1166,7 +1166,52 @@ but visual zero is never timeout authority: the UI must wait for the backend
 transition and authoritative recovery snapshot. Existing STOMP events remain
 wake-up signals that trigger that recovery rather than carrying deadline data.
 
-## 31. Git, documentation and risk
+## 31. FE-REVAMP-017 authoritative dice pair and scene presentation
+
+`DiceService` now returns one validated `DiceRoll(die1, die2, total)` after
+calling the configured `RandomIntGenerator#nextDie` exactly twice. Each die is
+1–6 and `total=die1+die2`; doubles remain an ordinary pair with no extra turn or
+new rule. `TurnCommandService` uses that same total for movement, rent and the
+existing `lastDice` field, and transports the same pair through
+`ThrowResultDto` and `DICE_ROLLED`. The legacy `dice` JSON field remains only as
+`total`'s compatibility alias. A jailed command that merely creates the
+existing pay/skip choice consumes no entropy and omits the nullable pair fields.
+
+The replay HASH remains `game:{gameId}:commands`: its existing `resultJson`
+string naturally contains the expanded DTO. Replay is checked before dice
+generation and returns the exact serialized original pair without another RNG
+read, transition or STOMP publication. No key, type, serializer, TTL or Lua
+shape changed. `dice:entropy` remains a no-TTL LIST of decimal strings `1`–`6`;
+the refill job appends one random.org die per item, `nextDie` consumes one item
+from the left, one roll consumes two, and an empty list uses the existing
+in-process secure fallback. MariaDB is unchanged.
+
+The frontend decoders fail closed unless genuine REST and event pairs have
+integer dice in range, a 2–12 total, correct addition, and `dice=total`. The pure
+dice presentation model carries only `die1`, `die2`, `total` and a monotonic
+presentation ID. Existing Greek DOM feedback continues to announce the total,
+so the 3D model is not the sole outcome representation.
+
+`BoardSceneAdapter.presentDiceRoll` consumes those visual facts plus an explicit
+reduced-motion flag. It reuses the one preloaded pair of scale-10 Dice clones at
+the board's open center (`x=-2.1/+2.1`, `y=0.25`, `z=0.5`), performs a bounded
+760ms lift/tumble, and settles to predetermined rotations. Browser calibration
+of the actual GLB established original-axis face values
+`+X/-X/+Y/-Y/+Z/-Z = 6/1/2/5/4/3`; the exported lookup encodes those rotations.
+No physics or client randomness determines a result.
+
+The accepted transition version is the presentation ID. Equal/older IDs are
+ignored, so a command response and its own STOMP echo animate once; a newer roll
+supersedes the active sequence and cannot be overwritten by a stale settle.
+Snapshots never call this API and therefore never replay historical rolls.
+Reduced motion reveals the deterministic pair directly and schedules one
+coalesced render. Normal animation is the only time RAF reschedules; after
+settle it drains to zero. Disposal cancels the one pending frame, clears pending
+or active dice presentation, and retains the FE-REVAMP-015 resource guarantees.
+Board/pawn movement, camera, lighting, assets, background, HUD, turn/jail rules,
+REST paths, STOMP destinations and dependencies are unchanged.
+
+## 32. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

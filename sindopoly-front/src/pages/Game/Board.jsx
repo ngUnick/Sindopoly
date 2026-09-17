@@ -25,6 +25,7 @@ import boardGLB from "../../assets/models/board.glb?url";  // ⬅ forces asset h
 import diceModelUrl from "../../assets/models/Dice.glb?url";
 import moneyImg from "../../assets/images/monopoly_money.png";
 import { BoardSceneAdapter } from "../../features/game/board/BoardSceneAdapter.js";
+import { buildDicePresentationModel } from "../../features/game/presentation/dicePresentationModel.js";
 
 
 function reportOwnershipIssues(ownership) {
@@ -37,6 +38,10 @@ function reportOwnershipIssues(ownership) {
       invalidPropertyClaims: ownership.invalidPropertyClaims,
     });
   }
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 }
 
 
@@ -451,6 +456,18 @@ const Board = () => {
   };
 
   const handleRealtimeEvent = event => {
+    const diceDetail = event?.payload?.details?.find(detail => detail.type === "DICE_ROLLED");
+    const dicePresentation = buildDicePresentationModel({
+      ...diceDetail,
+      presentationId: event?.stateVersion,
+    });
+    if (dicePresentation) {
+      setDice(dicePresentation.total);
+      sceneAdapterRef.current?.presentDiceRoll({
+        ...dicePresentation,
+        reducedMotion: prefersReducedMotion(),
+      });
+    }
     const playerName = id => playersData.find(player => String(player.playerId) === String(id))?.nickname
       ?? `Παίκτης ${id}`;
     const squareName = id => gamePositions.find(square => square.position === id)?.name ?? `#${id}`;
@@ -496,7 +513,7 @@ const Board = () => {
       // 1️⃣ roll & move
       const tr = await TurnAPI.throwDice(gameId, playerId);
       const {
-        dice,
+        total,
         newPosition,
         passedGo,
         squareType,
@@ -505,7 +522,17 @@ const Board = () => {
 
       // disable UI & show dice
       setIsMyTurn(false);
-      setDice(dice);
+      setDice(total ?? 0);
+      const dicePresentation = buildDicePresentationModel({
+        ...tr,
+        presentationId: tr.stateVersion,
+      });
+      if (dicePresentation) {
+        sceneAdapterRef.current?.presentDiceRoll({
+          ...dicePresentation,
+          reducedMotion: prefersReducedMotion(),
+        });
+      }
       await new Promise(r => setTimeout(r, 1000));
       sceneAdapterRef.current?.setPawnPosition(playerId, newPosition);
 

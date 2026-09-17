@@ -89,16 +89,35 @@ export function decodeOptionalAction(value, expected = {}) {
 
 export function decodeThrowResult(value) {
   requireRecord(value, "throwResult");
+  const dice = nonNegativeInteger(value.dice, "throwResult.dice");
+  const squareType = nonNegativeInteger(value.squareType, "throwResult.squareType");
+  const noRollJailOffer = squareType === 10 && dice === 0
+    && value.die1 == null && value.die2 == null && value.total == null;
+  const pair = noRollJailOffer
+    ? Object.freeze({ die1: null, die2: null, total: null })
+    : decodeDicePair(value, "throwResult");
+  if (!noRollJailOffer && dice !== pair.total) fail("throwResult.dice");
   return Object.freeze({
-    dice: nonNegativeInteger(value.dice, "throwResult.dice"),
+    dice,
+    ...pair,
     newPosition: nonNegativeInteger(value.newPosition, "throwResult.newPosition"),
     passedGo: boolean(value.passedGo, "throwResult.passedGo"),
-    squareType: nonNegativeInteger(value.squareType, "throwResult.squareType"),
+    squareType,
     data: integer(value.data, "throwResult.data"),
     stateVersion: version(value.stateVersion, "throwResult.stateVersion"),
     replayed: boolean(value.replayed, "throwResult.replayed"),
     card: value.card == null ? null : decodeCard(value.card, "throwResult.card"),
   });
+}
+
+/** Validates a server-confirmed pair without deriving or repairing any value. */
+export function decodeDicePair(value, path = "dicePair") {
+  requireRecord(value, path);
+  const die1 = boundedInteger(value.die1, 1, 6, `${path}.die1`);
+  const die2 = boundedInteger(value.die2, 1, 6, `${path}.die2`);
+  const total = boundedInteger(value.total, 2, 12, `${path}.total`);
+  if (total !== die1 + die2) fail(`${path}.total`);
+  return Object.freeze({ die1, die2, total });
 }
 
 export function decodeActionResult(value) {
@@ -215,6 +234,12 @@ function nonNegativeInteger(value, path) {
 function positiveInteger(value, path) {
   const parsed = integer(value, path);
   if (parsed <= 0) fail(path);
+  return parsed;
+}
+
+function boundedInteger(value, minimum, maximum, path) {
+  const parsed = integer(value, path);
+  if (parsed < minimum || parsed > maximum) fail(path);
   return parsed;
 }
 

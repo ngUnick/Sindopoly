@@ -93,9 +93,32 @@ player, be in the accepted lifecycle/phase, and provide command headers.
 
 | Method and path | Request / result |
 | --- | --- |
-| `POST /api/turn/{gameId}/{playerId}/throw` | Server generates dice and resolves movement/square effects. Returns dice, position, Start flag, square result, version, replay status, and nullable `card`. When a card is drawn, `card` contains the MariaDB `cardId`, `title`, thematic `text`, effect (`money` or `transport`), and authoritative signed amount/destination. |
+| `POST /api/turn/{gameId}/{playerId}/throw` | Server generates one authoritative pair and resolves movement/square effects. A genuine roll returns `die1`, `die2`, `total`, compatibility alias `dice=total`, position, Start flag, square result, version, replay status, and nullable `card`. Each die is 1–6, `total` is 2–12, and `total=die1+die2`. When a jailed player's command only creates the payment/skip offer, no entropy is consumed, `dice` is `0`, and the nullable pair fields are omitted. When a card is drawn, `card` contains the MariaDB `cardId`, `title`, thematic `text`, effect (`money` or `transport`), and authoritative signed amount/destination. |
 | `POST /api/turn/{gameId}/{playerId}/action` | Body includes `gameId`, `playerId`, legacy `squareType`, and `yes`. Path/body IDs must agree; the server-owned typed pending option—not `squareType`—authorizes the choice. |
 | `POST /api/turn/{gameId}/{playerId}/pass` | No body → action/rotation result with version/replay; declines the current permitted typed option. |
+
+Example genuine-roll fields:
+
+```json
+{
+  "dice": 7,
+  "die1": 3,
+  "die2": 4,
+  "total": 7,
+  "newPosition": 10,
+  "passedGo": false,
+  "squareType": 8,
+  "data": -1,
+  "stateVersion": 12,
+  "replayed": false,
+  "card": null
+}
+```
+
+`dice` is a temporary response-compatibility alias and is not calculated
+independently. An equivalent retry reads the serialized result from the existing
+`game:{gameId}:commands` replay record, returns the original pair exactly, and
+does not consume entropy or publish another event.
 
 ### Statistics
 

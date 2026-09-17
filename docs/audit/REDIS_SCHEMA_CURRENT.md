@@ -161,6 +161,12 @@ per-game Lua CAS.
 - Read by: `RandomOrgGenerator#nextDie`.
 - TTL: none.
 - Purpose: optional random.org dice entropy pool.
+- Element format: one decimal string from `"1"` through `"6"`; one element is
+  one individual die, never a two-die total or pair. The refill job requests
+  1,000 base-10 values in the inclusive range 1–6 and appends each with
+  `RPUSH`; `nextDie` consumes one from the head with `LPOP`, so one roll consumes
+  exactly two existing units. An empty list falls back to an in-process
+  `SecureRandom` value in the same range and does not write that fallback back.
 - Risks: external blocking `.block()` call in scheduled job; no failure handling around HTTP retrieve; only active if `dice.source=randomorg`.
 
 Invite codes are fields of `game:{gameId}` and are discovered through the

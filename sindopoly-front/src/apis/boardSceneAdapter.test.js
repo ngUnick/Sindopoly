@@ -4,6 +4,7 @@ import test from "node:test";
 import * as THREE from "three";
 import {
   BoardSceneAdapter,
+  DICE_FACE_ORIENTATIONS,
   disposeObjectGraph,
 } from "../features/game/board/BoardSceneAdapter.js";
 
@@ -137,6 +138,128 @@ test("loaded board-like and Dice-like graphs are disposed with the adapter", () 
   assert.equal(dice.materialDispose.count, 1, "two Dice clones share one material");
 });
 
+test("Dice GLB is loaded once and its existing clone pair is reused for presentations", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  const pair = [...adapter.diceModels];
+
+  assert.equal(harness.loads.filter(load => load.url === "Dice.glb").length, 1);
+  assert.equal(adapter.presentDiceRoll({
+    die1: 2, die2: 5, total: 7, presentationId: 1, reducedMotion: true,
+  }), true);
+  assert.deepEqual(adapter.diceModels, pair);
+  assert.ok(pair.every(die => die.visible));
+  assert.equal(harness.loads.filter(load => load.url === "Dice.glb").length, 1);
+});
+
+test("all six calibrated Dice.glb face rotations settle both dice deterministically", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  harness.completeLoad("Dice.glb", trackedModel().root);
+
+  assert.deepEqual(Object.keys(DICE_FACE_ORIENTATIONS), ["1", "2", "3", "4", "5", "6"]);
+  for (let value = 1; value <= 6; value += 1) {
+    assert.equal(adapter.presentDiceRoll({
+      die1: value,
+      die2: value,
+      total: value * 2,
+      presentationId: value,
+      reducedMotion: true,
+    }), true);
+    for (const die of adapter.diceModels) {
+      assert.deepEqual([die.rotation.x, die.rotation.y, die.rotation.z], DICE_FACE_ORIENTATIONS[value]);
+    }
+  }
+});
+
+test("dice animation uses bounded RAF and drains back to zero after settling", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  harness.environment.runNextFrame();
+
+  assert.equal(adapter.presentDiceRoll({
+    die1: 1, die2: 6, total: 7, presentationId: 4,
+  }), true);
+  assert.equal(harness.environment.pendingFrames.size, 1);
+  harness.environment.runNextFrame(100);
+  assert.equal(harness.environment.pendingFrames.size, 1);
+  harness.environment.runNextFrame(860);
+
+  assert.equal(adapter.diceAnimation, null);
+  assert.equal(harness.environment.pendingFrames.size, 0);
+  assert.deepEqual(diceRotations(adapter), [
+    DICE_FACE_ORIENTATIONS[1], DICE_FACE_ORIENTATIONS[6],
+  ]);
+});
+
+test("reduced motion settles directly with only one coalesced render", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  harness.environment.runNextFrame();
+
+  assert.equal(adapter.presentDiceRoll({
+    die1: 3, die2: 4, total: 7, presentationId: 5, reducedMotion: true,
+  }), true);
+  assert.equal(adapter.diceAnimation, null);
+  assert.equal(harness.environment.pendingFrames.size, 1);
+  harness.environment.runNextFrame(0);
+  assert.equal(harness.environment.pendingFrames.size, 0);
+});
+
+test("newer dice presentation supersedes animation and stale IDs are ignored", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  harness.environment.runNextFrame();
+
+  adapter.presentDiceRoll({ die1: 1, die2: 1, total: 2, presentationId: 8 });
+  harness.environment.runNextFrame(10);
+  assert.equal(adapter.presentDiceRoll({
+    die1: 6, die2: 6, total: 12, presentationId: 9, reducedMotion: true,
+  }), true);
+  assert.equal(adapter.presentDiceRoll({
+    die1: 2, die2: 3, total: 5, presentationId: 8, reducedMotion: true,
+  }), false);
+  harness.environment.runNextFrame(1000);
+
+  assert.equal(adapter.diceAnimation, null);
+  assert.equal(harness.environment.pendingFrames.size, 0);
+  assert.deepEqual(diceRotations(adapter), [
+    DICE_FACE_ORIENTATIONS[6], DICE_FACE_ORIENTATIONS[6],
+  ]);
+});
+
+test("dispose during a dice roll cancels the sole RAF and prevents late settle", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  harness.environment.runNextFrame();
+  adapter.presentDiceRoll({ die1: 2, die2: 5, total: 7, presentationId: 10 });
+  const pendingFrame = adapter.rafId;
+
+  adapter.dispose();
+
+  assert.ok(harness.environment.cancelledFrames.includes(pendingFrame));
+  assert.equal(harness.environment.pendingFrames.size, 0);
+  assert.equal(adapter.diceAnimation, null);
+  assert.equal(harness.environment.runNextFrame(1000), false);
+});
+
 test("late board and Dice callbacks dispose their resources and cannot attach or restart RAF", () => {
   const harness = createHarness();
   const adapter = harness.createAdapter();
@@ -263,6 +386,15 @@ test("adapter source stays presentation-only and Board delegates the Three lifec
   assert.doesNotMatch(boardSource, /new THREE\.|new GLTFLoader|requestAnimationFrame|cancelAnimationFrame/);
 });
 
+test("Board keeps the accessible total synchronized with observer dice events", async () => {
+  const boardSource = await readFile(new URL("../pages/Game/Board.jsx", import.meta.url), "utf8");
+
+  assert.match(
+    boardSource,
+    /if \(dicePresentation\) \{\s*setDice\(dicePresentation\.total\);\s*sceneAdapterRef\.current\?\.presentDiceRoll/,
+  );
+});
+
 function createHarness() {
   const environment = createEnvironment();
   const renderers = [];
@@ -346,14 +478,18 @@ function createEnvironment() {
       this.cancelledFrames.push(id);
       this.pendingFrames.delete(id);
     },
-    runNextFrame() {
+    runNextFrame(timestamp = 0) {
       const [id, callback] = this.pendingFrames.entries().next().value ?? [];
       if (!callback) return false;
       this.pendingFrames.delete(id);
-      callback(0);
+      callback(timestamp);
       return true;
     },
   };
+}
+
+function diceRotations(adapter) {
+  return adapter.diceModels.map(die => [die.rotation.x, die.rotation.y, die.rotation.z]);
 }
 
 function createRenderer() {

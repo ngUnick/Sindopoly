@@ -125,7 +125,8 @@ test("decodes the current session player without accepting string IDs", () => {
 
 test("decodes valid and replayed throw responses", () => {
   const result = {
-    dice: 7, newPosition: 12, passedGo: false, squareType: 5, data: 200,
+    dice: 7, die1: 3, die2: 4, total: 7,
+    newPosition: 12, passedGo: false, squareType: 5, data: 200,
     stateVersion: 8, replayed: false, card: null,
   };
 
@@ -135,7 +136,8 @@ test("decodes valid and replayed throw responses", () => {
 
 test("decodes current card data in a throw response", () => {
   const result = {
-    dice: 7, newPosition: 6, passedGo: true, squareType: 1, data: 6,
+    dice: 7, die1: 3, die2: 4, total: 7,
+    newPosition: 6, passedGo: true, squareType: 1, data: 6,
     stateVersion: 8, replayed: false,
     card: { cardId: 5, title: "Chance", text: "Move.", effect: "transport", amount: 6 },
   };
@@ -144,10 +146,40 @@ test("decodes current card data in a throw response", () => {
 });
 
 test("rejects malformed throw responses", () => {
-  assertInvalid(() => decodeThrowResult({
-    dice: "7", newPosition: 12, passedGo: false, squareType: 5, data: 200,
+  const result = {
+    dice: 7, die1: 3, die2: 4, total: 7,
+    newPosition: 12, passedGo: false, squareType: 5, data: 200,
     stateVersion: 8, replayed: false, card: null,
-  }));
+  };
+  for (const malformed of [
+    { ...result, dice: "7" },
+    { ...result, die1: 0 },
+    { ...result, die2: 7 },
+    { ...result, die1: 3.5 },
+    { ...result, die2: "4" },
+    { ...result, total: 8 },
+    { ...result, dice: 8 },
+  ]) {
+    assertInvalid(() => decodeThrowResult(malformed));
+  }
+});
+
+test("decodes authoritative minimum, maximum, and no-roll jail-offer results", () => {
+  const base = {
+    newPosition: 10, passedGo: false, squareType: 8, data: -1,
+    stateVersion: 8, replayed: false, card: null,
+  };
+  assert.deepEqual(decodeThrowResult({
+    ...base, dice: 2, die1: 1, die2: 1, total: 2,
+  }).total, 2);
+  assert.deepEqual(decodeThrowResult({
+    ...base, dice: 12, die1: 6, die2: 6, total: 12,
+  }).total, 12);
+  assert.deepEqual(decodeThrowResult({
+    ...base, dice: 0, squareType: 10, data: 50,
+  }), {
+    ...base, dice: 0, die1: null, die2: null, total: null, squareType: 10, data: 50,
+  });
 });
 
 test("decodes valid action responses and rejects malformed ones", () => {

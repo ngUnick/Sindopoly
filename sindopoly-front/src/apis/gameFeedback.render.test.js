@@ -43,7 +43,7 @@ test("observer notification duration leaves twelve seconds for contextual feedba
 
 test("rendered P2 observer notification shows a P1 property landing", () => {
   const html = renderObserver(envelope([
-    { type: "DICE_ROLLED", dice: 6 },
+    { type: "DICE_ROLLED", dice: 6, die1: 2, die2: 4, total: 6 },
     { type: "PLAYER_MOVED", fromPosition: 35, toPosition: 1 },
     { type: "LANDED_ON_TILE", squareId: 1 },
     { type: "PROPERTY_AVAILABLE", squareId: 1, amount: 60 },
@@ -57,7 +57,7 @@ test("rendered P2 observer notification shows a P1 property landing", () => {
 
 test("rendered observer property notification has no gameplay action controls", () => {
   const html = renderObserver(envelope([
-    { type: "DICE_ROLLED", dice: 1 },
+    { type: "DICE_ROLLED", dice: 2, die1: 1, die2: 1, total: 2 },
     { type: "LANDED_ON_TILE", squareId: 1 },
     { type: "PROPERTY_AVAILABLE", squareId: 1, amount: 60 },
   ]));
@@ -93,7 +93,7 @@ test("rendered active-player Chance modal keeps thematic REST card text primary"
 test("rendered P2 Chance notification contains the thematic STOMP card text", () => {
   const thematicText = "Ο φίλος σου που έχει αμάξι έφυγε πιο νωρίς σήμερα. Πήγαινε στη ΣΤΑΣΗ ΔΙΠΑΕ.";
   const html = renderObserver(envelope([
-    { type: "DICE_ROLLED", dice: 7 },
+    { type: "DICE_ROLLED", dice: 7, die1: 3, die2: 4, total: 7 },
     { type: "PLAYER_MOVED", fromPosition: 0, toPosition: 6 },
     { type: "LANDED_ON_TILE", squareId: 7 },
     {
@@ -119,7 +119,7 @@ test("rendered active and observer Community Chest feedback keeps thematic text"
     gamePositions: positions,
   }));
   const observerHtml = renderObserver(envelope([
-    { type: "DICE_ROLLED", dice: 2 },
+    { type: "DICE_ROLLED", dice: 2, die1: 1, die2: 1, total: 2 },
     { type: "LANDED_ON_TILE", squareId: 2 },
     { type: "CARD_DRAWN", squareId: 2, amount: 5, card },
   ], "00000000-0000-0000-0000-000000000003"));

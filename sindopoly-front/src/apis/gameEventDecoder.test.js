@@ -77,6 +77,23 @@ test("rejects malformed known event details", () => {
   assertInvalid(() => decodeGameEvent(malformed, 101));
 });
 
+test("rejects malformed and arithmetically inconsistent dice details", () => {
+  const dice = turnUpdatedEvent.payload.details.find(detail => detail.type === "DICE_ROLLED");
+  for (const malformedDice of [
+    { ...dice, die1: 0 },
+    { ...dice, die2: 7 },
+    { ...dice, die1: 1.5 },
+    { ...dice, die2: "4" },
+    { ...dice, total: 7 },
+    { ...dice, dice: 7 },
+  ]) {
+    assertInvalid(() => decodeGameEvent({
+      ...turnUpdatedEvent,
+      payload: { ...turnUpdatedEvent.payload, details: [malformedDice] },
+    }, 101));
+  }
+});
+
 test("rejects invalid JSON bodies with a normalized invalid-payload error", () => {
   assertInvalid(() => decodeGameEventBody("not-json", 101));
 });
@@ -85,7 +102,9 @@ test("rejects cross-game and unbounded envelopes", () => {
   assertInvalid(() => decodeGameEvent(turnUpdatedEvent, 102));
   assertInvalid(() => decodeGameEvent({
     ...turnUpdatedEvent,
-    payload: { ...turnUpdatedEvent.payload, details: Array(13).fill({ type: "DICE_ROLLED", dice: 6 }) },
+    payload: { ...turnUpdatedEvent.payload, details: Array(13).fill({
+      type: "DICE_ROLLED", dice: 6, die1: 2, die2: 4, total: 6,
+    }) },
   }, 101));
 });
 

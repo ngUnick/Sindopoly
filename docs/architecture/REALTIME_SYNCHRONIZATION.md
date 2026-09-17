@@ -27,7 +27,7 @@ The server emits one JSON envelope after an `APPLIED` authoritative transition:
     "reason": "ROLL_COMPLETED",
     "actorPlayerId": 41,
     "details": [
-      { "type": "DICE_ROLLED", "dice": 7 },
+      { "type": "DICE_ROLLED", "dice": 7, "die1": 3, "die2": 4, "total": 7 },
       { "type": "PLAYER_MOVED", "fromPosition": 3, "toPosition": 10 },
       { "type": "LANDED_ON_TILE", "squareId": 10 }
     ]
@@ -49,6 +49,13 @@ authoritative amount/destination. These details explain a committed transition;
 they are never accepted back as commands and never replace snapshot recovery.
 `REPLAY`, `STALE`, and `NO_OP` outcomes emit nothing. Publication failure is
 logged with game/type/version only and cannot roll back a committed transition.
+
+`DICE_ROLLED` carries the exact pair used by the committed transition. Both die
+values are integers from 1 through 6, `total=die1+die2`, and the temporary
+compatibility field `dice` equals `total`. The detail is built from the same
+`DiceRoll` as the REST result; it never generates, reconstructs, or accepts a
+client/Three.js result. A jail-choice-only throw has no `DICE_ROLLED` detail.
+The event and response use the same committed `stateVersion`.
 
 One envelope is emitted per committed transition, rather than one broker frame
 per internal fact. The active player keeps the REST-driven actionable dialog.

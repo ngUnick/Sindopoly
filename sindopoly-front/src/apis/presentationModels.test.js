@@ -12,6 +12,7 @@ import {
   buildConnectionViewModel,
 } from "../features/game/presentation/connectionViewModel.js";
 import { buildEventViewModel } from "../features/game/presentation/eventViewModel.js";
+import { buildDicePresentationModel } from "../features/game/presentation/dicePresentationModel.js";
 import { deriveOwnershipProjection } from "./ownershipProjection.js";
 import { decodeGameSnapshot } from "./transportDecoders.js";
 import { decodeGameEvent as decodeEvent } from "./gameEventDecoder.js";
@@ -330,6 +331,26 @@ const eventModel = (fixture, viewerPlayerId) => buildEventViewModel({
 
 test("event model uses viewer-relative roll copy", () => {
   assert.match(eventModel(turnUpdatedEvent, 101).text, /^Έφερες 6\./);
+});
+
+test("dice presentation preserves the authoritative pair and transition identity", () => {
+  const model = buildDicePresentationModel({
+    die1: 2, die2: 4, total: 6, presentationId: 12,
+  });
+  assert.deepEqual(model, { die1: 2, die2: 4, total: 6, presentationId: 12 });
+  assert.equal(Object.isFrozen(model), true);
+  assert.equal(buildDicePresentationModel({
+    die1: 2, die2: 4, total: 7, presentationId: 12,
+  }), null);
+});
+
+test("observer event model exposes the same confirmed dice presentation", () => {
+  assert.deepEqual(eventModel(turnUpdatedEvent, 102).dice, {
+    die1: 2,
+    die2: 4,
+    total: 6,
+    presentationId: turnUpdatedEvent.stateVersion,
+  });
 });
 
 test("event model uses third-person roll copy", () => {

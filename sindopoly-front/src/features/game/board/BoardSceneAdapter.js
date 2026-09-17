@@ -3,6 +3,24 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { buildForwardRoute, isBoardPosition } from "./boardCalibration.js";
 
 const INTERACTION_EVENTS = ["mousedown", "mousemove", "mouseup"];
+const DICE_ANIMATION_DURATION_MS = 760;
+const DICE_SETTLED_POSITIONS = Object.freeze([
+  Object.freeze([-2.1, 0.25, 0.5]),
+  Object.freeze([2.1, 0.25, 0.5]),
+]);
+
+/**
+ * Root rotations calibrated against the rendered Dice.glb. The model's original
+ * +X/-X/+Y/-Y/+Z/-Z faces are 6/1/2/5/4/3 respectively.
+ */
+export const DICE_FACE_ORIENTATIONS = Object.freeze({
+  1: Object.freeze([0, 0, -Math.PI / 2]),
+  2: Object.freeze([Math.PI / 2, 0, 0]),
+  3: Object.freeze([Math.PI, 0, 0]),
+  4: Object.freeze([0, 0, 0]),
+  5: Object.freeze([-Math.PI / 2, 0, 0]),
+  6: Object.freeze([0, 0, Math.PI / 2]),
+});
 
 /**
  * Disposes a scene graph without double-disposing resources shared by clones.
@@ -69,6 +87,9 @@ export class BoardSceneAdapter {
     this.pawns = [];
     this.pawnsByPlayerId = new Map();
     this.rafId = null;
+    this.diceAnimation = null;
+    this.pendingDicePresentation = null;
+    this.lastDicePresentationId = -1;
 
     this.mounted = false;
     this.disposed = false;
@@ -174,14 +195,20 @@ export class BoardSceneAdapter {
         const dice1 = gltf.scene.clone();
         const dice2 = gltf.scene.clone();
         dice1.scale.set(10, 10, 10);
-        dice1.position.set(10, 20, -20);
+        dice1.position.set(...DICE_SETTLED_POSITIONS[0]);
         dice2.scale.set(10, 10, 10);
-        dice2.position.set(0, 25, -20);
+        dice2.position.set(...DICE_SETTLED_POSITIONS[1]);
         dice1.visible = false;
         dice2.visible = false;
         this.diceModels = [dice1, dice2];
         this.scene.add(dice1, dice2);
-        this.invalidate();
+        if (this.pendingDicePresentation) {
+          const presentation = this.pendingDicePresentation;
+          this.pendingDicePresentation = null;
+          this.startDicePresentation(presentation);
+        } else {
+          this.invalidate();
+        }
       },
       undefined,
       error => {
@@ -277,6 +304,76 @@ export class BoardSceneAdapter {
     return true;
   }
 
+  /** Presents a confirmed pair; the scene never generates or changes game-state dice. */
+  presentDiceRoll({ die1, die2, total, presentationId, reducedMotion = false } = {}) {
+    if (!this.mounted || this.disposed
+        || !isDieValue(die1) || !isDieValue(die2)
+        || !Number.isSafeInteger(total) || total !== die1 + die2
+        || !Number.isSafeInteger(presentationId) || presentationId < 0
+        || presentationId <= this.lastDicePresentationId) {
+      return false;
+    }
+
+    this.lastDicePresentationId = presentationId;
+    const presentation = Object.freeze({
+      die1,
+      die2,
+      total,
+      presentationId,
+      reducedMotion: reducedMotion === true,
+    });
+    if (this.diceModels.length !== 2) {
+      this.pendingDicePresentation = presentation;
+      return true;
+    }
+    this.startDicePresentation(presentation);
+    return true;
+  }
+
+  startDicePresentation(presentation) {
+    if (presentation.reducedMotion) {
+      this.diceAnimation = null;
+      this.applyFinalDiceOrientation(presentation);
+      this.invalidate();
+      return;
+    }
+
+    this.diceAnimation = { presentation, startedAt: null };
+    this.applyDiceAnimationFrame(presentation, 0);
+    this.invalidate();
+  }
+
+  applyFinalDiceOrientation({ die1, die2 }) {
+    for (const [index, value] of [die1, die2].entries()) {
+      const die = this.diceModels[index];
+      die.visible = true;
+      die.position.set(...DICE_SETTLED_POSITIONS[index]);
+      die.rotation.set(...DICE_FACE_ORIENTATIONS[value]);
+    }
+  }
+
+  applyDiceAnimationFrame(presentation, progress) {
+    const eased = 1 - ((1 - progress) ** 3);
+    const remaining = 1 - eased;
+    for (const [index, value] of [presentation.die1, presentation.die2].entries()) {
+      const die = this.diceModels[index];
+      const settled = DICE_SETTLED_POSITIONS[index];
+      const orientation = DICE_FACE_ORIENTATIONS[value];
+      const variation = (presentation.presentationId + index * 2) % 3;
+      die.visible = true;
+      die.position.set(
+        settled[0],
+        settled[1] + Math.sin(Math.PI * progress) * (2.1 + index * 0.25),
+        settled[2],
+      );
+      die.rotation.set(
+        orientation[0] + remaining * Math.PI * (4 + variation),
+        orientation[1] + remaining * Math.PI * (3 + index),
+        orientation[2] + remaining * Math.PI * (4 + ((variation + 1) % 3)),
+      );
+    }
+  }
+
   assignPawns(playerRows) {
     const next = new Map();
     const available = new Set(this.pawns);
@@ -306,10 +403,25 @@ export class BoardSceneAdapter {
     return true;
   }
 
-  renderFrame() {
+  renderFrame(timestamp) {
     this.rafId = null;
     if (!this.mounted || this.disposed) return;
+    let animationContinues = false;
+    if (this.diceAnimation) {
+      const now = Number.isFinite(timestamp) ? timestamp : 0;
+      if (this.diceAnimation.startedAt === null) this.diceAnimation.startedAt = now;
+      const elapsed = Math.max(0, now - this.diceAnimation.startedAt);
+      const progress = Math.min(elapsed / DICE_ANIMATION_DURATION_MS, 1);
+      this.applyDiceAnimationFrame(this.diceAnimation.presentation, progress);
+      if (progress >= 1) {
+        this.applyFinalDiceOrientation(this.diceAnimation.presentation);
+        this.diceAnimation = null;
+      } else {
+        animationContinues = true;
+      }
+    }
     this.renderer.render(this.scene, this.camera);
+    if (animationContinues) this.invalidate();
   }
 
   dispose() {
@@ -320,6 +432,8 @@ export class BoardSceneAdapter {
 
     if (this.rafId !== null) this.environment?.cancelAnimationFrame(this.rafId);
     this.rafId = null;
+    this.diceAnimation = null;
+    this.pendingDicePresentation = null;
     if (this.environment?.removeEventListener) {
       for (const event of INTERACTION_EVENTS) {
         this.environment.removeEventListener(event, this.listenerFor(event), false);
@@ -341,8 +455,13 @@ export class BoardSceneAdapter {
     this.diceModels = [];
     this.pawns = [];
     this.pawnsByPlayerId.clear();
+    this.lastDicePresentationId = -1;
     this.isDragging = false;
   }
+}
+
+function isDieValue(value) {
+  return Number.isSafeInteger(value) && value >= 1 && value <= 6;
 }
 
 function createPawn(geometry, color, position) {
