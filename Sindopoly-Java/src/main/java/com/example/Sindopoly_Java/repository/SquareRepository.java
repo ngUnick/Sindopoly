@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface SquareRepository extends JpaRepository<Square, Integer> {
+    List<Square> findAllByOrderByIdAsc();
+
     @Query("SELECT s.id FROM Square s WHERE s.type = :type")
     List<Integer> findIdsByColour(@Param("type") SquareType type);
 }

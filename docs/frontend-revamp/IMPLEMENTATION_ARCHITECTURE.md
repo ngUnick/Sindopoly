@@ -390,7 +390,7 @@ history or client presentation state is added.
 | Dice pair | Add `die1`, `die2`, `total` to `ThrowResultDto` and `DICE_ROLLED` `GameEventDetail`; temporarily retain `dice=total` | `DiceService` returns a pair; command replay stores the expanded existing result JSON; `lastDice` may remain total | Additive JSON; old clients use `dice`; rule, DTO, replay, event and frontend decoder tests. Redis schema: **None**. MariaDB: **None** |
 | Turn deadline | Nullable `turnDeadlineEpochMs` on `GameRealtimeSnapshot` | Snapshot service reads the existing `game:{gameId}` field in the stable version-bracketed read | Additive; absolute epoch milliseconds, `null` when absent, frontend display-only authority. Redis schema: **None**. MariaDB: **None** |
 | Current game | Add `GET /api/session/current-game` returning `CurrentGameDto(gameId,status,stateVersion,visibility)` or 204; visibility preserves the existing public/private lobby route | Authenticated discovery returns candidates then validates membership/stable game snapshots | Keep boolean endpoint for compatibility; self-session, none, stale candidate and multi-game race tests. Redis schema: **None**. MariaDB: **None** |
-| Board metadata | Add `GET /api/board/squares` returning ordered `BoardSquareDto(id,type,displayNameEl,price,rent)` | New read service/repository projection; add Flyway migration for `square.display_name_el` and seed 40 names | Additive endpoint; order/completeness/auth/cache tests. Redis schema: **None**. MariaDB: **add nullable-then-backfilled name column, then enforce non-null if verified** |
+| Board metadata | `GET /api/board/squares` returns ordered `BoardSquareMetadataDto(position,name,type,property)`; property is nullable `{purchasePrice,baseRent,group}` | One ordered read service/repository projection; Flyway V2 adds `square.name`, seeds 40 Greek names, then enforces non-null | Additive authenticated endpoint; order/completeness/auth/one-query tests. Redis schema: **None**. MariaDB: **V2 name column only** |
 | Completion | Add nullable `finalResult` to ended `GameRealtimeSnapshot`, with ordered `{playerId,nickname,cash,propertyValue,totalValue,rank,winner}` | Server derives values from retained authoritative player state and existing Square prices; fetch prices in one query | Additive; winner/rank/tie/reconnect/terminal TTL tests. Redis schema: **None**. MariaDB schema: **None** |
 | Greek nicknames | Replace map request with typed create-player DTO and define NFC normalization, allowed categories, grapheme/code-point limit, case/uniqueness and compatibility policy | Validation/session boundary plus `Player.p_name`; no active-state copy | Existing names are not silently rewritten. MariaDB migration only if collation/uniqueness policy requires it. Redis schema: **None** |
 
@@ -501,7 +501,7 @@ Every milestone leaves the supported game runnable.
 | M4 Authoritative controller | Controller/reducer/gateways, reuse realtime primitives | Mock HTTP/STOMP race/reconnect suite; old Board can consume controller snapshot | None | None | None | High; retain old hook/API path |
 | M5 DOM HUD extraction | Header, rail, action/context/history components | Component and current-mechanics tests | None | None | None | Medium; legacy HUD switch |
 | M6 Scene adapter | Move renderer/assets/input/RAF/disposal behind adapter | Idle RAF=0; mount/unmount resource checks; visual parity | None | None | None | High; legacy scene kept until parity |
-| M7 Contract projections | Dice pair, deadline, board metadata, final result | Backend/contract compatibility tests | None | Add `die1`/`die2`/`total` while retaining `dice`; add snapshot deadline/final result; add `GET /api/board/squares`; no destination removal | Add/backfill `square.display_name_el`, then enforce non-null only after verification | High; additive fields ignored by old client |
+| M7 Contract projections | Dice pair, deadline, board metadata, final result | Backend/contract compatibility tests | None | Add `die1`/`die2`/`total` while retaining `dice`; add snapshot deadline/final result; add `GET /api/board/squares`; no destination removal | Flyway V2 adds/backfills `square.name`, then enforces non-null | High; additive fields ignored by old client |
 | M8 First vertical slice | Confirmed roll through two-player handoff | Two-context integration/E2E, reduced motion, reconnect interruption | None | None; consumes M1/M7 additions | None | High; feature switch to legacy flow |
 | M9 Full current mechanics | Purchase/decline, cards, tax, rent, jail, timeout, completion | Current rule matrix plus browser flows | None | None | None | High; per-outcome rollback |
 | M10 Responsive/accessibility | Desktop, tablet, functional phone, focus/live regions | Keyboard, reduced motion, visual baselines | None | None | None | Medium; component-level rollback |
@@ -1211,7 +1211,50 @@ or active dice presentation, and retains the FE-REVAMP-015 resource guarantees.
 Board/pawn movement, camera, lighting, assets, background, HUD, turn/jail rules,
 REST paths, STOMP destinations and dependencies are unchanged.
 
-## 32. Git, documentation and risk
+## 32. FE-REVAMP-018 canonical board metadata projection
+
+The canonical board catalog now follows one read-only chain:
+
+`MariaDB square (Flyway V1+V2) → BoardMetadataService → GET
+/api/board/squares → decodeBoardMetadata → buildBoardMetadataIndex →
+future game-controller/HUD integration`.
+
+The migration is intentionally included even though a no-migration outcome was
+the default. The committed backlog requires the Greek-name column, and both V1
+and the live schema proved that no durable name/title field existed. V2 first
+adds a nullable `VARCHAR(100)`, maps all 40 established Greek display names by
+ID, and only then enforces non-null. An unexpected ID is left null so migration
+fails closed. V1 remains immutable.
+
+`BoardMetadataService` issues one ordered repository query and requires exactly
+40 contiguous rows (`0`–`39`). It validates names, types, price/rent semantics,
+and property groups before emitting immutable DTOs. Each DTO exposes
+`position`, `name`, canonical `type`, and either null `property` or
+`{purchasePrice,baseRent,group}`. Utilities alone have a null base rent because
+their charge is a game rule, not static metadata. The endpoint is session
+authenticated but deliberately has no game-membership guard: this is global,
+non-sensitive reference data, not a game resource. It accepts no input, changes
+no state, and adds no CSRF, Redis, replay, polling, timer, or STOMP behavior.
+
+The frontend transport decoder independently enforces completeness, exact
+ordering, known types, property/type consistency, and finite integer values.
+The pure immutable index retains ordered iteration and O(1) lookup by position.
+`gameViewModel` now accepts this typed index rather than the former ad-hoc
+`namesBySquareId` map, while ownership continues to come only from the live
+ownership projection. This prepares the boundary without mounting a new fetch
+or changing the current Board lifecycle.
+
+Legacy catalog retirement is explicit. `Board.jsx#gamePositions` remains a
+temporary presentation dependency until the controller/board vertical slice;
+it is no longer the intended metadata authority. Its incomplete `priceMap`
+remains tracked mechanics debt for FE-REVAMP-019's authoritative completion
+projection. `boardCalibration` stays the geometry authority and
+`ownershipProjection` stays the live ownership authority. The extracted HUD is
+still unmounted. A later single-owner integration must replace the remaining
+Board catalog reads before deleting them; this item does not broaden into that
+runtime migration.
+
+## 33. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

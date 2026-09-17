@@ -158,7 +158,9 @@ class LegacyDatabaseMigrationIT {
                     + escaped(PAY_TWENTY_DESCRIPTION) + "'"))
                     .isEqualByComparingTo("20");
             assertThat(scalar(connection, "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1"))
-                    .isEqualTo(1);
+                    .isEqualTo(2);
+            assertThat(scalar(connection, "SELECT COUNT(*) FROM square WHERE name IS NOT NULL"))
+                    .isEqualTo(40);
         }
     }
 
@@ -177,7 +179,7 @@ class LegacyDatabaseMigrationIT {
         try (Connection connection = connection()) {
             assertBaselineHistory(connection);
             assertThat(scalar(connection, "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1"))
-                    .isEqualTo(1);
+                    .isEqualTo(2);
             assertThat(scalar(connection,
                     "SELECT IS_FREE_LOCK('sindopoly:database-compatibility')")).isEqualTo(1);
         }

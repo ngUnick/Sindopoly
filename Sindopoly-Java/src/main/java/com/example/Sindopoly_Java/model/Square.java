@@ -15,6 +15,9 @@ public class Square {
     @Column(name = "s_type")
     private SquareType type;
 
+    @Column(nullable = false, length = 100)
+    private String name;
+
     @Column(columnDefinition = "SMALLINT")
     private Integer price;
 
@@ -29,6 +32,10 @@ public class Square {
 
     public SquareType getType() {
         return type;
+    }
+
+    public String getName() {
+        return name;
     }
 
     public Integer getPrice() {

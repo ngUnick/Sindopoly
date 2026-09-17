@@ -6,7 +6,8 @@ stable reference-data evolution.
 ## Ownership
 
 - Canonical migrations: `Sindopoly-Java/src/main/resources/db/migration`.
-- Current migration: `V1__create_sindopoly_schema.sql`.
+- Current migration chain: `V1__create_sindopoly_schema.sql`, then
+  `V2__add_canonical_square_names.sql`.
 - Migration history: `flyway_schema_history` in the application database.
 - Hibernate: validates MariaDB mappings; it does not create or update MariaDB.
 - Stable Card/Square definitions: versioned Flyway data.
@@ -28,16 +29,18 @@ Active turn, membership, balances, position, deck order, and command replay are
 not MariaDB state; they remain transient authoritative Redis state.
 
 Released migrations are immutable because Flyway validates their checksums.
-Future schema or required reference-data changes require V2, V3, and so on.
+Future schema or required reference-data changes require V3, V4, and so on.
 
 ## Startup paths
 
 ### Empty database
 
 `SindopolyFlywayMigrationStrategy` identifies a database with no application
-tables and invokes Flyway. Flyway creates its history table, applies V1, and
-records a successful SQL migration at version 1. Hibernate then validates the
-result before repositories and application services become usable.
+tables and invokes Flyway. Flyway creates its history table, applies V1 and V2,
+and records both successful SQL migrations. V2 adds the square `name` column,
+backfills every canonical Greek name by board ID, and then enforces
+`VARCHAR(100) NOT NULL`. Hibernate validates the result before repositories and
+application services become usable.
 
 ### Recognized unversioned database
 
@@ -58,7 +61,9 @@ One populated Stats row plus zero rows retains the populated row. All-zero
 duplicates retain the lowest Stats ID. Multiple populated rows fail closed and
 are never merged. After V1 equivalence is proven, Flyway records baseline version
 1 with description `Validated legacy Sindopoly schema`. The named lock is then
-released and Flyway performs its normal migrate/validate path.
+released and Flyway performs its normal migrate/validate path. That path applies
+V2 after the V1 baseline; the legacy bridge does not duplicate or bypass the
+name migration.
 
 ### Flyway-managed database
 
@@ -94,9 +99,10 @@ history.
 
 - Fast H2 tests use `create-drop` with Flyway disabled and provide domain/API
   feedback only.
-- MariaDB 10.11 Testcontainers tests prove empty V1 migration, Hibernate
-  validation, repeat migration, recognized baseline, safe repairs, fail-closed
-  ambiguous/NULL/orphan/unknown states, and concurrent bootstrap.
+- MariaDB 10.11 Testcontainers tests prove empty V1+V2 migration, all 40
+  non-null names, Hibernate validation, repeat migration, recognized V1
+  baseline followed by V2, safe repairs, fail-closed ambiguous/NULL/orphan/
+  unknown states, and concurrent bootstrap.
 - Failsafe includes all `*IT` migration tests in the existing backend integration
   CI job.
 

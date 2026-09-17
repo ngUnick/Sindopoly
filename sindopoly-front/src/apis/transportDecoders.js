@@ -4,6 +4,14 @@ const SNAPSHOT_STATUSES = new Set(["lobby", "inProgress", "ended"]);
 const CURRENT_GAME_STATUSES = new Set(["lobby", "inProgress"]);
 const VISIBILITIES = new Set(["public", "private"]);
 const OPTIONAL_ACTION_TYPES = new Set(["PURCHASE_PROPERTY", "PAY_JAIL_EXIT"]);
+const BOARD_SQUARE_TYPES = new Set([
+  "START", "CARD", "TAX", "JAIL", "GOJAIL", "PARKING", "TRAIN", "UTILITY",
+  "BROWN", "CYAN", "PURPLE", "ORANGE", "RED", "YELLOW", "GREEN", "BLUE",
+]);
+const BOARD_PROPERTY_TYPES = new Set([
+  "TRAIN", "UTILITY", "BROWN", "CYAN", "PURPLE", "ORANGE",
+  "RED", "YELLOW", "GREEN", "BLUE",
+]);
 
 export function decodeCurrentPlayer(value) {
   requireRecord(value, "currentPlayer");
@@ -23,6 +31,34 @@ export function decodeCurrentGame(value) {
     stateVersion: version(value.stateVersion, "currentGame.stateVersion"),
     visibility: value.visibility,
   });
+}
+
+/** Validates the complete ordered MariaDB-backed board metadata projection. */
+export function decodeBoardMetadata(value) {
+  if (!Array.isArray(value) || value.length !== 40) fail("boardMetadata");
+  return Object.freeze(value.map((square, expectedPosition) => {
+    const path = `boardMetadata[${expectedPosition}]`;
+    requireRecord(square, path);
+    const position = boundedInteger(square.position, 0, 39, `${path}.position`);
+    if (position !== expectedPosition) fail(`${path}.position`);
+    const name = nonBlankString(square.name, `${path}.name`);
+    const type = enumValue(square.type, BOARD_SQUARE_TYPES, `${path}.type`);
+    const property = BOARD_PROPERTY_TYPES.has(type)
+      ? decodeBoardProperty(square.property, type, `${path}.property`)
+      : requireNull(square.property, `${path}.property`);
+    return Object.freeze({ position, name, type, property });
+  }));
+}
+
+function decodeBoardProperty(value, type, path) {
+  requireRecord(value, path);
+  const purchasePrice = positiveInteger(value.purchasePrice, `${path}.purchasePrice`);
+  const baseRent = type === "UTILITY"
+    ? requireNull(value.baseRent, `${path}.baseRent`)
+    : positiveInteger(value.baseRent, `${path}.baseRent`);
+  const group = enumValue(value.group, BOARD_PROPERTY_TYPES, `${path}.group`);
+  if (group !== type) fail(`${path}.group`);
+  return Object.freeze({ purchasePrice, baseRent, group });
 }
 
 /** Validates the current recovery DTO without deriving ownership or game rules. */
@@ -209,6 +245,17 @@ function enumValue(value, allowed, path) {
 function string(value, path) {
   if (typeof value !== "string") fail(path);
   return value;
+}
+
+function nonBlankString(value, path) {
+  const parsed = string(value, path);
+  if (!parsed.trim() || parsed !== parsed.trim()) fail(path);
+  return parsed;
+}
+
+function requireNull(value, path) {
+  if (value !== null) fail(path);
+  return null;
 }
 
 function nullableString(value, path) {

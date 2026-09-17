@@ -16,6 +16,7 @@ import {
   propertyIdsForPlayer,
 } from "../../../apis/ownershipProjection.js";
 import { buildConnectionViewModel } from "./connectionViewModel.js";
+import { getSquareMetadata } from "../board/boardMetadata.js";
 
 const SNAPSHOT_STATUSES = new Set(["lobby", "inProgress", "ended"]);
 
@@ -39,6 +40,7 @@ export function buildGameViewModel({
   snapshot,
   viewerPlayerId,
   ownership = null,
+  boardMetadata = null,
   commandState = null,
   connectionState = null,
 } = {}) {
@@ -94,6 +96,7 @@ export function buildGameViewModel({
       ownership: resolvedOwnership,
       viewerPlayerId: safeViewerId,
       activePlayerId: activePlayer?.playerId ?? null,
+      boardMetadata,
     }),
     completion: buildCompletionViewModel(snapshot, playersById),
     connection,
@@ -247,15 +250,20 @@ export function buildPropertyViewModels({
   ownership,
   viewerPlayerId = null,
   activePlayerId = null,
-  namesBySquareId = null,
+  boardMetadata = null,
 } = {}) {
   if (!Array.isArray(squareIds)) return Object.freeze([]);
   const uniqueIds = [...new Set(squareIds.filter(isSquareId))];
   return Object.freeze(uniqueIds.map(squareId => {
     const owner = ownership?.ownerBySquareId?.[squareId] ?? null;
+    const metadata = getSquareMetadata(boardMetadata, squareId);
     return Object.freeze({
       squareId,
-      name: hasText(namesBySquareId?.[squareId]) ? namesBySquareId[squareId] : null,
+      name: hasText(metadata?.name) ? metadata.name : null,
+      type: metadata?.type ?? null,
+      purchasePrice: metadata?.property?.purchasePrice ?? null,
+      baseRent: metadata?.property?.baseRent ?? null,
+      group: metadata?.property?.group ?? null,
       isOwned: owner != null,
       ownerPlayerId: owner?.playerId ?? null,
       ownerName: owner?.nickname ?? null,

@@ -7,17 +7,21 @@ test("snapshot, command, and STOMP boundaries invoke transport decoders", async 
   const gameApi = await source("GameAPI.jsx");
   const turnApi = await source("TurnAPI.jsx");
   const realtime = await source("realtimeSync.js");
+  const boardApi = await source("BoardAPI.js");
 
   assert.match(gameApi, /decodeGameSnapshot/);
   assert.match(turnApi, /decodeThrowResult/);
   assert.match(turnApi, /decodeActionResult/);
   assert.match(realtime, /decodeGameEventBody/);
+  assert.match(boardApi, /decodeBoardMetadata/);
+  assert.match(boardApi, /\/api\/board\/squares/);
+  assert.doesNotMatch(boardApi, /setInterval|setTimeout|stateVersion|STOMP/);
 });
 
 test("target API boundaries do not parse raw JSON directly", async () => {
   for (const path of [
     "AuthAPI.jsx", "GameAPI.jsx", "GamePlayAPI.jsx", "TurnAPI.jsx",
-    "currentGame.js", "gameCommandState.js",
+    "BoardAPI.js", "currentGame.js", "gameCommandState.js",
   ]) {
     assert.doesNotMatch(await source(path), /\.json\(\)/, path);
   }

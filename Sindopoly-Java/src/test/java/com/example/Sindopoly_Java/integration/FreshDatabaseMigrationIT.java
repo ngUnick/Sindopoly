@@ -75,6 +75,17 @@ class FreshDatabaseMigrationIT {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM player", Integer.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM stats", Integer.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM square", Integer.class)).isEqualTo(40);
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM flyway_schema_history
+                WHERE version = '2' AND description = 'add canonical square names'
+                  AND type = 'SQL' AND success = 1
+                """, Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM square WHERE name IS NOT NULL", Integer.class))
+                .isEqualTo(40);
+        assertThat(jdbc.queryForObject("SELECT name FROM square WHERE id = 0", String.class))
+                .isEqualTo("ΑΦΕΤΗΡΙΑ");
+        assertThat(jdbc.queryForObject("SELECT name FROM square WHERE id = 39", String.class))
+                .isEqualTo("ΗΛΕΚΤΡΟΝΙΚΗΣ");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM card", Integer.class)).isEqualTo(40);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM game_finalization", Integer.class)).isZero();
 

@@ -13,6 +13,7 @@ import {
 } from "../features/game/presentation/connectionViewModel.js";
 import { buildEventViewModel } from "../features/game/presentation/eventViewModel.js";
 import { buildDicePresentationModel } from "../features/game/presentation/dicePresentationModel.js";
+import { buildBoardMetadataIndex } from "../features/game/board/boardMetadata.js";
 import { deriveOwnershipProjection } from "./ownershipProjection.js";
 import { decodeGameSnapshot } from "./transportDecoders.js";
 import { decodeGameEvent as decodeEvent } from "./gameEventDecoder.js";
@@ -27,6 +28,8 @@ import {
   turnTimeoutEvent,
   turnUpdatedEvent,
 } from "../test-fixtures/gameRealtimeFixtures.js";
+import { createBoardMetadataPayload } from "../test-fixtures/boardMetadataFixtures.js";
+import { decodeBoardMetadata } from "./transportDecoders.js";
 
 const decodedSnapshot = fixture => decodeGameSnapshot(structuredClone(fixture));
 const decodedEvent = fixture => decodeEvent(structuredClone(fixture), fixture.gameId);
@@ -278,12 +281,30 @@ test("property model represents an unowned supplied square", () => {
 
 test("property model accepts only caller-supplied display metadata", () => {
   const snapshot = decodedSnapshot(inProgressSnapshot);
+  const boardMetadata = buildBoardMetadataIndex(
+    decodeBoardMetadata(createBoardMetadataPayload()),
+  );
   const property = buildPropertyViewModels({
     squareIds: [1],
     ownership: deriveOwnershipProjection(snapshot),
-    namesBySquareId: { 1: "ΓΥΜΝΑΣΤΗΡΙΟ" },
+    boardMetadata,
   })[0];
   assert.equal(property.name, "ΓΥΜΝΑΣΤΗΡΙΟ");
+  assert.equal(property.type, "BROWN");
+  assert.equal(property.purchasePrice, 101);
+  assert.equal(property.baseRent, 2);
+  assert.equal(property.group, "BROWN");
+});
+
+test("game view model accepts metadata without changing ownership authority", () => {
+  const boardMetadata = buildBoardMetadataIndex(
+    decodeBoardMetadata(createBoardMetadataPayload()),
+  );
+  const model = gameModel(inProgressSnapshot, 101, { boardMetadata });
+
+  assert.equal(model.properties[0].name, "ΓΥΜΝΑΣΤΗΡΙΟ");
+  assert.equal(model.properties[0].ownerPlayerId, 101);
+  assert.equal(model.properties[0].purchasePrice, 101);
 });
 
 test("conflicting ownership remains unresolved", () => {

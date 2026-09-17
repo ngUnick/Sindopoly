@@ -63,6 +63,46 @@ game for the player, the request fails explicitly with `409` rather than using
 Redis scan order. An absent or expired authenticated session produces `401`.
 This read adds no Redis key, reverse index, TTL, or MariaDB schema change.
 
+### Board reference data
+
+| Method and path | Access | Request / result |
+| --- | --- | --- |
+| `GET /api/board/squares` | Authenticated | No body → exactly 40 canonical board-square metadata objects in ascending position order. |
+
+Each object has `position` (the contiguous integer `0`–`39`), a non-blank Greek
+`name`, and the canonical `type`. Purchasable squares also have
+`property: {purchasePrice,baseRent,group}`. `baseRent` is `null` only for
+utilities, whose charge is calculated by the authoritative turn service;
+`group` is the exact canonical type name. Special, card, tax, jail, parking,
+go-to-jail, and Start squares have `property: null`.
+
+```json
+[
+  {
+    "position": 0,
+    "name": "ΑΦΕΤΗΡΙΑ",
+    "type": "START",
+    "property": null
+  },
+  {
+    "position": 39,
+    "name": "ΗΛΕΚΤΡΟΝΙΚΗΣ",
+    "type": "BLUE",
+    "property": {
+      "purchasePrice": 400,
+      "baseRent": 50,
+      "group": "BLUE"
+    }
+  }
+]
+```
+
+The projection is global immutable reference data, not game state, so it needs
+an authenticated session but no game membership, command headers, or CSRF. The
+server fails closed rather than returning a partial, unordered, duplicated, or
+malformed catalog. MariaDB/Flyway owns the source rows; the endpoint does one
+ordered read and creates no Redis key, poll, timer, or STOMP event.
+
 ### Lobby and game state
 
 | Method and path | Request and response | Authorization / purpose |

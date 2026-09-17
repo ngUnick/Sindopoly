@@ -12,6 +12,7 @@ import com.example.Sindopoly_Java.service.transition.GameCommandService;
 import com.example.Sindopoly_Java.service.transition.RedisGameTransitionStore;
 import com.example.Sindopoly_Java.service.transition.TransitionExecution;
 import com.example.Sindopoly_Java.service.transition.TurnCommandService;
+import com.example.Sindopoly_Java.service.core.DiceRoll;
 import com.example.Sindopoly_Java.service.core.DiceService;
 import com.example.Sindopoly_Java.service.transition.FinalizationFailureProbe;
 import com.example.Sindopoly_Java.service.transition.GameFinalizationService;
@@ -374,7 +375,7 @@ class IntegrationInfrastructureIT {
                             null, UUID.randomUUID(), 2).status()).isEqualTo(403);
                     assertNoEvents(hostEvents, memberEvents);
 
-                    doReturn(3).when(applicationDice).roll();
+                    doReturn(new DiceRoll(1, 2)).when(applicationDice).roll();
                     UUID rollId = UUID.randomUUID();
                     var executor = Executors.newFixedThreadPool(2);
                     List<GameBoundaryClient.ApiResponse> duplicateRolls;
@@ -558,7 +559,7 @@ class IntegrationInfrastructureIT {
         flyway.migrate();
 
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class))
-                .isEqualTo(1);
+                .isEqualTo(2);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM card", Integer.class)).isEqualTo(cards);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM square", Integer.class)).isEqualTo(squares);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM player", Integer.class)).isEqualTo(players);
