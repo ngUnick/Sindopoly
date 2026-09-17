@@ -217,6 +217,99 @@ test("reduced motion settles directly with only one coalesced render", () => {
   assert.equal(harness.environment.pendingFrames.size, 0);
 });
 
+test("completion-aware dice resolves only after the accepted visual settles", async () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  harness.environment.runNextFrame();
+  let settled = false;
+
+  const completion = adapter.presentDiceRollAndWait({
+    die1: 2, die2: 4, total: 6, presentationId: 6,
+  }).then(value => { settled = true; return value; });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  harness.environment.runNextFrame(100);
+  await Promise.resolve();
+  assert.equal(settled, false);
+  harness.environment.runNextFrame(860);
+
+  assert.equal(await completion, true);
+  assert.equal(harness.environment.pendingFrames.size, 0);
+});
+
+test("completion-aware reduced motion resolves without an animation loop", async () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  harness.environment.runNextFrame();
+
+  assert.equal(await adapter.presentDiceRollAndWait({
+    die1: 3, die2: 3, total: 6, presentationId: 7, reducedMotion: true,
+  }), true);
+  assert.equal(adapter.diceAnimation, null);
+  assert.equal(harness.environment.pendingFrames.size, 1, "the final orientation needs one render only");
+  harness.environment.runNextFrame();
+  assert.equal(harness.environment.pendingFrames.size, 0);
+});
+
+test("newer dice and explicit cancellation settle old completion handles safely", async () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  harness.environment.runNextFrame();
+
+  const superseded = adapter.presentDiceRollAndWait({
+    die1: 1, die2: 2, total: 3, presentationId: 8,
+  });
+  const current = adapter.presentDiceRollAndWait({
+    die1: 5, die2: 6, total: 11, presentationId: 9, reducedMotion: true,
+  });
+  assert.equal(await superseded, false);
+  assert.equal(await current, true);
+
+  const canceled = adapter.presentDiceRollAndWait({
+    die1: 4, die2: 4, total: 8, presentationId: 10,
+  });
+  assert.equal(adapter.cancelDicePresentation(10), true);
+  assert.equal(await canceled, false);
+  harness.environment.runNextFrame(1000);
+  assert.equal(adapter.diceAnimation, null);
+  assert.equal(harness.environment.pendingFrames.size, 0);
+});
+
+test("dispose and Dice load failure cannot leave completion handles unresolved", async () => {
+  const disposeHarness = createHarness();
+  const disposable = disposeHarness.createAdapter();
+  disposable.mount(disposeHarness.container);
+  const disposedCompletion = disposable.presentDiceRollAndWait({
+    die1: 1, die2: 6, total: 7, presentationId: 11,
+  });
+  disposable.dispose();
+  assert.equal(await disposedCompletion, false);
+
+  const failureHarness = createHarness();
+  const failing = failureHarness.createAdapter();
+  failing.mount(failureHarness.container);
+  const failedCompletion = failing.presentDiceRollAndWait({
+    die1: 2, die2: 5, total: 7, presentationId: 12,
+  });
+  const originalConsoleError = console.error;
+  try {
+    console.error = () => {};
+    failureHarness.failLoad("Dice.glb", new Error("load failed"));
+  } finally {
+    console.error = originalConsoleError;
+  }
+  assert.equal(await failedCompletion, false);
+});
+
 test("newer dice presentation supersedes animation and stale IDs are ignored", () => {
   const harness = createHarness();
   const adapter = harness.createAdapter();
@@ -440,6 +533,11 @@ function createHarness() {
       const load = loads.find(candidate => candidate.url === url);
       assert.ok(load, `missing loader request for ${url}`);
       load.onLoad({ scene });
+    },
+    failLoad(url, error) {
+      const load = loads.find(candidate => candidate.url === url);
+      assert.ok(load, `missing loader request for ${url}`);
+      load.onError(error);
     },
   };
 }

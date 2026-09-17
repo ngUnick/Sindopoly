@@ -1070,7 +1070,8 @@ therefore attach resources after route teardown.
 
 The production imperative API is deliberately small: `mount(container)`,
 `resize(width?, height?, pixelRatio?)`, `orientCameraForPosition(position)`,
-`setPawnPositions(players)`, `setPawnPosition(playerId, position)`, and
+`setPawnPositions(players)`, `setPawnPosition(playerId, position)`,
+`presentDiceRoll`, its FE-REVAMP-020 completion/cancellation variants, and
 `dispose()`. Calls before mount or after disposal fail safely, a second mount on
 one live/disposed instance is rejected, and `dispose()` is idempotent. React
 owns the container ref and adapter lifetime and passes only accepted visual
@@ -1297,7 +1298,93 @@ query parameters are gone. Direct navigation or reload at `/endgame` cannot
 reconstruct the game identity under the current route contract, so it displays
 a safe unavailable-result message rather than estimating or persisting a value.
 
-## 34. Git, documentation and risk
+## 34. FE-REVAMP-020 presentation coordinator
+
+The framework-independent `PresentationCoordinator` boundary now accepts only
+normalized, immutable, already-confirmed presentation transactions. It is a
+transient visual sequencer, not a second game state machine. It contains no
+snapshot, command, action eligibility, expected version, transport, persistence,
+timer-deadline, winner or economic authority. The authoritative controller will
+remain responsible for deciding which decoded backend facts are accepted when
+FE-REVAMP-021 mounts this boundary.
+
+The pre-integration sequencing inventory remains intentionally visible:
+
+| Current owner | Classification | Retained behavior |
+| --- | --- | --- |
+| backend snapshot/command/event payloads | authoritative state | Dice, destination, outcome, active player and completion truth |
+| `useGameRealtime`, `handleTick`, `throwDiceAction` | transport/controller plus legacy mixing | Snapshot/event acceptance, REST command calls and recovery reads |
+| fixed one-second roll delay, direct response/STOMP dice calls, modal timing and end navigation in `Board.jsx` | legacy presentation coordination | Remains live until the one-owner FE-REVAMP-021 migration |
+| `BoardSceneAdapter` | Three.js execution | Renderer/assets, deterministic dice, current pawn placement, camera and disposal |
+| `TurnResultModal` and observer queue/toast | DOM presentation | Active result/choice feedback and bounded observer notifications |
+| `eventHistory` | separate session presentation history | Never serves as an animation replay queue |
+
+A transaction is `{presentationId,stateVersion,actorPlayerId,dice,movement,
+outcome}`. `presentationId` is an explicit, bounded string supplied by the
+caller; event flows should use `eventId`, while command-response and matching
+STOMP-echo models must derive the same source-independent transition identity.
+The numeric `stateVersion` orders authoritative transitions and remains the
+monotonic Dice scene identity, but it is not the transaction identity because
+distinct grouped presentation facts may legitimately share one version. Dice
+are copied only when the pair and supplied total agree. Outcome is bounded
+preformatted text plus kind, emphasis and a local `dismissible` flag; it has no
+command callback. Inputs are copied/frozen and malformed or empty transactions
+fail closed.
+
+Movement mode is explicit. `FORWARD` alone may call `buildForwardRoute` with
+confirmed `from`/`to`; an equal position produces no movement stage. `DIRECT`
+passes only the confirmed endpoints with no fabricated intermediate route.
+`SNAP` passes one confirmed final position directly. No mode is inferred from
+dice, destination square, card text, jail state or snapshot history. The
+coordinator defines narrow injected `presentPawnMovement` and
+`snapPawnPosition` scene ports but does not add the final pawn tween or mount
+those ports in production. Recovery accepts an authoritative `stateVersion` and
+at most four explicit unique-player snaps, advances the stale-presentation
+watermark, and reconstructs no dice, route, card, outcome or history entry.
+
+The phase model is deliberately limited to `IDLE`, `PRESENTING_DICE`,
+`PRESENTING_MOVEMENT`, `PRESENTING_OUTCOME` and `RECOVERING`. A transaction
+plans only its present stages in that order. The DOM outcome port may resolve
+after local dismissal, but dismissal never submits a command, advances a turn
+or changes an optional action. Purchase, decline, jail payment and roll remain
+authoritative intents outside the coordinator. Supplied card text is opaque
+presentation content and is never parsed for mechanics.
+
+There is one active transaction and at most one queued transaction. A distinct
+same-version identity replaces the queued entry, preserving the active item and
+the newest pending fact without an unbounded backlog. A newer version immediately
+supersedes active and queued older work. Duplicate IDs and older versions are
+ignored. A bounded 64-entry dedup window, hard-capped at 256 even when configured,
+prevents session memory growth. Generation checks ensure late Dice, movement or
+outcome promises cannot resume a canceled, recovered, superseded or disposed
+sequence.
+
+`BoardSceneAdapter` retains its boolean `presentDiceRoll` compatibility API and
+adds `presentDiceRollAndWait` plus `cancelDicePresentation`. The completion
+promise resolves true only when that exact accepted roll settles, and false for
+rejection, supersession, explicit cancellation, Dice-load failure or disposal.
+Reduced motion applies the confirmed final faces immediately, resolves the same
+stage, and needs only the existing coalesced render. The adapter still owns RAF;
+the coordinator creates no timer or render loop. Existing one-load/two-clone,
+one-canvas, zero-idle-RAF, late-GLTF and idempotent-disposal guarantees remain.
+
+Scene and DOM failures resolve as bounded `FAILED` results, notify an injected
+diagnostic port, return to idle and never retry a game command. `cancel()`,
+recovery, supersession and idempotent `dispose()` settle accepted coordinator
+promises without rejecting into React. Outcome cleanup is an explicit local
+port. After disposal, no phase, outcome or diagnostic callback can fire.
+
+Production integration is intentionally deferred: `Board.jsx` imports neither
+new module and retains its existing fixed-delay dice/movement/modal and observer
+queue behavior. This avoids running old and new sequencers together. FE-REVAMP-021
+must create one coordinator per mounted game controller, build transaction
+identity consistently across REST responses and STOMP echoes, implement the
+bounded scene movement ports, cancel on recovery/completion, and replace each
+legacy sequencing owner one for one. There are no REST, STOMP, Redis, MariaDB,
+board metadata, asset, camera, background, package or visible behavior changes
+in FE-REVAMP-020.
+
+## 35. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

@@ -89,6 +89,7 @@ export class BoardSceneAdapter {
     this.rafId = null;
     this.diceAnimation = null;
     this.pendingDicePresentation = null;
+    this.diceCompletion = null;
     this.lastDicePresentationId = -1;
 
     this.mounted = false;
@@ -212,7 +213,11 @@ export class BoardSceneAdapter {
       },
       undefined,
       error => {
-        if (this.isCurrent(generation)) console.error("Error loading Dice GLB model", error);
+        if (this.isCurrent(generation)) {
+          this.pendingDicePresentation = null;
+          this.settleDiceCompletion(false);
+          console.error("Error loading Dice GLB model", error);
+        }
       },
     );
   }
@@ -305,7 +310,18 @@ export class BoardSceneAdapter {
   }
 
   /** Presents a confirmed pair; the scene never generates or changes game-state dice. */
-  presentDiceRoll({ die1, die2, total, presentationId, reducedMotion = false } = {}) {
+  presentDiceRoll(value = {}) {
+    return this.acceptDicePresentation(value, null);
+  }
+
+  /** Resolves when this exact decorative roll settles, or false when canceled/superseded. */
+  presentDiceRollAndWait(value = {}) {
+    return new Promise(resolve => {
+      if (!this.acceptDicePresentation(value, resolve)) resolve(false);
+    });
+  }
+
+  acceptDicePresentation({ die1, die2, total, presentationId, reducedMotion = false } = {}, resolve) {
     if (!this.mounted || this.disposed
         || !isDieValue(die1) || !isDieValue(die2)
         || !Number.isSafeInteger(total) || total !== die1 + die2
@@ -314,7 +330,11 @@ export class BoardSceneAdapter {
       return false;
     }
 
+    this.settleDiceCompletion(false);
     this.lastDicePresentationId = presentationId;
+    this.diceCompletion = typeof resolve === "function"
+      ? { presentationId, resolve }
+      : null;
     const presentation = Object.freeze({
       die1,
       die2,
@@ -330,11 +350,27 @@ export class BoardSceneAdapter {
     return true;
   }
 
+  cancelDicePresentation(presentationId = null) {
+    const currentId = this.diceAnimation?.presentation?.presentationId
+      ?? this.pendingDicePresentation?.presentationId
+      ?? this.diceCompletion?.presentationId
+      ?? null;
+    if (currentId == null
+        || presentationId != null && presentationId !== currentId) {
+      return false;
+    }
+    this.diceAnimation = null;
+    this.pendingDicePresentation = null;
+    this.settleDiceCompletion(false);
+    return true;
+  }
+
   startDicePresentation(presentation) {
     if (presentation.reducedMotion) {
       this.diceAnimation = null;
       this.applyFinalDiceOrientation(presentation);
       this.invalidate();
+      this.settleDiceCompletion(true);
       return;
     }
 
@@ -416,12 +452,19 @@ export class BoardSceneAdapter {
       if (progress >= 1) {
         this.applyFinalDiceOrientation(this.diceAnimation.presentation);
         this.diceAnimation = null;
+        this.settleDiceCompletion(true);
       } else {
         animationContinues = true;
       }
     }
     this.renderer.render(this.scene, this.camera);
     if (animationContinues) this.invalidate();
+  }
+
+  settleDiceCompletion(completed) {
+    const completion = this.diceCompletion;
+    this.diceCompletion = null;
+    completion?.resolve(completed);
   }
 
   dispose() {
@@ -434,6 +477,7 @@ export class BoardSceneAdapter {
     this.rafId = null;
     this.diceAnimation = null;
     this.pendingDicePresentation = null;
+    this.settleDiceCompletion(false);
     if (this.environment?.removeEventListener) {
       for (const event of INTERACTION_EVENTS) {
         this.environment.removeEventListener(event, this.listenerFor(event), false);
