@@ -1,6 +1,11 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { buildForwardRoute, isBoardPosition } from "./boardCalibration.js";
+import {
+  buildForwardRoute,
+  getPawnAnchor,
+  isBoardPosition,
+  isPawnSlot,
+} from "./boardCalibration.js";
 
 const INTERACTION_EVENTS = ["mousedown", "mousemove", "mouseup"];
 const DICE_ANIMATION_DURATION_MS = 760;
@@ -91,6 +96,7 @@ export class BoardSceneAdapter {
     this.pendingDicePresentation = null;
     this.diceCompletion = null;
     this.lastDicePresentationId = -1;
+    this.resizeObserver = null;
 
     this.mounted = false;
     this.disposed = false;
@@ -113,15 +119,16 @@ export class BoardSceneAdapter {
     const generation = this.generation;
     this.container = container;
     this.scene = new THREE.Scene();
+    const { width, height } = this.measureContainer();
     this.camera = new THREE.PerspectiveCamera(
       75,
-      this.environment.innerWidth / this.environment.innerHeight,
+      width / height,
       0.1,
       100,
     );
     this.renderer = this.createRenderer();
     this.renderer.setClearColor(0x000000, 0);
-    this.renderer.setSize(this.environment.innerWidth, this.environment.innerHeight * 0.99);
+    this.renderer.setSize(width, height);
     this.container.appendChild(this.renderer.domElement);
 
     this.addLights();
@@ -129,6 +136,11 @@ export class BoardSceneAdapter {
     this.camera.position.set(40, 25, 0);
     this.camera.lookAt(0, 0, 0);
     this.registerListeners();
+    const ResizeObserver = this.environment.ResizeObserver ?? globalThis.ResizeObserver;
+    if (typeof ResizeObserver === "function") {
+      this.resizeObserver = new ResizeObserver(() => this.resize());
+      this.resizeObserver.observe(this.container);
+    }
     this.loadBoard(generation);
     this.loadDice(generation);
     this.invalidate();
@@ -267,14 +279,28 @@ export class BoardSceneAdapter {
     this.resize();
   }
 
-  resize(width = this.environment?.innerWidth, height = this.environment?.innerHeight * 0.92, pixelRatio = this.environment?.devicePixelRatio) {
-    if (!this.mounted || !Number.isFinite(width) || !Number.isFinite(height) || height <= 0) return false;
-    this.camera.aspect = width / height;
+  resize(width, height, pixelRatio = this.environment?.devicePixelRatio) {
+    if (!this.mounted) return false;
+    const measured = this.measureContainer();
+    const resolvedWidth = positiveDimension(width) ?? measured.width;
+    const resolvedHeight = positiveDimension(height) ?? measured.height;
+    this.camera.aspect = resolvedWidth / resolvedHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
+    this.renderer.setSize(resolvedWidth, resolvedHeight);
     this.renderer.setPixelRatio(Math.min(pixelRatio || 1, 2));
     this.invalidate();
     return true;
+  }
+
+  measureContainer() {
+    return {
+      width: positiveDimension(this.container?.clientWidth)
+        ?? positiveDimension(this.environment?.innerWidth)
+        ?? 1,
+      height: positiveDimension(this.container?.clientHeight)
+        ?? positiveDimension(this.environment?.innerHeight)
+        ?? 1,
+    };
   }
 
   orientCameraForPosition(position) {
@@ -300,12 +326,62 @@ export class BoardSceneAdapter {
     if (!this.mounted || playerId == null || !isBoardPosition(position)) return false;
     const pawn = this.pawnsByPlayerId.get(String(playerId));
     if (!pawn) return false;
-    pawn.visible = true;
-    const currentPosition = pawn.userData.stepCounter === 40 ? 0 : pawn.userData.stepCounter;
-    const route = buildForwardRoute(currentPosition, position);
-    if (route === null) return false;
-    for (let index = 0; index < route.length; index += 1) advancePawn(pawn);
+    return this.placePawnAt(pawn, position, this.pawns.indexOf(pawn));
+  }
+
+  /** Applies an accepted final position without reconstructing historical movement. */
+  snapPawnPosition({ playerId, position, slot = null } = {}) {
+    if (!this.mounted || playerId == null || !isBoardPosition(position)) return false;
+    const pawn = this.pawnsByPlayerId.get(String(playerId));
+    if (!pawn) return false;
+    const resolvedSlot = isPawnSlot(slot) ? slot : this.pawns.indexOf(pawn);
+    return this.placePawnAt(pawn, position, resolvedSlot);
+  }
+
+  /**
+   * Executes only the caller-selected movement mode. FE-REVAMP-021 keeps this
+   * immediate while guaranteeing that every applied coordinate is calibrated.
+   */
+  presentPawnMovement({ mode, playerId, from, to, slot = null, route = null } = {}) {
+    if (!this.mounted || !["FORWARD", "DIRECT"].includes(mode)
+        || playerId == null || !isBoardPosition(from) || !isBoardPosition(to)) {
+      return false;
+    }
+    if (mode === "FORWARD") {
+      const expectedRoute = buildForwardRoute(from, to);
+      if (expectedRoute == null
+          || !Array.isArray(route)
+          || expectedRoute.length !== route.length
+          || expectedRoute.some((position, index) => position !== route[index])) {
+        return false;
+      }
+    } else if (route != null) {
+      return false;
+    }
+    const pawn = this.pawnsByPlayerId.get(String(playerId));
+    if (!pawn) return false;
+    const resolvedSlot = isPawnSlot(slot) ? slot : this.pawns.indexOf(pawn);
+    const positions = mode === "FORWARD" ? route : [to];
+    for (const position of positions) {
+      if (!this.placePawnAt(pawn, position, resolvedSlot, false)) return false;
+    }
+    this.orientCameraForPosition(to);
     this.invalidate();
+    return true;
+  }
+
+  cancelPawnPresentation() {
+    return this.mounted && !this.disposed;
+  }
+
+  placePawnAt(pawn, position, slot, render = true) {
+    const anchor = getPawnAnchor(position, slot);
+    if (!anchor) return false;
+    pawn.visible = true;
+    pawn.position.set(anchor.x, anchor.y, anchor.z);
+    pawn.userData.stepCounter = position;
+    pawn.userData.caseNumber = Math.floor(position / 10) + 1;
+    if (render) this.invalidate();
     return true;
   }
 
@@ -484,6 +560,8 @@ export class BoardSceneAdapter {
       }
       this.environment.removeEventListener("resize", this.onResize);
     }
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
 
     disposeObjectGraph(this.scene);
     this.renderer?.renderLists?.dispose?.();
@@ -508,6 +586,10 @@ function isDieValue(value) {
   return Number.isSafeInteger(value) && value >= 1 && value <= 6;
 }
 
+function positiveDimension(value) {
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 function createPawn(geometry, color, position) {
   const pawn = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color }));
   pawn.position.set(...position);
@@ -515,18 +597,4 @@ function createPawn(geometry, color, position) {
   pawn.userData.caseNumber = 1;
   pawn.userData.money = 1500;
   return pawn;
-}
-
-function advancePawn(pawn) {
-  if (pawn.userData.stepCounter !== 0 && pawn.userData.stepCounter % 10 === 0) {
-    if (pawn.userData.stepCounter === 40) pawn.userData.stepCounter = 0;
-    pawn.userData.caseNumber = pawn.userData.caseNumber < 4 ? pawn.userData.caseNumber + 1 : 1;
-  }
-
-  const stepSize = pawn.userData.stepCounter % 10 === 0 || pawn.userData.stepCounter % 10 === 9 ? 6 : 4.15;
-  if (pawn.userData.caseNumber === 1) pawn.position.z += stepSize;
-  else if (pawn.userData.caseNumber === 2) pawn.position.x -= stepSize;
-  else if (pawn.userData.caseNumber === 3) pawn.position.z -= stepSize;
-  else pawn.position.x += stepSize;
-  pawn.userData.stepCounter += 1;
 }

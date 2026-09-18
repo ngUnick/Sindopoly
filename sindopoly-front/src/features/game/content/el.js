@@ -84,6 +84,8 @@ export const GAMEPLAY_CONTENT = Object.freeze({
   confirm: "Ναι",
   decline: "Όχι",
   acknowledge: "Εντάξει",
+  board: "Ταμπλό",
+  boardMetadataUnavailable: "Τα στοιχεία του ταμπλό δεν είναι διαθέσιμα.",
 });
 
 export const END_GAME_CONTENT = Object.freeze({

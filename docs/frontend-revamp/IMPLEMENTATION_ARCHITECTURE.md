@@ -1384,7 +1384,138 @@ legacy sequencing owner one for one. There are no REST, STOMP, Redis, MariaDB,
 board metadata, asset, camera, background, package or visible behavior changes
 in FE-REVAMP-020.
 
-## 35. Git, documentation and risk
+## 35. FE-REVAMP-021 first production two-player slice
+
+The `/Game` route now enables the first production strangler slice through
+`FIRST_VERTICAL_SLICE_ENABLED`. The enabled branch mounts `AuthoritativeGame`;
+the old `Board` remains compiled only as a local rollback branch and is never
+mounted at the same time. The live authority chain is:
+
+`authenticated session → AuthoritativeGameRuntime → decoded snapshot/STOMP
+wake-up → gameControllerReducer → ownership/metadata/GameViewModel → GameShell
+HUD → PresentationCoordinator → BoardSceneAdapter`.
+
+The query-string player ID remains only route compatibility data. The live
+viewer identity comes from `AuthContext.currentPlayer.id`, and backend session
+membership still authorizes every snapshot and command.
+
+### Production ownership map
+
+| Responsibility | Pre-021 live owner | Enabled 021 owner | Migrated / legacy state | Deferred boundary |
+| --- | --- | --- | --- | --- |
+| accepted snapshot/version | `Board.jsx` plus `useGameRealtime` | one `AuthoritativeGameRuntime` reducer state | migrated; legacy owner unmounted | none |
+| STOMP subscription and wake-up | `useGameRealtime` | one `gameRealtimeClient` | migrated; subscribes before first read | multi-instance broker hardening remains platform work |
+| fallback polling/coalescing | `Board.jsx` interval plus realtime helper | one 15-second disconnected-only poller plus `createSnapshotSynchronizer` | migrated; Board poller unmounted | none |
+| roll/purchase/decline/jail intents | Board handlers using `gameCommandState` | runtime callbacks from `ActionTray` | migrated for the slice; legacy handlers unmounted | full mechanics matrix in FE-REVAMP-022 |
+| command UUID/expected version | module maps and Board helpers | runtime UUID plus reducer accepted version | migrated commands bypass legacy maps | maps remain for lobby/rollback consumers |
+| turn/player/action HUD | Board-local JSX and controls | `MatchStatusHeader`, `PlayerRail`, `ActionTray` in `GameShell` slots | migrated; no duplicate live control | visual/a11y polish in FE-REVAMP-023 |
+| board metadata | `Board.jsx#gamePositions` | one `BoardAPI.getMetadata` load and immutable index | migrated for live presentation; no fallback catalog | legacy catalog remains rollback-only until FE-REVAMP-028 |
+| dice/movement/outcome ordering | Board response/event calls and fixed delay | one `PresentationCoordinator` | migrated; old sequencer unmounted | final pawn tween/camera choreography in FE-REVAMP-025 |
+| Three.js lifecycle | Board-owned adapter instance | `GameBoard` owns one adapter | migrated live mount; one canvas and bounded cleanup | final assets/polish in FE-REVAMP-025 |
+| observer queue | Board observer queue | coordinator outcome port plus session event history | migrated live path; history is not rendered | history UI only if a later backlog explicitly requires it |
+| completion/deadline facts | legacy Board navigation/presentation | accepted snapshot `GameViewModel` | completion navigation retained; deadline carried only | countdown and completion styling remain later work |
+
+### Controller and realtime lifecycle
+
+One framework-independent runtime exists per mounted `(gameId, viewerId,
+scene)` tuple. It starts metadata loading once, activates one authenticated
+STOMP client, installs one bounded poller and creates one coordinator. The
+STOMP client subscribes to `/topic/game/{gameId}` before invoking the initial
+authoritative snapshot read, preserving the no-gap ordering. Validated events
+provide presentation/history facts and wake the snapshot synchronizer; they
+never replace accepted game state.
+
+All snapshots enter `gameControllerReducer`. Newer versions are accepted,
+equal versions retain the existing idempotent/recovery semantics, older or
+wrong-game values cannot replace state. Event bursts coalesce while a read is
+in flight and request one follow-up when necessary. Polling runs every 15
+seconds only while connection state is not `CONNECTED` or `RECOVERED`; metadata
+is never polled or refetched by STOMP.
+
+For a command, the runtime synchronously enters `PENDING`, creates one UUID and
+copies `X-Sindopoly-Expected-Version` from the reducer's accepted version.
+Rapid duplicate activation cannot create another command. Success is only a
+reconciliation target until a snapshot accepts it. `STALE_STATE` and ambiguous
+`NETWORK`, `SERVER`, `INVALID_PAYLOAD` or `UNKNOWN` outcomes are never retried;
+actions remain blocked until authoritative reconciliation. Authentication,
+membership and not-found failures remain bounded normalized facts and raw
+backend errors are not rendered.
+
+The response and matching STOMP echo share the deterministic identity
+`roll:{gameId}:{stateVersion}:{actorPlayerId}:{die1}:{die2}`. No arrival time,
+object identity, nickname or frontend randomness participates. The coordinator
+therefore presents one confirmed pair once for both active and observer flows.
+Current contracts provide confirmed endpoints but not an authoritative
+movement classification, so this slice uses explicit `DIRECT` movement to the
+confirmed destination; it does not infer a dice route. The adapter snaps
+initial/recovery positions to calibrated anchors, focuses the confirmed square
+and leaves final tweening out of scope.
+
+The session-local event-history state is now owned by the runtime (100 entries,
+256 event-ID dedup, no persistence). A reducer-proven version gap inserts one
+marker; snapshots fabricate no history. History is intentionally unmounted.
+
+### Live UI, metadata and compatibility
+
+`GameShell` mounts the extracted status, player and action regions. Player and
+turn rendering consumes only `GameViewModel`; HUD components import no API,
+STOMP, reducer or Three.js code. Optional purchase/decline and jail choices are
+shown only when the accepted snapshot grants that exact viewer/state option.
+The coordinator's outcome is informational and dismissal submits no command.
+
+Canonical board metadata is fetched once per runtime through the existing
+authenticated endpoint and strict decoder. Failure leaves the 3D board and
+authoritative game usable, exposes only a generic Greek unavailable panel and
+does not restore the legacy catalog as live authority. The scene adapter now
+sizes its canvas from the shell board container and observes container changes;
+this prevents a full-window canvas from overflowing after HUD regions mount.
+The observer is disconnected with the existing window listeners, RAF and GLB
+resources. There is still no idle render loop.
+
+Terminal results continue through the authoritative completion model and
+existing `/endgame` route state. The accepted deadline remains available to the
+model, but this slice creates no countdown or frontend timeout authority. The
+existing board/Dice GLBs, calibrated dice faces, camera primitives, background
+and audio ownership are unchanged.
+
+### Verification evidence and rollback
+
+Automated orchestration coverage includes subscribe-before-read, initial and
+late snapshot acceptance, event races/coalescing, stale and ambiguous failures,
+rapid duplicate activation, response/STOMP deduplication, purchase/decline,
+two isolated clients, observer-only presentation, recovery snapping, polling,
+metadata-once, deadline/completion pass-through, disposal and source-layer
+contracts. The frontend suite has 554 passing tests after the container-resize
+case was added.
+
+The authenticated manual smoke used two cookie-isolated production bundles
+(`localhost` host and `127.0.0.1` guest) against one backend/Redis game. It
+verified lobby create/join/start, active-only roll, observer-only waiting,
+confirmed total `6`, one outcome per client, a host-only 100€ purchase choice,
+decline, handoff to one guest roll control, matching calibrated destination,
+reload recovery and Home→Continue remount. Each context retained one canvas and
+the clean run emitted no console warning/error. Application-level network
+observations were approximately one metadata plus one initial snapshot read per
+mount, one STOMP subscription per context, one mutation per activation and a
+bounded reconciliation read; no metadata refetch or request storm appeared.
+
+Responsive runtime checks recorded zero horizontal overflow at 1920×1080,
+1366×768, 768×1024 and 390×844. The board/background remained visible, each
+viewport kept one canvas, desktop used the fixed rail, tablet/phone used the
+scrollable rail and the action tray remained vertically reachable. Detailed
+responsive/accessibility refinement remains FE-REVAMP-023.
+
+The production build contains 3022 modules, 1,670.78 kB JS raw / 500.72 kB
+gzip and 26.72 kB CSS raw / 5.97 kB gzip. Against the FE-REVAMP-001 baseline
+this is +18 modules, +32.64/+8.25 kB JS raw/gzip and +5.50/+0.87 kB CSS
+raw/gzip. No package, backend source, REST/STOMP contract, Redis family/TTL,
+MariaDB schema, asset or background change belongs to FE-REVAMP-021.
+
+Rollback is one local route switch to the still-compiled legacy Board. It must
+never enable both paths together. FE-REVAMP-022 is the next boundary: prove the
+full supported mechanics matrix before any legacy deletion.
+
+## 36. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

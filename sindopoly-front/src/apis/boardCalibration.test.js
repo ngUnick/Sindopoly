@@ -279,10 +279,11 @@ test("model transform and inspected bounds remain explicit calibration evidence"
   assert.deepEqual(BOARD_CALIBRATION.modelWorldBounds.max, { x: 26.25, y: 0.043661, z: 26.790839 });
 });
 
-test("production Board does not own calibration while the scene adapter consumes route geometry only", () => {
+test("production Board does not own calibration while the scene adapter consumes canonical geometry", () => {
   assert.doesNotMatch(boardSource, /boardCalibration|BOARD_ANCHORS|buildForwardRoute|getPawnAnchor/);
   assert.match(adapterSource, /buildForwardRoute/);
-  assert.doesNotMatch(adapterSource, /getPawnAnchor|BOARD_ANCHORS/);
+  assert.match(adapterSource, /getPawnAnchor/);
+  assert.doesNotMatch(adapterSource, /BOARD_ANCHORS/);
 });
 
 function distanceXZ(left, right) {

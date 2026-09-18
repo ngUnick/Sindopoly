@@ -126,9 +126,10 @@ test("side regions collapse to one column at tablet and phone widths", () => {
   assert.equal(styles.split(combinedSelector).length - 1, 3);
 });
 
-test("Game route mounts current Board once through the reversible shell", () => {
-  assert.match(game, /const GAME_SHELL_ENABLED = true/);
-  assert.match(game, /<GameShell board=\{board\} legacy \/>/);
+test("Game route enables one authoritative slice with a reversible legacy branch", () => {
+  assert.match(game, /FIRST_VERTICAL_SLICE_ENABLED = true/);
+  assert.match(game, /\? <AuthoritativeGame \/>/);
+  assert.match(game, /: <GameShell board=\{legacyBoard\} legacy \/>/);
   assert.equal(game.match(/<Board\s*\/>/g)?.length, 1);
   assert.doesNotMatch(game, /w-\[800px\]/);
 });

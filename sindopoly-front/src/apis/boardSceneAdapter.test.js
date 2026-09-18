@@ -45,6 +45,24 @@ test("resize updates renderer, camera projection and schedules no extra listener
   assert.equal(harness.environment.pendingFrames.size, 1, "resize invalidations coalesce");
 });
 
+test("mount and container resize stay bounded to the shell board region", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+
+  adapter.mount(harness.container);
+  assert.deepEqual(harness.renderers[0].sizes[0], [640, 480]);
+  assert.equal(harness.environment.resizeObservers.length, 1);
+  assert.deepEqual(harness.environment.resizeObservers[0].targets, [harness.container]);
+
+  harness.container.clientWidth = 500;
+  harness.container.clientHeight = 360;
+  harness.environment.emitContainerResize();
+  assert.deepEqual(harness.renderers[0].sizes.at(-1), [500, 360]);
+
+  adapter.dispose();
+  assert.equal(harness.environment.resizeObservers[0].disconnected, true);
+});
+
 test("pointer orbit remains bounded to the mounted listener lifecycle", () => {
   const harness = createHarness();
   const adapter = harness.createAdapter();
@@ -438,7 +456,7 @@ test("StrictMode-style mount, dispose and fresh remount remains bounded", () => 
   assert.equal(harness.environment.pendingFrames.size, 0);
 });
 
-test("pawn updates preserve current stable visual slots and forward legacy coordinates", () => {
+test("pawn updates preserve stable visual slots on canonical anchors", () => {
   const harness = createHarness();
   const adapter = harness.createAdapter();
   adapter.mount(harness.container);
@@ -454,6 +472,8 @@ test("pawn updates preserve current stable visual slots and forward legacy coord
   assert.equal(playerTwoPawn, adapter.pawns[1]);
   assert.equal(playerOnePawn.userData.stepCounter, 3);
   assert.equal(playerTwoPawn.userData.stepCounter, 5);
+  assert.deepEqual(playerOnePawn.position.toArray(), [23.15, 0.5, -8.309161]);
+  assert.deepEqual(playerTwoPawn.position.toArray(), [23.15, 0.5, 1.090839]);
 
   adapter.setPawnPositions([
     { playerId: 1, position: 4 },
@@ -463,6 +483,28 @@ test("pawn updates preserve current stable visual slots and forward legacy coord
   assert.equal(adapter.pawnsByPlayerId.get("2"), playerTwoPawn);
   assert.equal(playerOnePawn.userData.stepCounter, 4);
   assert.equal(playerTwoPawn.userData.stepCounter, 6);
+});
+
+test("explicit scene movement uses canonical direct/forward modes and focuses destination", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  adapter.setPawnPositions([{ playerId: 1, position: 3 }]);
+
+  assert.equal(adapter.presentPawnMovement({
+    mode: "DIRECT", playerId: 1, from: 3, to: 30, slot: 0, route: null,
+  }), true);
+  assert.equal(adapter.pawnsByPlayerId.get("1").userData.stepCounter, 30);
+  assert.deepEqual(adapter.camera.position.toArray(), [-40, 25, 0]);
+
+  assert.equal(adapter.presentPawnMovement({
+    mode: "FORWARD", playerId: 1, from: 30, to: 2, slot: 0, route: [31, 32, 33, 34, 35, 36, 37, 38, 39, 0, 1, 2],
+  }), true);
+  assert.equal(adapter.pawnsByPlayerId.get("1").userData.stepCounter, 2);
+  assert.equal(adapter.presentPawnMovement({
+    mode: "FORWARD", playerId: 1, from: 2, to: 4, slot: 0, route: [4],
+  }), false);
 });
 
 test("adapter source stays presentation-only and Board delegates the Three lifecycle", async () => {
@@ -493,6 +535,8 @@ function createHarness() {
   const renderers = [];
   const loads = [];
   const container = {
+    clientWidth: 640,
+    clientHeight: 480,
     children: [],
     appendChild(child) {
       child.parentNode = this;
@@ -544,11 +588,13 @@ function createHarness() {
 
 function createEnvironment() {
   const listeners = new Map();
+  const resizeObservers = [];
   let nextFrameId = 1;
-  return {
+  const environment = {
     innerWidth: 1200,
     innerHeight: 800,
     devicePixelRatio: 2.5,
+    resizeObservers,
     pendingFrames: new Map(),
     cancelledFrames: [],
     requestCount: 0,
@@ -583,7 +629,30 @@ function createEnvironment() {
       callback(timestamp);
       return true;
     },
+    emitContainerResize() {
+      for (const observer of resizeObservers) {
+        if (!observer.disconnected) observer.callback([]);
+      }
+    },
   };
+  environment.ResizeObserver = class {
+    constructor(callback) {
+      this.callback = callback;
+      this.targets = [];
+      this.disconnected = false;
+      resizeObservers.push(this);
+    }
+
+    observe(target) {
+      this.targets.push(target);
+    }
+
+    disconnect() {
+      this.disconnected = true;
+      this.targets = [];
+    }
+  };
+  return environment;
 }
 
 function diceRotations(adapter) {
