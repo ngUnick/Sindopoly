@@ -1629,6 +1629,33 @@ unchanged FE-REVAMP-021 evidence rather than being falsely reported as rerun.
 No CSS changed and the current effective viewport had zero horizontal overflow,
 but that is not a substitute for the required exact breakpoint rerun.
 
+A bounded acceptance rerun on 2026-09-18 found the same runner limitations. The
+browser inventory exposed only one shared-cookie in-app browser; attempts to
+create controlled Chrome and Edge profiles both returned `Browser is not
+available`. Two in-app tabs therefore cannot supply the required independent
+HOST/GUEST authentication proof, and no HTTP client was substituted. The
+responsive surface exposed no viewport-control capability: its measured CSS
+viewport was 808×856 and `window.resizeTo` was unavailable. Consequently none
+of the requested sizes could be selected or measured on the production Game
+route:
+
+| Requested CSS viewport | Actual `innerWidth` × `innerHeight` | `clientWidth` / `scrollWidth` | Horizontal overflow | Canvas / board | Header / rail / actions / background | Clipping | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1920×1080 | 808×856; request could not be applied | 808 / 808 on the available surface | no on available non-Game surface | not measurable at requested size | not measurable at requested size | not measurable | DEFERRED — dimensions do not match |
+| 1366×768 | 808×856; request could not be applied | 808 / 808 on the available surface | no on available non-Game surface | not measurable at requested size | not measurable at requested size | not measurable | DEFERRED — dimensions do not match |
+| 768×1024 | 808×856; request could not be applied | 808 / 808 on the available surface | no on available non-Game surface | not measurable at requested size | not measurable at requested size | not measurable | DEFERRED — dimensions do not match |
+| 390×844 | 808×856; request could not be applied | 808 / 808 on the available surface | no on available non-Game surface | not measurable at requested size | not measurable at requested size | not measurable | DEFERRED — dimensions do not match |
+
+The user-provided manual rerun reported no console errors, correct pawn/state
+recovery and no old dice animation after refresh. The prior transient outcome
+message also disappeared. That is intentional under the current contract:
+snapshot recovery restores current authoritative truth, while event history is
+session-local and the backend provides no durable event replay. The frontend
+must not fabricate an already-consumed narrative from the snapshot. The user's
+description of the responsive layout as funky/clunky is currently classified
+as aesthetic evidence only; this runner could not establish or disprove a
+functional B/C/D/E regression at the four required exact viewports.
+
 **NOT READY FOR LEGACY DELETION.** Every currently implemented mechanic has
 deterministic new-path evidence and no failing mechanic remains, but deletion is
 held until one follow-up environment can rerun two simultaneous cookie-isolated
