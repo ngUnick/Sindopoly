@@ -27,9 +27,11 @@ import {
 import {
   GAMEPLAY_CONTENT,
   formatJailExitOffer,
+  formatLandingOutcome,
   formatMoney,
   formatPurchaseOffer,
   formatRentOutcome,
+  formatStartPassOutcome,
   formatTaxOutcome,
   formatTurnDestination,
   formatTurnMoney,
@@ -570,9 +572,13 @@ function buildThrowOutcome(result, metadata, snapshot) {
       ?? `${GAMEPLAY_CONTENT.rent}: ${formatMoney(result.data)}.`;
     emphasis = "negative";
   } else if (result.squareType === 4) {
-    // The response value is authoritative; the client must not duplicate the Start reward rule.
-    text = `Πέρασες από την ${GAMEPLAY_CONTENT.start}. Έλαβες ${formatMoney(result.data)}!`;
-    emphasis = "positive";
+    // Type four also represents a property landing with no transaction; metadata distinguishes it from Start.
+    if (square?.type === "START") {
+      text = formatStartPassOutcome(result.data);
+      emphasis = "positive";
+    } else {
+      text = formatLandingOutcome(squareName) ?? GAMEPLAY_CONTENT.acknowledge;
+    }
   } else if (result.squareType === 5) {
     text = formatPurchaseOffer(squareName, result.data);
   } else if (result.squareType === 6) {
@@ -588,6 +594,10 @@ function buildThrowOutcome(result, metadata, snapshot) {
   } else if (result.squareType === 10) {
     text = formatJailExitOffer(result.data);
     emphasis = "warning";
+  }
+  if (result.passedGo === true && square?.type !== "START") {
+    // The roll response confirms passage but carries the landing mechanic in data, not the Start amount.
+    text = `${formatStartPassOutcome()} ${text}`;
   }
   return { kind: "ROLL_RESULT", text, emphasis, dismissible: true };
 }

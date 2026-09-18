@@ -71,7 +71,6 @@ export const GAMEPLAY_CONTENT = Object.freeze({
   properties: "Ιδιοκτησίες",
   recentEvents: "Πρόσφατα γεγονότα",
   inJail: "Στη ΦΥΛΑΚΗ",
-  payJailAndRoll: "Πληρωμή 50€ και ρίψη",
   skipTurn: "Παράλειψη σειράς",
   turnCompleted: "Η σειρά σου ολοκληρώθηκε",
   gameCompleted: "Το παιχνίδι ολοκληρώθηκε",
@@ -302,6 +301,16 @@ export function formatPurchaseOffer(squareName, amount) {
 export function formatTaxOutcome(squareName, amount) {
   if (!hasText(squareName) || !Number.isFinite(amount)) return null;
   return `${squareName}: πληρωμή ${formatMoney(amount)}.`;
+}
+
+export function formatLandingOutcome(squareName) {
+  return hasText(squareName) ? `Προσγειώθηκες: ${squareName}.` : null;
+}
+
+/** Formats only the server-confirmed reward supplied for an actual Start landing. */
+export function formatStartPassOutcome(amount = null) {
+  const prefix = `Πέρασες από την ${GAMEPLAY_CONTENT.start}.`;
+  return Number.isFinite(amount) ? `${prefix} Έλαβες ${formatMoney(amount)}!` : prefix;
 }
 
 export function formatJailExitOffer(amount) {

@@ -12,7 +12,10 @@ import { createBoardMetadataPayload } from "../test-fixtures/boardMetadataFixtur
 import {
   endedGameSnapshot,
   inProgressSnapshot,
+  jailedPlayerSnapshot,
+  postTimeoutSnapshot,
   purchaseOptionalActionSnapshot,
+  turnTimeoutEvent,
   turnUpdatedEvent,
 } from "../test-fixtures/gameRealtimeFixtures.js";
 
@@ -104,9 +107,9 @@ test("roll uses the accepted version, blocks double activation and reconciles by
   assert.equal(runtime.getState().viewModel.action.kind, ACTION_KINDS.WAITING);
 });
 
-test("command response and matching STOMP echo share one deterministic presentation", async () => {
+test("replayed command response and matching STOMP echo share one deterministic presentation", async () => {
   const afterRoll = { ...inProgressSnapshot, stateVersion: 3 };
-  const result = rollResult({ stateVersion: 3, newPosition: 12 });
+  const result = rollResult({ stateVersion: 3, newPosition: 12, replayed: true });
   const event = eventAtVersion(3, { fromPosition: 6, toPosition: 12 });
   const harness = createHarness({ snapshots: [inProgressSnapshot, afterRoll], roll: () => result });
   const runtime = harness.createRuntime();
@@ -122,6 +125,7 @@ test("command response and matching STOMP echo share one deterministic presentat
     gameId: 101, stateVersion: 3, actorPlayerId: 101, die1: 2, die2: 4,
   }), "roll:101:3:101:2:4");
   assert.equal(harness.scene.calls.dice.length, 1);
+  assert.equal(harness.commands.roll.length, 1);
   assert.equal(runtime.getState().history.entries.length, 1);
 });
 
@@ -165,24 +169,107 @@ test("stale command is never retried and fresh reconciliation restores readiness
   assert.equal(runtime.getState().viewModel.action.enabled, true);
 });
 
-test("ambiguous command failure requires reconciliation without blind retry", async () => {
-  const network = Object.assign(new Error("network"), {
-    code: "NETWORK", retriable: true,
-  });
-  const harness = createHarness({
-    snapshots: [inProgressSnapshot, { ...inProgressSnapshot, stateVersion: 3 }],
-    roll: () => Promise.reject(network),
-  });
-  const runtime = harness.createRuntime();
-  runtime.start();
-  harness.realtime.subscribed();
-  await flush();
+test("ambiguous command failures require reconciliation without blind retry", async () => {
+  for (const code of ["NETWORK", "SERVER", "INVALID_PAYLOAD"]) {
+    const failure = Object.assign(new Error(code), { code, retriable: code === "NETWORK" });
+    const harness = createHarness({
+      snapshots: [inProgressSnapshot, { ...inProgressSnapshot, stateVersion: 3 }],
+      roll: () => Promise.reject(failure),
+    });
+    const runtime = harness.createRuntime();
+    runtime.start();
+    harness.realtime.subscribed();
+    await flush();
 
-  assert.equal(await runtime.primaryAction(), false);
-  await flush(6);
-  assert.equal(harness.commands.roll.length, 1);
-  assert.equal(harness.snapshotCalls, 2);
-  assert.equal(runtime.getState().controller.command.status, "IDLE");
+    assert.equal(await runtime.primaryAction(), false, code);
+    await flush(6);
+    assert.equal(harness.commands.roll.length, 1, code);
+    assert.equal(harness.snapshotCalls, 2, code);
+    assert.equal(runtime.getState().controller.command.status, "IDLE", code);
+    runtime.dispose();
+  }
+});
+
+test("authoritative roll outcomes cover every supported backend square result without rule inference", async () => {
+  const scenarios = [
+    {
+      label: "movement card",
+      result: { squareType: 1, data: 6, newPosition: 6, card: card("transport", 6, "Πήγαινε στη ΣΤΑΣΗ ΔΙΠΑΕ.") },
+      includes: ["Πήγαινε στη ΣΤΑΣΗ ΔΙΠΑΕ.", "Τετράγωνο 6"],
+    },
+    {
+      label: "money-gain card",
+      result: { squareType: 2, data: 50, newPosition: 2, card: card("money", 50, "Κέρδισες υποτροφία.") },
+      includes: ["Κέρδισες υποτροφία.", "+50€"],
+    },
+    {
+      label: "money-loss card",
+      result: { squareType: 2, data: -30, newPosition: 2, card: card("money", -30, "Πλήρωσε έξοδα.") },
+      includes: ["Πλήρωσε έξοδα.", "-30€"],
+    },
+    {
+      label: "rent",
+      result: { squareType: 3, data: 25, newPosition: 3 },
+      includes: ["25€", "BaselineGuest"],
+    },
+    {
+      label: "purchase offer",
+      result: { squareType: 5, data: 101, newPosition: 1 },
+      includes: ["ΓΥΜΝΑΣΤΗΡΙΟ", "101€"],
+    },
+    {
+      label: "tax",
+      result: { squareType: 6, data: 200, newPosition: 4 },
+      includes: ["Τετράγωνο 4", "200€"],
+    },
+    {
+      label: "go to jail",
+      result: { squareType: 7, data: -1, newPosition: 10 },
+      includes: ["ΦΥΛΑΚΗ"],
+    },
+    {
+      label: "jail visit",
+      result: { squareType: 8, data: -1, newPosition: 10 },
+      includes: ["ΦΥΛΑΚΗ"],
+    },
+    {
+      label: "free parking",
+      result: { squareType: 9, data: -1, newPosition: 20 },
+      includes: ["ΝΑΥΤΙΛΟΣ"],
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const state = await runRollOutcome(scenario.result);
+    assert.ok(state.outcome, scenario.label);
+    for (const expected of scenario.includes) {
+      assert.equal(state.outcome.text.includes(expected), true, scenario.label);
+    }
+  }
+});
+
+test("type-four outcomes distinguish Start from an ordinary no-transaction property landing", async () => {
+  const ownProperty = await runRollOutcome({
+    squareType: 4, data: -1, newPosition: 1, passedGo: false,
+  });
+  assert.match(ownProperty.outcome.text, /ΓΥΜΝΑΣΤΗΡΙΟ/u);
+  assert.doesNotMatch(ownProperty.outcome.text, /ΑΦΕΤΗΡΙΑ|-1€/u);
+
+  const exactStart = await runRollOutcome({
+    squareType: 4, data: 237, newPosition: 0, passedGo: true,
+  });
+  assert.match(exactStart.outcome.text, /ΑΦΕΤΗΡΙΑ/u);
+  assert.match(exactStart.outcome.text, /237€/u);
+});
+
+test("passing Start preserves the landing outcome without copying the backend reward amount", async () => {
+  const state = await runRollOutcome({
+    squareType: 5, data: 101, newPosition: 1, passedGo: true,
+  });
+  assert.match(state.outcome.text, /ΑΦΕΤΗΡΙΑ/u);
+  assert.match(state.outcome.text, /ΓΥΜΝΑΣΤΗΡΙΟ/u);
+  assert.match(state.outcome.text, /101€/u);
+  assert.doesNotMatch(state.outcome.text, /200€/u);
 });
 
 test("server-owned purchase choice uses ActionTray intent and explicit command authority", async () => {
@@ -239,6 +326,112 @@ test("decline uses the single secondary command owner and observer gets no contr
   assert.equal(observerHarness.commands.resolve.length + observerHarness.commands.pass.length, 0);
 });
 
+test("jail payment and decline remain server-owned optional actions", async () => {
+  const paid = {
+    ...jailedPlayerSnapshot,
+    stateVersion: 9,
+    optionalAction: null,
+    players: jailedPlayerSnapshot.players.map(player => player.playerId === 101
+      ? { ...player, money: 1390, jailed: false, jailTurnsRemaining: 0 }
+      : player),
+  };
+  const paymentHarness = createHarness({
+    snapshots: [jailedPlayerSnapshot, paid],
+    resolve: () => actionResult(9),
+  });
+  const payment = paymentHarness.createRuntime();
+  payment.start();
+  paymentHarness.realtime.subscribed();
+  await flush();
+
+  assert.equal(payment.getState().viewModel.action.kind, ACTION_KINDS.PAY_JAIL_EXIT);
+  assert.equal(payment.getState().viewModel.action.cost, 50);
+  assert.equal(await payment.primaryAction(), true);
+  await flush(6);
+  assert.equal(paymentHarness.commands.resolve[0].accept, true);
+  assert.equal(payment.getState().viewModel.viewer.player.jailed, false);
+  assert.equal(payment.getState().viewModel.viewer.player.money, 1390);
+  assert.equal(payment.getState().viewModel.action.kind, ACTION_KINDS.ROLL);
+
+  const declined = {
+    ...jailedPlayerSnapshot,
+    stateVersion: 9,
+    playerTurn: 102,
+    optionalAction: null,
+  };
+  const declineHarness = createHarness({
+    snapshots: [jailedPlayerSnapshot, declined],
+    pass: () => actionResult(9),
+  });
+  const decline = declineHarness.createRuntime();
+  decline.start();
+  declineHarness.realtime.subscribed();
+  await flush();
+  assert.equal(await decline.secondaryAction(), true);
+  await flush(6);
+  assert.equal(declineHarness.commands.pass.length, 1);
+  assert.equal(decline.getState().viewModel.viewer.player.jailed, true);
+  assert.equal(decline.getState().viewModel.activePlayer.playerId, 102);
+});
+
+test("timeout event records the fact and reconciles the authoritative handoff", async () => {
+  const harness = createHarness({ snapshots: [inProgressSnapshot, postTimeoutSnapshot] });
+  const runtime = harness.createRuntime();
+  runtime.start();
+  harness.realtime.subscribed();
+  await flush();
+
+  harness.realtime.event(turnTimeoutEvent);
+  await flush(8);
+
+  assert.equal(runtime.getState().controller.acceptedVersion, 9);
+  assert.equal(runtime.getState().viewModel.activePlayer.playerId, 102);
+  assert.equal(runtime.getState().viewModel.turn.turnDeadlineEpochMs, postTimeoutSnapshot.turnDeadlineEpochMs);
+  assert.equal(runtime.getState().history.entries.some(entry => /χρόνος έληξε/u.test(entry.text)), true);
+  assert.equal(harness.commands.roll.length + harness.commands.resolve.length + harness.commands.pass.length, 0);
+});
+
+test("player removal event reconciles remaining and removed-player views", async () => {
+  const afterLeave = {
+    ...inProgressSnapshot,
+    stateVersion: 3,
+    playerTurn: 102,
+    players: [inProgressSnapshot.players[1]],
+  };
+  const leaveEvent = {
+    eventId: "event-player-left",
+    eventType: "TURN_UPDATED",
+    gameId: 101,
+    stateVersion: 3,
+    occurredAt: "2026-09-01T10:05:00Z",
+    payload: {
+      reason: "PLAYER_LEFT",
+      actorPlayerId: 101,
+      details: [{ type: "TURN_CHANGED", nextPlayerId: 102 }],
+    },
+  };
+  const removedHarness = createHarness({ snapshots: [inProgressSnapshot, afterLeave] });
+  const remainingHarness = createHarness({
+    snapshots: [inProgressSnapshot, afterLeave], viewerPlayerId: 102,
+  });
+  const removed = removedHarness.createRuntime();
+  const remaining = remainingHarness.createRuntime();
+  removed.start();
+  remaining.start();
+  removedHarness.realtime.subscribed();
+  remainingHarness.realtime.subscribed();
+  await flush();
+  removedHarness.realtime.event(leaveEvent);
+  remainingHarness.realtime.event(leaveEvent);
+  await flush(8);
+
+  assert.equal(removed.getState().viewModel.viewer.present, false);
+  assert.equal(removed.getState().viewModel.action.kind, ACTION_KINDS.NONE);
+  assert.equal(remaining.getState().viewModel.viewer.present, true);
+  assert.equal(remaining.getState().viewModel.action.kind, ACTION_KINDS.ROLL);
+  assert.equal(remaining.getState().viewModel.players.length, 1);
+});
+
 test("two isolated clients converge after one roll and present the same pair once", async () => {
   const afterRoll = {
     ...inProgressSnapshot,
@@ -277,6 +470,37 @@ test("two isolated clients converge after one roll and present the same pair onc
   assert.equal(guest.getState().controller.acceptedVersion, 3);
   assert.equal(host.getState().viewModel.activePlayer.playerId, 102);
   assert.equal(guest.getState().viewModel.activePlayer.playerId, 102);
+});
+
+test("three- and four-player snapshots preserve order, ownership, active turn and pawn facts", async () => {
+  const extraPlayers = [
+    gamePlayer(103, "Third", 21, 1320, [11]),
+    gamePlayer(104, "Fourth", 31, 1280, [15]),
+  ];
+  for (const playerCount of [3, 4]) {
+    const players = [...inProgressSnapshot.players, ...extraPlayers].slice(0, playerCount);
+    const activePlayer = players.at(-1);
+    const snapshot = {
+      ...inProgressSnapshot,
+      stateVersion: 10 + playerCount,
+      playerTurn: activePlayer.playerId,
+      players,
+    };
+    const harness = createHarness({ snapshots: [snapshot], viewerPlayerId: activePlayer.playerId });
+    const runtime = harness.createRuntime();
+    runtime.start();
+    harness.realtime.subscribed();
+    await flush();
+
+    const state = runtime.getState();
+    assert.deepEqual(state.viewModel.players.map(player => player.playerId),
+      players.map(player => player.playerId));
+    assert.equal(state.viewModel.activePlayer.playerId, activePlayer.playerId);
+    assert.equal(state.viewModel.action.kind, ACTION_KINDS.ROLL);
+    assert.deepEqual(state.viewModel.properties.map(property => property.squareId), [1, 3, 11, 15].slice(0, playerCount));
+    assert.deepEqual(harness.scene.calls.setPawnPositions[0], players);
+    runtime.dispose();
+  }
 });
 
 test("polling is one bounded fallback, never polls metadata, and cleans up", async () => {
@@ -379,7 +603,10 @@ function createHarness({
   snapshots = [inProgressSnapshot],
   viewerPlayerId = 101,
   roll = () => rollResult({ stateVersion: 3, newPosition: 12 }),
+  resolve = () => actionResult(4),
+  pass = () => actionResult(4),
   dice = () => true,
+  reducedMotion = false,
 } = {}) {
   const order = [];
   const queue = [...snapshots];
@@ -423,11 +650,11 @@ function createHarness({
           },
           async resolve(gameId, playerId, accept, command) {
             commands.resolve.push({ gameId, playerId, accept, command });
-            return actionResult(4);
+            return await resolve();
           },
           async pass(gameId, playerId, command) {
             commands.pass.push({ gameId, playerId, command });
-            return actionResult(4);
+            return await pass();
           },
         },
         createCommandId: () => `command-${++commandSequence}`,
@@ -438,7 +665,7 @@ function createHarness({
           return poll;
         },
         clearPollInterval(poll) { poll.cleared = true; },
-        reducedMotion: false,
+        reducedMotion,
       });
     },
   };
@@ -498,6 +725,41 @@ function rollResult(overrides = {}) {
   };
 }
 
+function card(effect, amount, text) {
+  return {
+    cardId: 501,
+    title: effect === "transport" ? "Chance" : "Community Chest",
+    text,
+    effect,
+    amount,
+  };
+}
+
+async function runRollOutcome(overrides) {
+  const afterRoll = {
+    ...inProgressSnapshot,
+    stateVersion: 3,
+    playerTurn: 102,
+    players: inProgressSnapshot.players.map(player => player.playerId === 101
+      ? { ...player, position: overrides.newPosition }
+      : player),
+  };
+  const harness = createHarness({
+    snapshots: [inProgressSnapshot, afterRoll],
+    roll: () => rollResult({ stateVersion: 3, ...overrides }),
+    reducedMotion: true,
+  });
+  const runtime = harness.createRuntime();
+  runtime.start();
+  harness.realtime.subscribed();
+  await flush();
+  assert.equal(await runtime.primaryAction(), true);
+  await flush(6);
+  const state = runtime.getState();
+  runtime.dispose();
+  return state;
+}
+
 function actionResult(stateVersion) {
   return {
     newBalance: 1400,
@@ -505,6 +767,20 @@ function actionResult(stateVersion) {
     nextPlayerId: 102,
     stateVersion,
     replayed: false,
+  };
+}
+
+function gamePlayer(playerId, nickname, position, money, properties) {
+  return {
+    playerId,
+    nickname,
+    position,
+    money,
+    properties,
+    jailed: false,
+    jailTurnsRemaining: 0,
+    bankrupt: false,
+    afk: false,
   };
 }
 

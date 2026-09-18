@@ -1515,7 +1515,134 @@ Rollback is one local route switch to the still-compiled legacy Board. It must
 never enable both paths together. FE-REVAMP-022 is the next boundary: prove the
 full supported mechanics matrix before any legacy deletion.
 
-## 36. Git, documentation and risk
+## 36. FE-REVAMP-022 supported-mechanics parity proof
+
+FE-REVAMP-022 keeps the legacy `Board` rollback path compiled and unmounted. It
+does not add a mechanic, transport contract, persistence surface or second
+controller. The proof combines backend rule/infrastructure tests, decoded
+frontend fixtures, the mounted `AuthoritativeGameRuntime` orchestration suite,
+scene lifecycle tests and a canonical Docker smoke. A bounded parity defect was
+found and fixed: REST `squareType=4` represents both an actual Start landing and
+an ordinary property landing with no transaction. The new path had displayed
+every such result as a Start reward. Canonical board metadata now distinguishes
+the Start square; other type-four results display only the confirmed landing.
+When `passedGo=true` on a different landing, the UI adds generic Start-passage
+copy but does not invent a reward amount or replace the landing outcome.
+
+### Supported-mechanics inventory
+
+| Classification | Inventory and evidence |
+| --- | --- |
+| A — migrated and proven in FE-REVAMP-021 | two-player create/join/start, normal roll, exact dice pair, direct pawn destination, purchase offer/decline, turn handoff, snapshot reconciliation, reload/Continue, one renderer/HUD/controller |
+| B — migrated and deterministically proven here | Start passage/exact landing; owned/unaffordable property landing; purchase; standard/train/utility rent; tax; money-gain/loss and transport cards; normal jail visit and Go To Jail; jail pay/decline/release flow; timeout; in-progress leave/removal; terminal result; replay; stale and ambiguous failures; reconnect/polling; three/four-player order, ownership and pawn facts |
+| C — backend implementation not yet proven on the new path | none found after the automated matrix; the manual browser subset is intentionally representative rather than random-mechanic exhaustive |
+| D — legacy-only presentation | legacy modal styling, fixed delays, toast ordering and pixel layout remain rollback-only presentation choices, not game semantics |
+| E — not supported | bankruptcy transitions, doubles/extra-turn rules, auctions, mortgages and spectator mode. `bankrupt` is projected but no production transition sets it; doubles explicitly rotate normally. These are not product features and were not invented for parity. |
+
+### Authoritative parity matrix
+
+`REST` below means the existing throw/action/pass result; `event` means the
+existing `/topic/game/{gameId}` envelope/details; `snapshot` remains recovery
+truth. “Automated” cites the most direct evidence while the full backend and
+frontend suites exercise the surrounding decoder/security/lifecycle contracts.
+
+| Mechanic | Backend trigger | REST result | STOMP detail | Snapshot change | Active presentation | Observer presentation | Scene | ActionTray | Recovery/reload | Automated evidence | Canonical smoke / legacy comparison | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Normal roll / handoff | active `throw` | pair, total, destination, version | `DICE_ROLLED`, `PLAYER_MOVED`, `TURN_CHANGED` | position/turn/deadline | one confirmed pair/outcome | same pair and destination | one DIRECT move, bounded Dice | one roll owner then waiting | snapshot snaps; no historical replay | runtime roll/two-client/dedup; integration critical flow | live host roll and API-client roll matched; legacy final facts equal | PASS |
+| Pass or land on Start | movement crosses/lands 0 | `passedGo`; actual Start result carries reward | `MONEY_RECEIVED` plus movement/landing | server balance/position | generic passage plus landing, or exact server reward on Start | exact event amount | confirmed destination only | server-selected next action | snapshot balance/position | gameplay rule + real Redis tests; runtime Start/type-four regressions | deterministic automation; fixes false legacy-style Start copy | PASS |
+| Property landing/no transaction | own or unaffordable property | type 4, `data=-1` | landing/turn details | position, no transfer | named landing, no fabricated reward | named landing/turn | destination | next server action only | snapshot unchanged ownership | gameplay rule; runtime type-four test | bounded defect reproduced/fixed; legacy semantics retained | PASS |
+| Purchase offer | affordable unowned property | type 5, authoritative price | `PROPERTY_AVAILABLE` | exact optional action/version | named property/price and two controls | same offer, no controls | destination | purchase + decline only for option owner | option restored by snapshot | gameplay rules; presentation/runtime tests | live 120€ host and 100€/160€ guest offers | PASS |
+| Purchase | resolve `yes` | balance/properties/next/version | `PROPERTY_PURCHASED`, turn change | owner/balance/turn | pending then snapshot facts | same owner/balance/turn | no rule work | disabled pending then next action | snapshot owns result | gameplay rule + integration; runtime option tests | live guest 100€ purchase, 1,300→1,200 and 0→1 property | PASS |
+| Purchase decline | pass/resolve `no` | empty acquired list/next/version | `PROPERTY_DECLINED`, turn change | clears option; no ownership | decline fact then handoff | same fact | no rule work | one decline owner | no stale option after reload | gameplay rule + replay integration; runtime tests | live host and guest decline; no transfer | PASS |
+| Standard/train/utility rent | land on another owner | authoritative charge | `RENT_PAID` with counterparty/amount | atomic payer/owner balances | supplied amount/counterparty | same supplied facts | destination | no calculation/action | snapshot restores balances | gameplay rule and real Redis integration cover rent variants; event/runtime outcome tests | automated deterministic; legacy and new consume server outcome | PASS |
+| Tax/expense | land tax | authoritative amount | `TAX_PAID` | balance/turn | named square/amount | same amount | destination | no calculation/action | snapshot balance | gameplay rule/real Redis; runtime square-result test | live both players paid 200€, DOM and balances matched | PASS |
+| Money-gain card | draw money card | opaque card + positive amount | `CARD_DRAWN` | balance/deck/turn | server text and signed amount | same text/amount | destination | automatic | snapshot does not replay card | gameplay card/cycle tests; runtime/event model tests | deterministic automation; no client rule | PASS |
+| Money-loss card | draw money card | opaque card + negative amount | `CARD_DRAWN` | balance/deck/turn | server text and signed amount | same text/amount | destination | automatic | snapshot balance | gameplay card/cycle tests; runtime/event model tests | live `$15` thematic card, 1,300→1,285 | PASS |
+| Movement card | draw transport card | server destination/card | card + authoritative movement | position, possible Start reward | opaque text + confirmed destination | same | DIRECT, never inferred from text | automatic | direct snapshot snap | gameplay transport/Start test; runtime movement-card test | deterministic automation; legacy/new end position equal | PASS |
+| Jail entry/visit | Go To Jail or normal Jail | types 7/8, position | `PLAYER_JAILED` or landing | position/jailed/turns | jail/visit fact | same | direct confirmed destination | server option only | snapshot jailed flags | gameplay jail test; runtime square-result/presentation tests | deterministic automation | PASS |
+| Jail pay/decline/release | jailed active roll creates option; action/pass resolves | authoritative cost/balance/next/version | exit available/released/turn change | option, jailed flags, balance, turns | exact server cost; pay keeps roll, decline follows server turn | same facts, no controls | snapshot position | exact option owner/version only | snapshot restores option/release | gameplay jail suite + jail-timeout integration; runtime pay/decline test | deterministic automation; no hard-coded fee remains in new content | PASS |
+| Timeout/AFK | server deadline task | no frontend mutation response | `TURN_TIMED_OUT`, turn change | turn/deadline/AFK facts | text fact, commands wake from snapshot | same | recovery snap only | frontend sends no timeout | event wakes coalesced read | timing/race integration; runtime timeout test | live timeout handoff and DOM fact observed | PASS |
+| Player leave/removal | member leave/kick | removed player/version | membership notification | membership/order/turn, possible completion | remaining view updates | removed client loses membership on recovery | remaining pawns snap | removed viewer has none | fresh membership required | in-progress departure integration; runtime removed/remaining views | live guest removal left one player card and one canvas | PASS |
+| Completion | max time/money lifecycle | existing terminal result | `GAME_COMPLETED` | ended/winner/frozen standings | commands disabled; navigate `/endgame` | same result | coordinator cancels | none | terminal snapshot is truth | lifecycle/completion/integration + terminal runtime/model tests | deterministic automation; no legacy `priceMap` | PASS |
+| Replay/idempotency | same command ID/fingerprint | exact result, `replayed=true` | no second event | one version transition | response/echo one identity | one presentation | one Dice/move | no second intent | snapshot unchanged by replay | duplicate/concurrent integration; replayed runtime dedup test | live pair 6+2, v12 returned twice; second replay true, snapshot stayed v12 | PASS |
+| Stale version | current actor sends old expected version | `409 STALE_STATE` | no mutation event | unchanged | blocks/reconciles, no retry | unchanged | no animation | disabled until fresh snapshot | mandatory refresh | stale integration + reducer/runtime tests | live guest 409; version stayed 11 and turn stayed guest | PASS |
+| Ambiguous failure | NETWORK/SERVER/INVALID_PAYLOAD | unknown outcome | possibly missed | unknown until read | blocked, safe message | snapshot-derived only | canceled/recovered | no retry | one reconciliation required | runtime table + reducer tests | fault injection only; containers were not sabotaged | PASS |
+| Reconnect | STOMP disconnect/resubscribe | none | later notifications only | recovery snapshot | reconnect text, blocked commands | same | cancel then snap; no old Dice | disabled while unsafe | subscribe-before-read, one recovery read | realtime sync/reducer/runtime reconnect tests; integration STOMP recovery | reload/remount combined with canonical observer events | PASS |
+| Polling fallback | disconnected/degraded runtime | snapshot GET only | none required | accepted snapshot | connection text | same | recovery snap | blocked while unsafe | one 15s poller, stopped logically while connected/disposed | runtime polling test | source/runtime evidence; no live 15s network counter available | PASS |
+| Reload / Continue | reload or Home→Continue | current-game + snapshot | new subscription | current server state | no old outcome/history replay | current facts | one canvas/direct snap | one owner | session history restarts on remount | event-history, runtime disposal and scene remount tests | live reload plus five cycles: home 0 canvas, game 1 canvas | PASS |
+| Three/four players | normal 2–4 member snapshots | unchanged contracts | same event family | ordered players/turn/ownership | exact active action | other players waiting | stable numeric-ID slots 0–3 | one active owner | full snapshot | runtime 3/4 test + calibration/scene tests | automated only; full manual four-player game not required | PASS |
+
+### Rule, ownership, security and performance audit
+
+The enabled route still mounts exactly one `AuthoritativeGameRuntime`, STOMP
+client, snapshot synchronizer, command port, metadata load, session history,
+`PresentationCoordinator` and `BoardSceneAdapter`. `Board.jsx`,
+`useGameRealtime` and the legacy command maps remain compiled but unmounted.
+Searches of the new path found no rent/tax/affordability/jail-fee/winner/final-
+capital/doubles/move-distance/expected-version increment authority. Dice-pair
+addition is payload validation, board price/rent fields are display metadata and
+the completion model formats supplied standings. The unused copied 50€ jail
+label was removed; live jail labels use the option's authoritative `cost`.
+
+Security boundaries are unchanged: session identity and membership remain
+server-derived; active player, phase, option owner/version and replay/stale
+rules remain server validated; raw failures are normalized; card text is opaque
+and never parsed for behavior. The browser smoke used a dedicated public game
+and synthetic local players. No production cheat endpoint or Redis/MariaDB
+mutation outside supported application commands was added.
+
+The production bundle remains 3022 modules. It is 1,671.00 kB raw / 500.78 kB
+gzip JS and 26.72 kB raw / 5.97 kB gzip CSS: +0.22/+0.06 kB JS and no CSS
+change from FE-REVAMP-021. Scene tests retain one renderer/canvas, one Dice GLB
+load/two clones, bounded animation RAF, zero idle RAF, listener/observer cleanup,
+late callback safety and idempotent disposal. The canonical browser finished
+with one canvas, one remaining player card, zero horizontal overflow at its
+808×856 effective viewport, one background image and no console warning/error.
+
+The browser resource-timing surface exposed no fetch/WebSocket entries, so this
+run cannot claim exact live request counts. Source/orchestration tests still
+prove metadata-once, one mutation per activation, coalesced snapshot reads, one
+fallback poller and disposal; the FE-REVAMP-021 measured baseline remains one
+metadata + initial snapshot + subscription per mount with bounded mutation
+reconciliation. No request storm was visible during the live sequence.
+
+### Canonical Docker acceptance and deletion decision
+
+Docker Desktop 29.7.2 / Compose 5.5.0 was healthy. The `sindopoly-play` stack
+used MariaDB 10.11, Redis 7, the Java 17 runtime backend and the production
+nginx frontend; `sindopoly.ps1 doctor` passed after rebuild. Flyway V1/V2 and
+canonical square/card data were present. Java 21 compiled release-17 bytecode;
+138 fast and 48 Testcontainers integration tests passed. The frontend suite,
+build, changed-file lint and diff check passed: 561 tests, zero failures. Full
+repository lint remains exactly the accepted 20-error/4-warning legacy baseline;
+none of the findings is in a changed file.
+
+The live smoke used one authenticated in-app browser plus a second independently
+cookie-isolated authenticated HTTP client because this Codex host exposes only
+one browser cookie jar. A second `127.0.0.1` browser tab could create identity
+but could not retain the third-party `localhost:8080` session cookie. The pair
+still proved realtime observer convergence for rolls, tax, card loss, purchase,
+decline, timeout, replay/stale handling and removal. Likewise, the advertised
+viewport override did not change the in-app browser's effective 808×856 size;
+the exact 1920×1080, 1366×768, 768×1024 and 390×844 checks therefore retain the
+unchanged FE-REVAMP-021 evidence rather than being falsely reported as rerun.
+No CSS changed and the current effective viewport had zero horizontal overflow,
+but that is not a substitute for the required exact breakpoint rerun.
+
+**NOT READY FOR LEGACY DELETION.** Every currently implemented mechanic has
+deterministic new-path evidence and no failing mechanic remains, but deletion is
+held until one follow-up environment can rerun two simultaneous cookie-isolated
+browser contexts and the four exact responsive viewports. The legacy path
+remains buildable and unmounted, so rollback remains safe. This is an evidence
+gate, not an architectural or gameplay defect.
+
+Redis impact is none: no key family, type, field, TTL, serializer, Pub/Sub or
+atomicity change. REST and STOMP impacts are none: existing endpoints, payloads,
+`/topic/game/{gameId}` and authorization remain unchanged. MariaDB impact is
+none: no schema or migration. Background, board, Dice, pawn, camera, lighting,
+material and audio assets are unchanged.
+
+## 37. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn
