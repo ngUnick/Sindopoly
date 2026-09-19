@@ -1656,12 +1656,56 @@ description of the responsive layout as funky/clunky is currently classified
 as aesthetic evidence only; this runner could not establish or disprove a
 functional B/C/D/E regression at the four required exact viewports.
 
-**NOT READY FOR LEGACY DELETION.** Every currently implemented mechanic has
-deterministic new-path evidence and no failing mechanic remains, but deletion is
-held until one follow-up environment can rerun two simultaneous cookie-isolated
-browser contexts and the four exact responsive viewports. The legacy path
-remains buildable and unmounted, so rollback remains safe. This is an evidence
-gate, not an architectural or gameplay defect.
+The final bounded acceptance run on 2026-09-19 used installed Microsoft Edge
+`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`, not the Codex
+in-app browser. Two headless Edge processes used distinct, freshly created
+temporary `--user-data-dir` profiles and separate CDP ports. Both profiles had
+a `JSESSIONID`, the cookie values differed (values were not logged), and the UI
+authenticated host `Alpha0919` and guest `Beta0919` as different server player
+IDs. The host created a public game, the guest joined, and the host started it;
+both browsers entered the same production Game route with one canvas each and
+only the active player having actionable controls. In game 30, both browser
+sessions read identical authoritative snapshots at versions 2, 3 and 4. A host
+roll of 8 moved the host to position 8 and offered the same 100€ property to
+both viewers; only the host could decline. After the host declined through the
+UI, both browsers showed version 4, guest turn, unchanged 1,500€ balances and
+no transferred ownership. Both displayed one confirmed dice/outcome message.
+The guest reload restored current position, money and turn with one canvas,
+while old dice/movement and transient outcome copy did not replay, as required
+by session-local history semantics. A separate run explicitly compared the
+distinct cookie values and authenticated identities; its roll also converged
+across both browsers. Temporary Edge processes/profiles were removed after
+verification; synthetic canonical-stack test games were left untouched.
+
+CDP `Emulation.setDeviceMetricsOverride` applied each required CSS viewport to
+the active player's production Game route. Measurements were taken at page top;
+the active Roll button was then scrolled into view and passed viewport and DOM
+hit tests. A narrower `clientWidth` at three sizes is the vertical scrollbar,
+not horizontal page overflow.
+
+| Requested and actual `innerWidth` × `innerHeight` | `clientWidth` / `scrollWidth` | Canvas rect width × height | Page `scrollHeight` | Functional result |
+| --- | --- | --- | --- | --- |
+| 1920×1080 / 1920×1080 | 1920 / 1920 | 1640×904 | 1080 | PASS |
+| 1366×768 / 1366×768 | 1351 / 1351 | 1099×904 | 1080 | PASS; vertical scroll reaches action |
+| 768×1024 / 768×1024 | 753 / 753 | 729×904 | 1278 | PASS; vertical scroll reaches action |
+| 390×844 / 390×844 | 375 / 375 | 359×904 | 1282 | PASS; vertical scroll reaches action |
+
+At every size there was one visible canvas, readable status text, an available
+player rail, visible background, no page-level horizontal overflow, no
+canvas/action overlap, and an enabled Roll control reachable by normal scrolling
+with a successful center-point hit test. The phone rail has bounded internal
+horizontal scrolling (`scrollWidth` 368 versus `clientWidth` 341), rather than
+page overflow. The phone/tablet board is tall and the layout remains visually
+dense: classify the user's “funky/clunky” observation as aesthetic (A), not a
+functional B/C/D/E failure. No responsive CSS or product source was changed.
+Both browsers emitted one expected 401 resource-log entry while anonymously
+probing `/api/session/me` before login; no console or WebGL errors appeared
+after authentication or during gameplay/viewport verification.
+
+**FE-REVAMP-022 ACCEPTED — READY FOR LEGACY DELETION IN A LATER MILESTONE.**
+Both previously missing acceptance gates now have measured canonical-stack
+browser evidence. This milestone does not remove the still-buildable, unmounted
+legacy rollback path. Redis, REST, STOMP, MariaDB and assets remain unchanged.
 
 Redis impact is none: no key family, type, field, TTL, serializer, Pub/Sub or
 atomicity change. REST and STOMP impacts are none: existing endpoints, payloads,
