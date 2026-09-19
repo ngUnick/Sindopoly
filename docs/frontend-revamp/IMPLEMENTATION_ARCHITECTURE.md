@@ -1789,7 +1789,36 @@ Redis, REST, STOMP, MariaDB, board metadata, 3D assets, background, route
 ownership, keyboard behavior and FE23 accessibility semantics are unchanged.
 The next boundary is FE-REVAMP-025; it is not included here.
 
-## 39. Git, documentation and risk
+## 39. FE-REVAMP-025 pawn/dice asset pipeline and polish
+
+FE-REVAMP-025 adds a checked-in asset manifest at
+`sindopoly-front/assets/asset-manifest.json` and the dependency-free
+`npm run assets:validate` validator. It validates the GLB 2.0 header, declared
+binary length, JSON chunk, mesh presence, provenance field, file-size budget
+and indexed-triangle budget for the board, Dice and four existing pawn models.
+The manifest records the current repository asset provenance limitation
+(source/license confirmation is still required before redistribution), explicit
+size/triangle ceilings and the 16.67ms frame budget.
+
+The live `BoardSceneAdapter` remains the sole renderer owner and is not replaced
+with a second scene path. Existing calibrated Dice presentation, primitive pawn
+fallbacks, one-frame invalidation, pixel-ratio cap and disposal behavior remain
+unchanged; no gameplay, authority, movement, camera, background or asset URL
+contract changes were made. The new focused tests execute the validator and
+assert the adapter's bounded 760ms Dice animation, pixel-ratio cap and coalesced
+frame guard. This keeps FE25 a measurable pipeline/budget boundary while
+deferring unverified GLB-origin transforms and final pawn choreography to a
+future explicitly approved polish iteration.
+
+Measured current assets: board 1,179,208 bytes; Dice 429,856 bytes / 11,366
+triangles; Iron 37,672 / 786; Thimble 33,372 / 646; TopHat 17,956 / 284;
+WheelBarrow 27,688 / 364. The board validator reports 24 indexed triangles
+because its current GLB primitives use non-indexed geometry; file-size and GLB
+structural checks remain authoritative. Redis, REST, STOMP and MariaDB impact
+is none. FE24's Playwright runtime limitation remains documented above and is
+not reworked here. The next boundary is FE-REVAMP-026; it is not included.
+
+## 40. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

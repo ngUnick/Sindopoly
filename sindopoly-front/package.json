@@ -8,6 +8,7 @@
     "build": "vite build",
     "test": "node --test src/apis/*.test.js",
     "test:e2e": "playwright test",
+    "assets:validate": "node scripts/validate-assets.mjs",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
