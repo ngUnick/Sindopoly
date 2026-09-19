@@ -239,6 +239,27 @@
   cursor: not-allowed;
 }
 
+.game-live-announcer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.action-focus-region:focus {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-control);
+}
+
+.player-rail__list:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
+}
+
 @media (min-width: 761px) and (max-width: 1100px) {
   .player-rail__list {
     grid-auto-columns: minmax(13rem, 1fr);
@@ -273,5 +294,15 @@
   .action-tray__primary,
   .action-tray__secondary {
     width: 100%;
+  }
+}
+
+@media (max-width: 320px) {
+  .player-rail__list {
+    grid-auto-columns: minmax(0, 100%);
+  }
+
+  .player-card {
+    padding: var(--space-2);
   }
 }

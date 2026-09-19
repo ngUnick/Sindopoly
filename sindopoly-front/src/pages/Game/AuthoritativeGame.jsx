@@ -4,11 +4,12 @@ import AuthContext from "../../AuthContext/AuthContext.jsx";
 import { ObserverNotificationToast } from "../../components/GameFeedback.js";
 import { GAMEPLAY_CONTENT } from "../../features/game/content/el.js";
 import {
-  ActionTray,
   ContextPanel,
   MatchStatusHeader,
   PlayerRail,
 } from "../../features/game/hud/index.js";
+import ActionFocusRegion from "../../features/game/hud/ActionFocusRegion.js";
+import GameLiveAnnouncer from "../../features/game/hud/GameLiveAnnouncer.js";
 import { readCompletionNavigationState } from "../../features/game/presentation/gameViewModel.js";
 import GameShell from "../../features/game/shell/GameShell.jsx";
 import { useAuthoritativeGame } from "../../hooks/useAuthoritativeGame.js";
@@ -49,21 +50,24 @@ export default function AuthoritativeGame() {
   );
 
   return (
-    <GameShell
-      header={game.viewModel && (
-        <MatchStatusHeader turn={game.viewModel.turn} connection={game.viewModel.connection} />
-      )}
-      players={game.viewModel && <PlayerRail players={game.viewModel.players} />}
-      board={board}
-      context={context}
-      actions={game.viewModel && (
-        <ActionTray
-          action={game.viewModel.action}
-          onPrimaryAction={game.onPrimaryAction}
-          onSecondaryAction={game.onSecondaryAction}
-        />
-      )}
-    />
+    <>
+      <GameLiveAnnouncer key={gameId} viewModel={game.viewModel} />
+      <GameShell
+        header={game.viewModel && (
+          <MatchStatusHeader turn={game.viewModel.turn} connection={game.viewModel.connection} />
+        )}
+        players={game.viewModel && <PlayerRail players={game.viewModel.players} />}
+        board={board}
+        context={context}
+        actions={game.viewModel && (
+          <ActionFocusRegion
+            action={game.viewModel.action}
+            onPrimaryAction={game.onPrimaryAction}
+            onSecondaryAction={game.onSecondaryAction}
+          />
+        )}
+      />
+    </>
   );
 }
 

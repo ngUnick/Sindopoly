@@ -454,7 +454,7 @@ test("production route mounts extracted HUD only through the authoritative owner
   for (const name of ["ActionTray", "ConnectionStatus", "ContextPanel", "MatchStatusHeader", "PlayerRail"]) {
     assert.doesNotMatch(`${gameSource}\n${boardSource}`, new RegExp(`from .*hud|<${name}`));
   }
-  assert.match(authoritativeGameSource, /ActionTray/);
+  assert.match(authoritativeGameSource, /ActionFocusRegion/);
   assert.match(authoritativeGameSource, /MatchStatusHeader/);
   assert.match(authoritativeGameSource, /PlayerRail/);
 });

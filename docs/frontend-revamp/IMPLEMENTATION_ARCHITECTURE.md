@@ -1713,7 +1713,51 @@ atomicity change. REST and STOMP impacts are none: existing endpoints, payloads,
 none: no schema or migration. Background, board, Dice, pawn, camera, lighting,
 material and audio assets are unchanged.
 
-## 37. Git, documentation and risk
+## 37. FE-REVAMP-023 responsive and accessibility pass
+
+FE-REVAMP-023 implements the committed M10 scope, not legacy deletion. The
+authoritative route and the unmounted local `Board` rollback remain intact;
+reviewed legacy removal belongs to FE-REVAMP-028. No gameplay rule, board
+metadata, scene/asset, backend or transport behavior changed.
+
+The live route now has one persistent polite status region for accepted turn
+and connection transitions. It does not announce the initial snapshot or
+repeat unchanged snapshots, and observer outcomes retain their existing
+separate non-blocking status toast. The action region preserves keyboard focus
+when a pending command or confirmed transition removes the focused button; the
+next enabled action remains reachable by Tab. Native buttons still own Enter and
+Space activation. The rail's scroll-container focus and the action fallback
+show a tokenized focus ring. The narrowest reflow keeps player cards and the
+observer toast inside their containers. Reduced-motion presentation remains
+owned by the existing coordinator and was not changed here.
+
+Verification: 565 frontend tests pass, the production bundle builds, and
+changed-file ESLint and `git diff --check` pass. Repository-wide lint remains
+at its pre-existing 20 errors / 4 warnings in unrelated legacy/secondary
+files. In a live two-player game (host `FE23_UI_02`, guest `FE23_UI_04`), keyboard
+Enter rolled and declined a server-offered purchase. Focus moved to the action
+region rather than the document body, Tab reached the next enabled control,
+and the handoff appeared once in the polite live region. The route retained one
+canvas and no new console/WebGL error occurred in the authenticated game. A
+failed cross-site `127.0.0.1` preview attempt emitted auth errors before the
+same-site `localhost` production-preview run; it is not game evidence.
+
+Rendered width checks at 390×844 and 200%-equivalent CSS viewports of 960×540
+(1920×1080 source) and 683×384 (1366×768 source) showed no page-level
+horizontal overflow and a scroll-reachable action region. The narrowest browser
+override clamps at 240 CSS pixels, where the action remained contained. These
+are reflow baselines, not a native browser-zoom or assistive-technology audit;
+that residual verification gap remains before the final hardening gate.
+
+The build transforms 3024 modules and emits 1,672.41 kB JS raw / 501.19 kB
+gzip and 27.55 kB CSS raw / 6.11 kB gzip, versus the accepted FE-REVAMP-022
+baseline of 3022 modules, about 1,670.96/500.75 kB JS and 26.72/5.97 kB CSS.
+This small increase is attributable to the two focused accessibility
+components and CSS. Redis, REST, STOMP and MariaDB effects are none; no
+compatibility or migration action is required. FE-REVAMP-024 is the next
+committed boundary and is not part of this change.
+
+## 38. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

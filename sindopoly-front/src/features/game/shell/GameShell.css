@@ -134,4 +134,24 @@
   .game-live-board {
     min-height: 24rem;
   }
+
+  .game-live-board-region [data-game-feedback="observer"] {
+    left: var(--space-2);
+    right: var(--space-2);
+    max-width: none;
+  }
+}
+
+@media (max-width: 320px) {
+  .game-shell__header,
+  .game-shell__actions,
+  .game-shell__players,
+  .game-shell__context {
+    padding: var(--space-2);
+  }
+
+  .game-live-board-region,
+  .game-live-board {
+    min-height: 18rem;
+  }
 }
