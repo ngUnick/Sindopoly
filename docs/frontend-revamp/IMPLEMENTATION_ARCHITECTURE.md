@@ -1757,7 +1757,39 @@ components and CSS. Redis, REST, STOMP and MariaDB effects are none; no
 compatibility or migration action is required. FE-REVAMP-024 is the next
 committed boundary and is not part of this change.
 
-## 38. Git, documentation and risk
+## 38. FE-REVAMP-024 Playwright harness
+
+FE-REVAMP-024 adds a test-only Playwright configuration at
+`sindopoly-front/playwright.config.js` and a Chromium spec under `e2e/`. The
+spec creates two deterministic, Greek-safe player identities through the
+existing authenticated APIs, creates and joins a disposable public game,
+starts it with authoritative expected-version headers, and transfers each
+isolated API session into its own `BrowserContext` via `storageState`.
+
+The browser flow asserts one canvas per context, an authoritative active-player
+roll control only for the active player, keyboard Enter activation, convergence
+of both HUD headers after the roll, optional server-owned purchase decline,
+reload recovery, and no captured console/page errors. Context traces capture
+screenshots and DOM snapshots; failures attach console errors and Playwright
+retains trace/video/screenshot artifacts. The `test:e2e` npm script runs the
+Chromium project and accepts `SINDOPOLY_FRONTEND_URL` and
+`SINDOPOLY_BACKEND_URL` overrides. The harness owns no gameplay logic and does
+not mutate Redis, REST, STOMP or MariaDB contracts.
+
+Automated unit coverage remains green at 565 tests; harness/config syntax and
+changed-file ESLint pass. Chromium 133 was installed locally, but the
+Playwright runner did not return a test result in this Windows sandbox (the
+process remained alive without reporter output), so no E2E pass is claimed
+here. The canonical Docker stack remained healthy and the FE23 authenticated
+browser evidence is unchanged. Running `npm run test:e2e` on a normal Playwright
+host is the remaining runtime acceptance step. The production bundle and
+runtime source are unchanged apart from the test dependency/configuration.
+
+Redis, REST, STOMP, MariaDB, board metadata, 3D assets, background, route
+ownership, keyboard behavior and FE23 accessibility semantics are unchanged.
+The next boundary is FE-REVAMP-025; it is not included here.
+
+## 39. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn
