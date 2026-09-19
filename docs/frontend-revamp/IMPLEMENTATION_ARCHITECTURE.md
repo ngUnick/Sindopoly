@@ -1876,10 +1876,50 @@ read ordering, presentation coordinator, BoardSceneAdapter, accessibility
 runtime, gesture-gated audio behavior or asset provenance changed. Redis,
 REST, STOMP and MariaDB impact is none. The Playwright runner remains the
 FE24 IMPLEMENTED-BUT-RUNTIME-PENDING limitation and was not debugged here.
-The legacy Board runtime, rollback switch and compatibility helpers remain in
-place for FE-REVAMP-028; no deletion or dismantling is part of FE27.
+At the FE27 boundary the legacy Board runtime and rollback switch were still
+present. FE-REVAMP-028 is the explicit removal milestone recorded below.
 
-## 42. Git, documentation and risk
+## 42. FE-REVAMP-028 final hardening and legacy removal
+
+FE-REVAMP-028 makes the authoritative runtime the only production `/Game`
+path. `Game.jsx` now mounts `AuthoritativeGame` directly; the
+`FIRST_VERTICAL_SLICE_ENABLED` switch, legacy `Board.jsx`, its
+`GamePlayAPI` snapshot adapter, and the legacy `GameShell` compatibility branch
+have been removed. Legacy Board-only contract tests and obsolete global Board
+navigation/control CSS were retired. The shared `BoardSceneAdapter`, canonical
+calibration/metadata, transport decoders, `realtimeSync`, `gameCommandState`,
+`useGameRealtime` (still required by Lobby), authoritative `TurnAPI` methods,
+HUD, presentation coordinator, event history and FE24–FE27 tests remain.
+
+The resulting production ownership chain is one route → one authoritative
+runtime/controller → one GameShell/HUD → one PresentationCoordinator → one
+GameBoard → one BoardSceneAdapter. There is no legacy feature flag, duplicate
+game command lifecycle, Board-local polling, legacy STOMP owner or old HUD
+control path. The frontend rule-authority audit remains clean: no client
+movement, rent, tax, jail-fee, affordability, card-destination, winner or
+capital calculation was retained. Canonical board metadata and authoritative
+`finalResult` remain the only sources for those facts.
+
+The deletion removed 2 runtime files (728 lines) and 2 legacy-only test files
+(132 lines), trimmed the old TurnAPI wrappers and 153 obsolete global Board CSS
+lines, and retired the compatibility branch. The full suite passes 561 tests after migrating
+ownership assertions to the authoritative route. The known FE24 Playwright
+runner remains IMPLEMENTED-BUT-RUNTIME-PENDING in this Windows environment;
+no harness weakening or runner debugging was performed. Redis, REST, STOMP
+and MariaDB impact is none. BoardSceneAdapter behavior, board/Dice/pawn assets,
+background, calibration, zero-idle-RAF, FE23 semantics, FE26 audio ownership,
+refresh snapping and non-replayed session history remain unchanged.
+
+FE27 bundle evidence was 3,027 modules, 624.92 kB raw / 163.72 kB gzip Game
+chunk and 28.21 kB raw / 6.47 kB gzip CSS. FE28 produces 3,023 modules,
+612.17 kB raw / 158.98 kB gzip Game chunk and 26.30 kB raw / 6.00 kB gzip
+CSS, while preserving the route-split non-game graph. `assets:validate` remains
+green with unchanged budgets. Remaining frontend debt is limited to the known Playwright runtime
+environment limitation, existing repository lint debt and historical
+documentation describing earlier migration stages. FE-REVAMP-029 (Greek
+nickname policy) is the next boundary and is not included here.
+
+## 43. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

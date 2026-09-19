@@ -592,8 +592,8 @@ test("production source has one enabled owner and preserves layer boundaries", a
     readFile(new URL("../pages/Game/Game.jsx", import.meta.url), "utf8"),
     readFile(new URL("../pages/Game/GameBoard.jsx", import.meta.url), "utf8"),
   ]);
-  assert.match(gameSource, /FIRST_VERTICAL_SLICE_ENABLED\s*=\s*true/u);
   assert.match(gameSource, /AuthoritativeGame/u);
+  assert.doesNotMatch(gameSource, /FIRST_VERTICAL_SLICE_ENABLED|legacyBoard|<Board/u);
   assert.doesNotMatch(boardSource, /TurnAPI|GameAPI|useGameRealtime|setInterval|PresentationCoordinator/u);
   assert.doesNotMatch(runtimeSource, /@stomp|sockjs|three|Redis|MariaDB/u);
   assert.doesNotMatch(hookSource, /calculateRent|purchasePrice|winnerPlayerId|Math\.random/u);

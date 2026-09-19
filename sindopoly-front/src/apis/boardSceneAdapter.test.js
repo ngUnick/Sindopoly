@@ -507,9 +507,8 @@ test("explicit scene movement uses canonical direct/forward modes and focuses de
   }), false);
 });
 
-test("adapter source stays presentation-only and Board delegates the Three lifecycle", async () => {
+test("adapter source stays presentation-only and owns the Three lifecycle", async () => {
   const adapterSource = await readFile(new URL("../features/game/board/BoardSceneAdapter.js", import.meta.url), "utf8");
-  const boardSource = await readFile(new URL("../pages/Game/Board.jsx", import.meta.url), "utf8");
 
   assert.doesNotMatch(
     adapterSource,
@@ -517,17 +516,6 @@ test("adapter source stays presentation-only and Board delegates the Three lifec
   );
   assert.doesNotMatch(adapterSource, /fetch\s*\(|axios|\brent\b|afford|winner|commandId|stateVersion/iu);
   assert.match(adapterSource, /from "\.\/boardCalibration\.js"/);
-  assert.match(boardSource, /new BoardSceneAdapter\(\{ boardModelUrl: boardGLB, diceModelUrl \}\)/);
-  assert.doesNotMatch(boardSource, /new THREE\.|new GLTFLoader|requestAnimationFrame|cancelAnimationFrame/);
-});
-
-test("Board keeps the accessible total synchronized with observer dice events", async () => {
-  const boardSource = await readFile(new URL("../pages/Game/Board.jsx", import.meta.url), "utf8");
-
-  assert.match(
-    boardSource,
-    /if \(dicePresentation\) \{\s*setDice\(dicePresentation\.total\);\s*sceneAdapterRef\.current\?\.presentDiceRoll/,
-  );
 });
 
 function createHarness() {

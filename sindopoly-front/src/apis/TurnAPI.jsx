@@ -1,51 +1,14 @@
 import API_BASE_URL from "./apiConfig";
 import { apiFetch } from "./apiClient";
-import { commandHeaders, readCommandResponse } from "./gameCommandState";
 import { decodeActionResult, decodeThrowResult } from "./transportDecoders";
 import { readJsonResponse } from "./transportError";
 
 /**
- * Low-level wrappers around your two turn endpoints:
- *  • POST /api/turn/:gameId/:playerId/throw
- *  • POST /api/turn/:gameId/:playerId/action
+ * Authoritative command gateway for the live Game runtime. Legacy command
+ * wrappers were removed with the rollback Board; lifecycle identity and
+ * expected versions now arrive only from the controller.
  */
 export const TurnAPI = {
-  /** STEP 1: roll dice & peek → POST /throw */
-  throwDice: async (gameId, playerId) => {
-    const res = await apiFetch(
-      `${API_BASE_URL}/api/turn/${gameId}/${playerId}/throw`,
-      { method: "POST", headers: commandHeaders(gameId) }
-    );
-    // body should be your ThrowResultDto:
-    // { dice, newPosition, passedGo, squareType, data }
-    return await readCommandResponse(res, gameId, decodeThrowResult);
-  },
-
-  /** STEP 2: apply buy/ok → POST /action */
-  doAction: async (gameId, playerId, yes) => {
-    const payload = { gameId, playerId, yes };
-    const res = await apiFetch(
-      `${API_BASE_URL}/api/turn/${gameId}/${playerId}/action`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...commandHeaders(gameId) },
-        body: JSON.stringify(payload),
-      }
-    );
-    // body should be your ActionResultDto:
-    // { newBalance, acquiredProperties, nextPlayerId }
-    return await readCommandResponse(res, gameId, decodeActionResult);
-  },
-
-  /** Decline the server-owned purchase or jail-payment option. */
-  pass: async (gameId, playerId) => {
-    const res = await apiFetch(
-      `${API_BASE_URL}/api/turn/${gameId}/${playerId}/pass`,
-      { method: "POST", headers: commandHeaders(gameId) }
-    );
-    return await readCommandResponse(res, gameId, decodeActionResult);
-  },
-
   /** FE-REVAMP-021 command path: lifecycle identity comes from the live controller. */
   throwDiceAuthoritative: async (gameId, playerId, command) => {
     const res = await apiFetch(

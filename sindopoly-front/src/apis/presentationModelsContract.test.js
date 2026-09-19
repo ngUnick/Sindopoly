@@ -38,14 +38,13 @@ test("presentation models format authoritative completion values without rule ca
 
 test("production completion path retires query-string and hard-coded price authority", async () => {
   const sourceRoot = new URL("../", import.meta.url);
-  const [board, endGame] = await Promise.all([
-    readFile(new URL("pages/Game/Board.jsx", sourceRoot), "utf8"),
+  const [game, endGame] = await Promise.all([
+    readFile(new URL("pages/Game/AuthoritativeGame.jsx", sourceRoot), "utf8"),
     readFile(new URL("pages/Game/EndGame.jsx", sourceRoot), "utf8"),
   ]);
-  assert.doesNotMatch(`${board}\n${endGame}`, /priceMap|totalCapital|properties\s*\.\s*reduce/iu);
+  assert.doesNotMatch(`${game}\n${endGame}`, /priceMap|totalCapital|properties\s*\.\s*reduce/iu);
   assert.doesNotMatch(endGame, /useSearchParams|searchParams|get\(["']capital|BoardAPI/iu);
-  assert.match(board, /buildCompletionViewModel\(snapshot\)/);
-  assert.match(board, /state:\s*\{\s*completion\s*\}/);
+  assert.match(game, /readCompletionNavigationState|navigate\(["']\/endgame/);
 });
 
 test("presentation models introduce no state or memoization library", async () => {

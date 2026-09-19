@@ -9,7 +9,7 @@ const PAWN_ELEVATION = 0.5;
 const PAWN_SLOT_OFFSET = 0.55;
 
 /**
- * Source-calibrated geometry after Board.jsx applies scale 0.035 and Y rotation PI/2.
+ * Source-calibrated geometry after the board model applies scale 0.035 and Y rotation PI/2.
  * The perimeter dimensions close exactly: 6 + (8 * 4.15) + 6 = 45.2.
  */
 export const BOARD_CALIBRATION = Object.freeze({

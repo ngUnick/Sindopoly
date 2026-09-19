@@ -27,11 +27,10 @@ const componentPaths = [
   "features/game/hud/PlayerCard.js",
   "features/game/hud/PlayerRail.js",
 ];
-const [componentSource, styles, indexSource, boardSource, gameSource, authoritativeGameSource] = await Promise.all([
+const [componentSource, styles, indexSource, gameSource, authoritativeGameSource] = await Promise.all([
   Promise.all(componentPaths.map(readSource)).then(parts => parts.join("\n")),
   readSource("features/game/hud/GameHud.css"),
   readSource("features/game/hud/index.js"),
-  readSource("pages/Game/Board.jsx"),
   readSource("pages/Game/Game.jsx"),
   readSource("pages/Game/AuthoritativeGame.jsx"),
 ]);
@@ -452,18 +451,14 @@ test("HUD CSS represents status with text-compatible selectors", () => {
 
 test("production route mounts extracted HUD only through the authoritative owner", () => {
   for (const name of ["ActionTray", "ConnectionStatus", "ContextPanel", "MatchStatusHeader", "PlayerRail"]) {
-    assert.doesNotMatch(`${gameSource}\n${boardSource}`, new RegExp(`from .*hud|<${name}`));
+    assert.doesNotMatch(gameSource, new RegExp(`from .*hud|<${name}`));
   }
   assert.match(authoritativeGameSource, /ActionFocusRegion/);
   assert.match(authoritativeGameSource, /MatchStatusHeader/);
   assert.match(authoritativeGameSource, /PlayerRail/);
 });
 
-test("legacy Board HUD remains an unmounted rollback path", () => {
-  assert.match(gameSource, /FIRST_VERTICAL_SLICE_ENABLED = true/);
-  assert.match(gameSource, /\? <AuthoritativeGame \/>/);
-  assert.match(gameSource, /: <GameShell board=\{legacyBoard\} legacy \/>/);
-  assert.match(boardSource, /className="first-nav"/);
-  assert.match(boardSource, /className="sec-nav"/);
-  assert.match(boardSource, /className="third-nav(?:\s|")/);
+test("production route mounts the authoritative HUD owner without legacy controls", () => {
+  assert.match(gameSource, /<AuthoritativeGame \/>/);
+  assert.doesNotMatch(gameSource, /FIRST_VERTICAL_SLICE_ENABLED|legacyBoard|<Board/u);
 });

@@ -14,10 +14,7 @@ import {
 } from "../features/game/board/boardCalibration.js";
 
 const sourceRoot = new URL("../", import.meta.url);
-const [calibrationSource, boardSource] = await Promise.all([
-  readFile(new URL("features/game/board/boardCalibration.js", sourceRoot), "utf8"),
-  readFile(new URL("pages/Game/Board.jsx", sourceRoot), "utf8"),
-]);
+const calibrationSource = await readFile(new URL("features/game/board/boardCalibration.js", sourceRoot), "utf8");
 const adapterSource = await readFile(new URL("features/game/board/BoardSceneAdapter.js", sourceRoot), "utf8");
 
 test("calibration exposes exactly forty canonical anchors", () => {
@@ -279,8 +276,7 @@ test("model transform and inspected bounds remain explicit calibration evidence"
   assert.deepEqual(BOARD_CALIBRATION.modelWorldBounds.max, { x: 26.25, y: 0.043661, z: 26.790839 });
 });
 
-test("production Board does not own calibration while the scene adapter consumes canonical geometry", () => {
-  assert.doesNotMatch(boardSource, /boardCalibration|BOARD_ANCHORS|buildForwardRoute|getPawnAnchor/);
+test("scene adapter consumes canonical geometry", () => {
   assert.match(adapterSource, /buildForwardRoute/);
   assert.match(adapterSource, /getPawnAnchor/);
   assert.doesNotMatch(adapterSource, /BOARD_ANCHORS/);

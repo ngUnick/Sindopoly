@@ -11,11 +11,9 @@ export default function GameShell({
   board,
   context,
   actions,
-  legacy = false,
 }) {
   const classNames = [
     "game-shell",
-    legacy && "game-shell--legacy",
     header && "game-shell--has-header",
     players && "game-shell--has-players",
     context && "game-shell--has-context",
@@ -27,7 +25,7 @@ export default function GameShell({
   return (
     <main
       className={classNames}
-      data-game-shell-mode={legacy ? "legacy" : "responsive"}
+      data-game-shell-mode="responsive"
     >
       {header && (
         <header className="game-shell__header" data-game-shell-region="header">
@@ -77,5 +75,4 @@ GameShell.propTypes = {
   board: PropTypes.node.isRequired,
   context: PropTypes.node,
   actions: PropTypes.node,
-  legacy: PropTypes.bool,
 };

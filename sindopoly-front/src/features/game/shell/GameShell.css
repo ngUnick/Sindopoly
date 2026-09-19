@@ -72,12 +72,6 @@
   min-height: 32rem;
 }
 
-/* Compatibility mode keeps the current viewport-sized Board visually unchanged. */
-.game-shell.game-shell--legacy {
-  --game-shell-gap: 0;
-  --game-shell-inset: 0;
-}
-
 @media (min-width: 1501px) {
   .game-shell {
     --game-shell-player-rail: 14.75rem;

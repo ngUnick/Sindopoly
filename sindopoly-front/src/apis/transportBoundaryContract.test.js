@@ -20,7 +20,7 @@ test("snapshot, command, and STOMP boundaries invoke transport decoders", async 
 
 test("target API boundaries do not parse raw JSON directly", async () => {
   for (const path of [
-    "AuthAPI.jsx", "GameAPI.jsx", "GamePlayAPI.jsx", "TurnAPI.jsx",
+    "AuthAPI.jsx", "GameAPI.jsx", "TurnAPI.jsx",
     "BoardAPI.js", "currentGame.js", "gameCommandState.js",
   ]) {
     assert.doesNotMatch(await source(path), /\.json\(\)/, path);

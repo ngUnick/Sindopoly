@@ -61,12 +61,6 @@ test("populated slots activate deterministic layout modifiers", () => {
   }
 });
 
-test("legacy compatibility mode is explicit and locally reversible", () => {
-  assert.match(shell, /legacy && "game-shell--legacy"/);
-  assert.match(shell, /legacy \? "legacy" : "responsive"/);
-  assert.match(styles, /\.game-shell--legacy/);
-});
-
 test("GameShell preserves supplied children without owning commands", () => {
   for (const child of ["header", "players", "board", "context", "actions"]) {
     assert.match(shell, new RegExp(`\\{${child}\\}`));
@@ -126,10 +120,8 @@ test("side regions collapse to one column at tablet and phone widths", () => {
   assert.equal(styles.split(combinedSelector).length - 1, 3);
 });
 
-test("Game route enables one authoritative slice with a reversible legacy branch", () => {
-  assert.match(game, /FIRST_VERTICAL_SLICE_ENABLED = true/);
-  assert.match(game, /\? <AuthoritativeGame \/>/);
-  assert.match(game, /: <GameShell board=\{legacyBoard\} legacy \/>/);
-  assert.equal(game.match(/<Board\s*\/>/g)?.length, 1);
+test("Game route has one authoritative runtime and no legacy branch", () => {
+  assert.match(game, /<AuthoritativeGame \/>/);
+  assert.doesNotMatch(game, /FIRST_VERTICAL_SLICE_ENABLED|legacyBoard|<Board|GameShell board/u);
   assert.doesNotMatch(game, /w-\[800px\]/);
 });

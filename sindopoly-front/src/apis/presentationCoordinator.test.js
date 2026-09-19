@@ -391,10 +391,9 @@ test("normalized inputs are immutable and coordinator sources have no authority 
   assert.ok(Object.isFrozen(normalized.dice));
   assert.ok(Object.isFrozen(normalized.outcome));
 
-  const [coordinatorSource, transactionSource, boardSource] = await Promise.all([
+  const [coordinatorSource, transactionSource] = await Promise.all([
     readFile(new URL("../features/game/presentation/PresentationCoordinator.js", import.meta.url), "utf8"),
     readFile(new URL("../features/game/presentation/presentationTransaction.js", import.meta.url), "utf8"),
-    readFile(new URL("../pages/Game/Board.jsx", import.meta.url), "utf8"),
   ]);
   const source = `${coordinatorSource}\n${transactionSource}`;
   assert.doesNotMatch(
@@ -404,7 +403,6 @@ test("normalized inputs are immutable and coordinator sources have no authority 
   assert.doesNotMatch(source, /Redis|MariaDB/iu);
   assert.doesNotMatch(source, /Math\.random|calculateRent|purchasePrice|turnDeadlineEpochMs|winnerPlayerId|fetch\s*\(/u);
   assert.doesNotMatch(source, /eventHistory|setTimeout|setInterval|requestAnimationFrame/iu);
-  assert.doesNotMatch(boardSource, /PresentationCoordinator|presentationTransaction/u);
 });
 
 test("deduplication memory remains bounded independently of the single queue slot", async () => {
