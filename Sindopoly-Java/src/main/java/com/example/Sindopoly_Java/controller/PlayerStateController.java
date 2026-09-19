@@ -1,11 +1,12 @@
 package com.example.Sindopoly_Java.controller;
 
 import com.example.Sindopoly_Java.model.Player;
+import com.example.Sindopoly_Java.model.dto.CreatePlayerRequest;
 import com.example.Sindopoly_Java.repository.PlayerRepository;
 import com.example.Sindopoly_Java.service.PlayerStateService;
 import com.example.Sindopoly_Java.security.AuthenticatedPlayerResolver;
 import com.example.Sindopoly_Java.security.PlayerSessionService;
-import com.example.Sindopoly_Java.utils.ValidationUtils;
+import com.example.Sindopoly_Java.utils.NicknamePolicy;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,19 +23,19 @@ public class PlayerStateController {
 
     private final PlayerStateService playerStateService;
     private final PlayerRepository playerRepository;
-    private final ValidationUtils validationUtils;
+    private final NicknamePolicy nicknamePolicy;
     private final AuthenticatedPlayerResolver authenticatedPlayerResolver;
     private final PlayerSessionService playerSessionService;
 
     @Autowired
     public PlayerStateController(PlayerStateService playerStateService,
                                  PlayerRepository playerRepository,
-                                 ValidationUtils v,
+                                 NicknamePolicy nicknamePolicy,
                                  AuthenticatedPlayerResolver authenticatedPlayerResolver,
                                  PlayerSessionService playerSessionService) {
         this.playerStateService = playerStateService;
         this.playerRepository = playerRepository;
-        this.validationUtils = v;
+        this.nicknamePolicy = nicknamePolicy;
         this.authenticatedPlayerResolver = authenticatedPlayerResolver;
         this.playerSessionService = playerSessionService;
     }
@@ -46,22 +47,16 @@ public class PlayerStateController {
      */
     @PostMapping("/create")
     public ResponseEntity<Integer> createPlayer(
-            @RequestBody Map<String, String> body,
+            @RequestBody CreatePlayerRequest body,
             HttpServletRequest request,
             HttpServletResponse response) {
-        String nickname = body.get("nickname");
-
-        validationUtils.validateNickname(nickname);
-
-        if (nickname == null || nickname.trim().isEmpty()) {
-            throw new IllegalArgumentException("Nickname is required");
-        }
+        String nickname = nicknamePolicy.acceptedName(body != null ? body.nickname() : null);
 
         // Reject identity switching before a durable Player row can be created.
         playerSessionService.assertCanEstablish();
 
         Player player = new Player();
-        player.setName(nickname.trim());
+        player.setName(nickname);
 
         player = playerRepository.save(player);
         playerSessionService.establish(player, request, response);

@@ -202,6 +202,37 @@ class IntegrationInfrastructureIT {
     }
 
     @Test
+    void greekNamesRoundTripThroughMariaDbWithoutNicknameUniqueness() throws Exception {
+        String[] names = {"Νι\u0301κος", "Νίκος", "ΝΙΚΟΣ", "Νικοσ", "Nikos"};
+        int[] ids = new int[names.length];
+        for (int index = 0; index < names.length; index++) {
+            MvcResult result = mockMvc.perform(post("/api/player-state/create")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("nickname", names[index]))))
+                    .andExpect(status().isOk()).andReturn();
+            ids[index] = Integer.parseInt(result.getResponse().getContentAsString());
+            String stored = jdbc.queryForObject("SELECT p_name FROM player WHERE id = ?", String.class,
+                    ids[index]);
+            assertThat(stored).isEqualTo(index == 0 ? "Νίκος" : names[index]);
+            mockMvc.perform(get("/api/session/me")
+                            .session((MockHttpSession) result.getRequest().getSession(false)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(ids[index]))
+                    .andExpect(jsonPath("$.nickname").value(stored));
+        }
+        assertThat(ids).doesNotHaveDuplicates();
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'player'
+                  AND COLUMN_NAME = 'p_name' AND NON_UNIQUE = 0
+                """, Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("""
+                SELECT COLLATION_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'player' AND COLUMN_NAME = 'p_name'
+                """, String.class)).isNotBlank();
+    }
+
+    @Test
     void realWebSocketHandshakeRequiresAnAuthenticatedHttpSession() {
         URI endpoint = URI.create("ws://127.0.0.1:" + serverPort + "/ws/websocket");
 

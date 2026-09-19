@@ -1919,7 +1919,56 @@ environment limitation, existing repository lint debt and historical
 documentation describing earlier migration stages. FE-REVAMP-029 (Greek
 nickname policy) is the next boundary and is not included here.
 
-## 43. Git, documentation and risk
+## 43. FE-REVAMP-029 — Greek nickname policy
+
+`POST /api/player-state/create` still accepts `{ "nickname": "..." }` and returns
+the numeric player ID. The request now has a typed one-field DTO and a single
+backend policy validator. A non-string, missing, or invalid nickname returns the
+existing 400 validation response before a player row or session is created.
+The frontend mirrors the policy for feedback and submits the accepted NFC form;
+the backend independently normalizes and validates every request.
+
+At creation, normalize the input once to Unicode NFC, then accept **2–15 Unicode
+code points** consisting only of Unicode letters whose script is Greek or Latin,
+ASCII digits `0`–`9`, and `_`. The unnormalized input is bounded at 64 UTF-16
+units before normalization. Case, accents, final sigma and script choices are
+preserved; no case folding, accent stripping, transliteration, trimming or
+compatibility normalization (NFKC) occurs. A decomposed accent is accepted when
+NFC composes it into an allowed letter; a remaining combining mark is rejected.
+Whitespace anywhere (including leading, trailing and repeated internal spaces),
+punctuation other than `_`, emoji, other scripts, controls, bidi controls and
+invisible format characters are rejected. Greek/Latin mixed-script names are
+accepted, including visually confusable pairs such as Latin `A` and Greek `Α`.
+The policy does not promise confusable-resistant uniqueness. Unicode Greek/Latin
+script letters include compatibility-shaped letters such as fullwidth Latin;
+they are preserved, not NFKC-folded. Examples: `Νίκος`, `Γιώργος`, `Nikos`,
+`AΑ_7` are valid; ` Νίκος`, `Νί κος`, `Νίκος!`, `Нίκος` (Cyrillic first letter)
+and `Νίκος😀` are not.
+
+`Player.id` remains the sole session, authorization and gameplay identity.
+Nicknames are untrusted display data, rendered as React text in Lobby, Game,
+EndGame and Statistics; no nickname lookup or authorization query exists.
+There is no nickname uniqueness rule: equal names and case/accent/sigma variants
+may belong to different player IDs. No Java or MariaDB equality comparison is
+used for nickname identity. The canonical `player.p_name VARCHAR(255)` has no
+nickname unique key or explicit column collation; it inherits the database's
+collation. Therefore collation-specific equality cannot alter this policy, and
+no migration or comparison-key column is needed. New rows store NFC names;
+existing rows are not rewritten or retroactively validated. The frontend no
+longer silently strips unsupported characters or applies its former local-only
+profanity filter during login; the server policy is authoritative.
+
+Redis player hashes and active-game state may continue carrying the stored
+display nickname. No Redis key, serializer, TTL, index or migration changes.
+STOMP envelopes and projections are unchanged; only future nickname values can
+contain Greek characters. Parameterized JPA storage and React escaping remain
+the input/output boundaries. Mixed-script impersonation remains a residual
+social risk because display names are intentionally non-unique; use numeric
+player IDs where identity matters. The acceptance suite covers Unicode policy,
+typed request/session behavior, frontend mirroring, and MariaDB round-trip and
+absence of a nickname unique constraint.
+
+## 44. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

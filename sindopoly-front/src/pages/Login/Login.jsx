@@ -2,20 +2,12 @@ import { useState, useEffect, useRef, useContext } from "react";
 import { Button, Modal, Input, message } from "antd";
 import monopoly_logo from "../../assets/images/monopoly_logo.png";
 import { useNavigate } from "react-router-dom";
-import { Filter } from "glin-profanity";
-import { sanitizeText } from "../../utils/sanitize";
+import { validateNickname } from "../../features/player/nicknamePolicy.js";
 import bgImg from "../../assets/images/monopoly_bg.png";
 import AuthContext from "../../AuthContext/AuthContext";
 import { AuthAPI } from "../../apis/AuthAPI";
 import { apiFetch, clearCsrfToken } from "../../apis/apiClient";
 import { LOGIN_CONTENT } from "../../features/game/content/el.js";
-
-const filter = new Filter({
-  languages: ["english"],
-  allowObfuscatedMatch: true,
-  severityLevels: true,
-  minSeverity: 1,
-});
 
 const Login = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -42,36 +34,20 @@ const Login = () => {
   };
 
   const isNicknameValid = (name) => {
-    const trimmed = name.trim();
-
-    if (trimmed.length < 2) {
+    const result = validateNickname(name);
+    if (result.reason === "short") {
       message.warning(LOGIN_CONTENT.nicknameMin);
-      return false;
-    }
-
-    if (trimmed.length > 15) {
+    } else if (result.reason === "long") {
       message.warning(LOGIN_CONTENT.nicknameMax);
-      return false;
-    }
-
-    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
+    } else if (!result.valid) {
       message.warning(LOGIN_CONTENT.nicknameCharacters);
-      return false;
     }
-
-    if (filter.isProfane(trimmed)) {
-      message.error(LOGIN_CONTENT.inappropriateNickname);
-      return false;
-    }
-
-    return true;
+    return result;
   };
 
   const handleOk = async () => {
-    if (!isNicknameValid(nickname)) return;
-
-    const cleanName = nickname.trim();
-    sessionStorage.setItem("nickname", cleanName);
+    const result = isNicknameValid(nickname);
+    if (!result.valid) return;
 
     setLoading(true);
     const hide = message.loading(LOGIN_CONTENT.creatingPlayer, 0);
@@ -80,7 +56,7 @@ const Login = () => {
       const res = await apiFetch("/api/player-state/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nickname: cleanName }),
+        body: JSON.stringify({ nickname: result.nickname }),
         csrf: false,
       });
 
@@ -91,6 +67,7 @@ const Login = () => {
       const currentPlayer = await AuthAPI.getCurrentPlayer();
       if (currentPlayer.id !== playerId) throw new Error("Session identity mismatch");
       login(currentPlayer);
+      sessionStorage.setItem("nickname", currentPlayer.nickname);
       hide(); // hide loading
       setLoading(false);
       navigate("/");
@@ -134,9 +111,8 @@ const Login = () => {
           ref={inputRef}
           placeholder={LOGIN_CONTENT.nicknamePlaceholder}
           value={nickname}
-          onChange={(e) => setNickname(sanitizeText(e.target.value))}
+          onChange={(e) => setNickname(e.target.value)}
           onKeyDown={handleKeyDown}
-          maxLength={15}
         />
       </Modal>
     </div>

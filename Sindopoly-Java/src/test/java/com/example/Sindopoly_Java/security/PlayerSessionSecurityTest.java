@@ -102,6 +102,27 @@ class PlayerSessionSecurityTest {
     }
 
     @Test
+    void greekNicknameIsNormalizedBeforeStorageAndReturnedBySessionProjection() throws Exception {
+        EstablishedPlayer player = createPlayer("Νι\u0301κος");
+        assertThat(playerRepository.findById(player.playerId()).orElseThrow().getName()).isEqualTo("Νίκος");
+        mockMvc.perform(get("/api/session/me").session(player.session()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(player.playerId()))
+                .andExpect(jsonPath("$.nickname").value("Νίκος"));
+    }
+
+    @Test
+    void createPlayerRejectsNonTextualAndInvalidNicknamesWithoutCreatingAnIdentity() throws Exception {
+        for (String body : new String[] {"{\"nickname\":42}", "{\"nickname\":null}",
+                "{\"nickname\":\" Νίκος\"}", "{}"}) {
+            mockMvc.perform(post("/api/player-state/create")
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
+        assertThat(playerRepository.count()).isZero();
+    }
+
+    @Test
     void currentGameRejectsRequestWithoutApplicationSession() throws Exception {
         mockMvc.perform(get("/api/session/current-game"))
                 .andExpect(status().isUnauthorized());
