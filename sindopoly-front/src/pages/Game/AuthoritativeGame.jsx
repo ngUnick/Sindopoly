@@ -10,6 +10,7 @@ import {
 } from "../../features/game/hud/index.js";
 import ActionFocusRegion from "../../features/game/hud/ActionFocusRegion.js";
 import GameLiveAnnouncer from "../../features/game/hud/GameLiveAnnouncer.js";
+import MusicControl from "../../features/game/hud/MusicControl.js";
 import { readCompletionNavigationState } from "../../features/game/presentation/gameViewModel.js";
 import GameShell from "../../features/game/shell/GameShell.jsx";
 import { useAuthoritativeGame } from "../../hooks/useAuthoritativeGame.js";
@@ -54,7 +55,10 @@ export default function AuthoritativeGame() {
       <GameLiveAnnouncer key={gameId} viewModel={game.viewModel} />
       <GameShell
         header={game.viewModel && (
-          <MatchStatusHeader turn={game.viewModel.turn} connection={game.viewModel.connection} />
+          <div className="game-header-controls">
+            <MatchStatusHeader turn={game.viewModel.turn} connection={game.viewModel.connection} />
+            <MusicControl />
+          </div>
         )}
         players={game.viewModel && <PlayerRail players={game.viewModel.players} />}
         board={board}

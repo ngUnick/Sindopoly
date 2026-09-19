@@ -1818,7 +1818,34 @@ structural checks remain authoritative. Redis, REST, STOMP and MariaDB impact
 is none. FE24's Playwright runtime limitation remains documented above and is
 not reworked here. The next boundary is FE-REVAMP-026; it is not included.
 
-## 40. Git, documentation and risk
+## 40. FE-REVAMP-026 gesture-gated audio
+
+FE-REVAMP-026 adds one `MusicControl` owner to the authoritative GameShell
+header. Ambient music is opt-in at the product surface: the control creates
+the module-resolved audio asset only in response to its native button gesture,
+sets the established 50% volume and loop behavior, and catches autoplay/play
+failures by reverting the persisted preference to muted. It never starts audio
+from mount, snapshot, STOMP, timer or navigation effects. Unmount pauses and
+releases the local audio reference.
+
+The preference is stored only as the boolean key `sindopoly.music.enabled` in
+the browser's local storage. Storage failures and environments without
+`globalThis.Audio` are safe no-audio equivalents: the GameShell and gameplay
+controls continue to render and operate without an audio object. The legacy
+Board audio owner remains unchanged as the rollback path; the authoritative
+route has exactly one new audio owner. No sound result is authoritative and no
+game transition waits on playback.
+
+The focused tests cover opt-in persistence, gesture-only playback wiring,
+looping, cleanup and no-Audio safety. The full frontend suite passes 569 tests;
+the production build transforms 3026 modules and emits 1,673.28 kB JS raw /
+501.59 kB gzip and 28.21 kB CSS raw / 6.18 kB gzip. FE25 asset validation
+continues to pass unchanged. There are no Redis, REST, STOMP, MariaDB, board,
+background or asset-manifest changes. FE24's Playwright runner limitation
+remains unchanged and is not debugged in FE26. The next boundary is
+FE-REVAMP-027; it is not included.
+
+## 41. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn
