@@ -9,6 +9,19 @@ failure. No production source, frontend behavior, test, dependency,
 configuration, Docker, workflow, Redis schema, MariaDB schema, Flyway, REST,
 STOMP, timer, polling, or game-rule change was made.
 
+### Exact-HEAD nickname smoke follow-up
+
+The first exact-HEAD browser check used a 29-hour-old `sindopoly-frontend:latest`
+container. That pre-FE29 image still contained the retired ASCII-only login
+sanitizer, so Greek characters were discarded by the served production bundle.
+The FE29 source at `6756c1417bc484d62aed980e43691dbb34676d96` already used the
+canonical Unicode policy and direct `onChange` value. Rebuilding and recreating
+the canonical backend/frontend containers served the current Login chunk; live
+production typing of `Νίκος` preserved every character, creation succeeded,
+the current-player session returned `Νίκος`, Home displayed `Νίκος`, and the
+lobby displayed `Νίκος`. A focused source contract test now guards the real
+Login input path against reintroducing sanitization or ASCII filters.
+
 REVAMP-030 separately owns proof from a clean Windows/Docker Desktop checkout.
 This run used the existing accepted working checkout and caches.
 
