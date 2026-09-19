@@ -49,6 +49,14 @@ export function contentForTransportError(error) {
 }
 
 export const HOME_CONTENT = Object.freeze({
+  createGame: "Δημιουργία παιχνιδιού",
+  joinGame: "Συμμετοχή σε παιχνίδι",
+  statistics: "Στατιστικά",
+  leaveChangeNickname: "Έξοδος και αλλαγή ψευδωνύμου",
+  createNewGame: "Δημιουργία νέου παιχνιδιού",
+  create: "Δημιουργία",
+  public: "Δημόσιο",
+  private: "Ιδιωτικό",
   continueGame: "Συνέχεια παιχνιδιού",
   checkingCurrentGame: "Έλεγχος τρέχοντος παιχνιδιού…",
   currentGameUnavailable: "Το τρέχον παιχνίδι δεν είναι διαθέσιμο",
@@ -56,8 +64,59 @@ export const HOME_CONTENT = Object.freeze({
   cannotOpenCurrentGame: "Δεν ήταν δυνατό να ανοίξει το τρέχον παιχνίδι.",
 });
 
+export const LOGIN_CONTENT = Object.freeze({
+  start: "Έναρξη",
+  chooseNickname: "Επίλεξε ψευδώνυμο",
+  continue: "Συνέχεια",
+  nicknamePlaceholder: "Πληκτρολόγησε το ψευδώνυμό σου",
+  nicknameMin: "Το ψευδώνυμο πρέπει να έχει τουλάχιστον 2 χαρακτήρες.",
+  nicknameMax: "Το ψευδώνυμο δεν μπορεί να ξεπερνά τους 15 χαρακτήρες.",
+  nicknameCharacters: "Το ψευδώνυμο μπορεί να περιέχει μόνο γράμματα, αριθμούς και κάτω παύλες.",
+  inappropriateNickname: "Ακατάλληλο ψευδώνυμο.",
+  creatingPlayer: "Δημιουργία παίκτη…",
+  createFailed: "Δεν ήταν δυνατή η αποθήκευση του ψευδωνύμου. Δοκίμασε ξανά.",
+});
+
+export const SEARCH_GAME_CONTENT = Object.freeze({
+  creator: "Δημιουργός",
+  players: "Παίκτες",
+  action: "Ενέργεια",
+  full: "Πλήρες",
+  join: "Συμμετοχή",
+  publicLobbies: "Δημόσια λόμπι",
+  joinByCode: "Συμμετοχή με κωδικό",
+  failedJoin: "Δεν ήταν δυνατή η συμμετοχή στο παιχνίδι.",
+  failedLoad: "Δεν ήταν δυνατή η φόρτωση των παιχνιδιών.",
+  joinedPrivate: "Συμμετείχες στο ιδιωτικό παιχνίδι!",
+  invalidInvite: "Ο κωδικός πρόσκλησης είναι άκυρος ή έχει λήξει.",
+  joinPrivate: "Συμμετοχή σε ιδιωτικό παιχνίδι",
+  invitePlaceholder: "Πληκτρολόγησε τον κωδικό πρόσκλησης…",
+});
+
+export const STATISTICS_CONTENT = Object.freeze({
+  player: "Παίκτης",
+  wins: "Νίκες",
+  games: "Παιχνίδια",
+  winRate: "Ποσοστό νικών",
+  yourStats: "Τα στατιστικά σου",
+  leaderboard: "Κατάταξη",
+  loadFailed: "Δεν ήταν δυνατή η φόρτωση των στατιστικών. Δοκίμασε ξανά αργότερα.",
+});
+
 export const LOBBY_CONTENT = Object.freeze({
   playerRemoved: "Ο παίκτης αφαιρέθηκε.",
+  title: "Λόμπι παιχνιδιού",
+  visibility: "Ορατότητα",
+  public: "δημόσιο",
+  private: "ιδιωτικό",
+  inviteCode: "Κωδικός πρόσκλησης",
+  players: "Παίκτες",
+  you: "Εσύ",
+  owner: "Ιδιοκτήτης 👑",
+  waiting: "Αναμονή για να συμμετάσχουν παίκτες…",
+  start: "Έναρξη παιχνιδιού",
+  leave: "Έξοδος από το παιχνίδι",
+  removePlayer: "Αφαίρεση παίκτη",
 });
 
 export const GAMEPLAY_CONTENT = Object.freeze({

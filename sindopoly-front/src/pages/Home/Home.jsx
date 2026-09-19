@@ -116,13 +116,13 @@ function Home() {
             ) : (
               <div className="flex flex-col items-center gap-5">
                 <Button type="primary" onClick={() => setModalOpen(true)}>
-                  Create Game
+                  {HOME_CONTENT.createGame}
                 </Button>
                 <Button type="primary" onClick={() => navigate("/searchGame")}>
-                  Join Game
+                  {HOME_CONTENT.joinGame}
                 </Button>
                 <Button type="primary" onClick={() => navigate("/statistics")}>
-                  Statistics
+                  {HOME_CONTENT.statistics}
                 </Button>
               </div>
             )}
@@ -134,7 +134,7 @@ function Home() {
           <Avatar size="small" icon={<UserOutlined />} />
           <span className="font-medium">{nickname}</span>
 
-          <Tooltip title="Leave & change nickname">
+          <Tooltip title={HOME_CONTENT.leaveChangeNickname}>
             <Button
               type="text"
               size="small"
@@ -148,19 +148,19 @@ function Home() {
 
       {/* create-game modal */}
       <Modal
-        title="Create a New Game"
+        title={HOME_CONTENT.createNewGame}
         open={isModalOpen}
         onOk={handleCreateGame}
         onCancel={() => setModalOpen(false)}
-        okText="Create"
+        okText={HOME_CONTENT.create}
         centered
       >
         <Radio.Group
           onChange={(e) => setVisibility(e.target.value)}
           value={visibility}
         >
-          <Radio value="public">Public</Radio>
-          <Radio value="private">Private</Radio>
+          <Radio value="public">{HOME_CONTENT.public}</Radio>
+          <Radio value="private">{HOME_CONTENT.private}</Radio>
         </Radio.Group>
       </Modal>
     </div>

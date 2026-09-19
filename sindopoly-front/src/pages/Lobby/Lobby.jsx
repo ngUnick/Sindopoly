@@ -1,6 +1,6 @@
 import { Button, message } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { GameAPI } from '../../apis/GameAPI';
 import { acceptGameSnapshot } from '../../apis/gameCommandState';
 import bgImg from "../../assets/images/monopoly_bg.png";
@@ -18,7 +18,6 @@ const Lobby = () => {
   const gameId = params.get('game_id');
   const visibility = params.get('visibility') || 'public';
   const playerId = localStorage.getItem('player_id');
-  const nickname = sessionStorage.getItem("nickname");
 
   const [players, setPlayers] = useState([]);
   const [inviteCode, setInviteCode] = useState(null); // ✅ new
@@ -96,33 +95,33 @@ const Lobby = () => {
       <div className="fixed w-full h-full shadow-[0_0_80px_rgba(255,255,255,0.7)_inset] left-0 top-0" />
 
       <div className="bg-[rgba(255,236,195,0.8)] py-[30px] px-10 backdrop-blur-sm border-solid border-[rgba(255,255,255,0.6)] rounded-md w-[600px]">
-        <h1 className="text-center text-xl font-bold mb-6" style={{ fontSize: '30px' }}>Game Lobby</h1>
+        <h1 className="text-center text-xl font-bold mb-6" style={{ fontSize: '30px' }}>{LOBBY_CONTENT.title}</h1>
 
         <p className="text-center mb-4" style={{ fontSize: '20px' }}>
-          Visibility: <strong style={{ color: visibility === 'private' ? 'darkred' : 'darkgreen', textTransform: "capitalize" }}>{visibility}</strong>
+          {LOBBY_CONTENT.visibility}: <strong style={{ color: visibility === 'private' ? 'darkred' : 'darkgreen', textTransform: "capitalize" }}>{visibility === 'private' ? LOBBY_CONTENT.private : LOBBY_CONTENT.public}</strong>
         </p>
 
         {visibility === 'private' && inviteCode && (
           <p className="text-center mb-4 text-sm text-gray-700" style={{ fontSize: '20px' }}>
-            Invite Code: <strong style={{ textDecoration: 'underline' }}>{inviteCode}</strong>
+            {LOBBY_CONTENT.inviteCode}: <strong style={{ textDecoration: 'underline' }}>{inviteCode}</strong>
           </p>
         )}
 
         
 
         <div className="mb-6">
-          <h2 className="text-center text-lg font-medium mb-2" style={{ fontSize: '20px' }}>Players:</h2>
+          <h2 className="text-center text-lg font-medium mb-2" style={{ fontSize: '20px' }}>{LOBBY_CONTENT.players}:</h2>
           <ul className="list-disc list-inside text-center" style={{ fontSize: '20px' }}>
             {players.map(p => (
               <div key={p.id} className="text-center font-medium flex items-center justify-center gap-2">
                 <span style={{ fontWeight: p.id == playerId ? '700' : '' }}>
-                  {p.nickname ?? `Player #${p.id}`} {p.id == playerId && "(You)"} {p.id == gameId && "(Owner 👑)"}
+                  {p.nickname ?? `Παίκτης #${p.id}`} {p.id == playerId && `(${LOBBY_CONTENT.you})`} {p.id == gameId && `(${LOBBY_CONTENT.owner})`}
                 </span>
                 {isOwner && p.id != playerId && (
                   <button
                     className="text-red-600 hover:text-red-800 text-xs"
                     onClick={() => handleKick(p.id)}
-                    title="Remove player"
+                    title={LOBBY_CONTENT.removePlayer}
                   >
                     ❌
                   </button>
@@ -133,12 +132,12 @@ const Lobby = () => {
         </div>
 
         <p className="text-center mb-4">
-          Waiting for players to join... <br />
+          {LOBBY_CONTENT.waiting} <br />
         </p>
 
         <div className="flex justify-center gap-3">
-          <Button type="primary" disabled={!isOwner} onClick={handleStartGame}>Start Game</Button>
-          <Button type="primary" danger onClick={handleLeaveGame}>Leave Game</Button>
+          <Button type="primary" disabled={!isOwner} onClick={handleStartGame}>{LOBBY_CONTENT.start}</Button>
+          <Button type="primary" danger onClick={handleLeaveGame}>{LOBBY_CONTENT.leave}</Button>
         </div>
       </div>
     </div>

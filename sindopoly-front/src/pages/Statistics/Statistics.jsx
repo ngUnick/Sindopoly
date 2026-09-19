@@ -3,6 +3,7 @@ import { Table, Spin, message } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import { StatisticsAPI } from "../../apis/StatisticsAPI";
 import bgImg from "../../assets/images/monopoly_bg.png";
+import { STATISTICS_CONTENT } from "../../features/game/content/el.js";
 
 const antIcon = <LoadingOutlined style={{ fontSize: 24 }} spin />;
 
@@ -44,7 +45,7 @@ export default function Statistics() {
           winRate:   (me.winRate * 100).toFixed(2) + " %",
         });
       } catch (e) {
-        message.error("Couldn't load statistics - try again later");
+        message.error(STATISTICS_CONTENT.loadFailed);
       } finally {
         setLoading(false);
       }
@@ -53,19 +54,19 @@ export default function Statistics() {
 
   /* ─ table columns ─────────────────────────── */
   const columns = [
-    { title: "Player", dataIndex: "nickname" },
+    { title: STATISTICS_CONTENT.player, dataIndex: "nickname" },
     {
-      title: "Wins",
+      title: STATISTICS_CONTENT.wins,
       dataIndex: "totalWins",
       sorter: (a, b) => a.totalWins - b.totalWins,
     },
     {
-      title: "Games",
+      title: STATISTICS_CONTENT.games,
       dataIndex: "totalGames",
       sorter: (a, b) => a.totalGames - b.totalGames,
     },
     {
-      title: "Win Rate",
+      title: STATISTICS_CONTENT.winRate,
       dataIndex: "winRate",
       sorter: (a, b) =>
         parseFloat(a.winRate) - parseFloat(b.winRate),
@@ -88,21 +89,21 @@ export default function Statistics() {
             {myStats && (
               <div className="mb-6 border-b pb-2">
                 <h3 className="font-semibold text-gray-800 mb-3">
-                  Your Stats — {myStats.nickname}
+                  {STATISTICS_CONTENT.yourStats} — {myStats.nickname}
                 </h3>
 
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div>
                     <div className="text-xl font-bold">{myStats.wins}</div>
-                    <div className="text-xs uppercase text-gray-600">Wins</div>
+                    <div className="text-xs uppercase text-gray-600">{STATISTICS_CONTENT.wins}</div>
                   </div>
                   <div>
                     <div className="text-xl font-bold">{myStats.games}</div>
-                    <div className="text-xs uppercase text-gray-600">Games</div>
+                    <div className="text-xs uppercase text-gray-600">{STATISTICS_CONTENT.games}</div>
                   </div>
                   <div>
                     <div className="text-xl font-bold">{myStats.winRate}</div>
-                    <div className="text-xs uppercase text-gray-600">Win Rate</div>
+                    <div className="text-xs uppercase text-gray-600">{STATISTICS_CONTENT.winRate}</div>
                   </div>
                 </div>
               </div>
@@ -110,7 +111,7 @@ export default function Statistics() {
 
             {/* -------------- leaderboard -------------- */}
             <h2 className="text-center text-xl font-bold mb-3">
-              Leaderboard
+              {STATISTICS_CONTENT.leaderboard}
             </h2>
 
             <Table

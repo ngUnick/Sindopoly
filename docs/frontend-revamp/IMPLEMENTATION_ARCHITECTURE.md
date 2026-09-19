@@ -1845,7 +1845,41 @@ background or asset-manifest changes. FE24's Playwright runner limitation
 remains unchanged and is not debugged in FE26. The next boundary is
 FE-REVAMP-027; it is not included.
 
-## 41. Git, documentation and risk
+## 41. FE-REVAMP-027 route splitting and secondary screens
+
+FE-REVAMP-027 adds `React.lazy` boundaries for every route and a shared Greek
+`Suspense` loading status. The application shell still owns Router,
+`AuthProvider` and protected-route decisions, while the Game route remains the
+only boundary that loads the authoritative runtime, Three.js, GLTF loaders,
+board/model URLs and game audio. Login, home, search/join, lobby, statistics
+and completion are separate non-game chunks; the legacy Board and rollback
+switch remain compiled and untouched.
+
+Secondary screens now consume the shared Greek content boundary for visible
+labels, validation messages, lobby state and statistics copy. This establishes
+screen parity without moving transport, session, gameplay, audio or authority
+logic into the content module. The route-loading fallback is polite,
+localized, and does not fabricate game state.
+
+The production build transformed 3,027 modules. The initial route graph is
+split into non-game chunks (for example Login 29.95 kB raw / 16.23 kB gzip and
+Home 15.24 kB / 6.03 kB); the Game chunk is isolated at 624.92 kB raw /
+163.72 kB gzip. The initial entry chunks contain no `GLTFLoader`,
+`BoardSceneAdapter`, GLB or audio references and request no GLB; board, Dice,
+pawn and audio assets remain referenced only by the game chunk. Overall CSS is
+28.21 kB raw / 6.47 kB gzip, with the existing
+large-game-chunk warning retained. `assets:validate` remains green with the
+FE25 16.67 ms frame budget and unchanged byte/triangle limits.
+
+No gameplay authority, snapshot/stateVersion reconciliation, subscribe-before-
+read ordering, presentation coordinator, BoardSceneAdapter, accessibility
+runtime, gesture-gated audio behavior or asset provenance changed. Redis,
+REST, STOMP and MariaDB impact is none. The Playwright runner remains the
+FE24 IMPLEMENTED-BUT-RUNTIME-PENDING limitation and was not debugged here.
+The legacy Board runtime, rollback switch and compatibility helpers remain in
+place for FE-REVAMP-028; no deletion or dismantling is part of FE27.
+
+## 42. Git, documentation and risk
 
 Use small conventional commits such as `test(frontend): characterize board
 cleanup`, `fix(frontend): resolve game asset URLs`, `feat(api): project turn

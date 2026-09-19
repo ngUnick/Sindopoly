@@ -8,6 +8,7 @@ import bgImg from "../../assets/images/monopoly_bg.png";
 import AuthContext from "../../AuthContext/AuthContext";
 import { AuthAPI } from "../../apis/AuthAPI";
 import { apiFetch, clearCsrfToken } from "../../apis/apiClient";
+import { LOGIN_CONTENT } from "../../features/game/content/el.js";
 
 const filter = new Filter({
   languages: ["english"],
@@ -44,22 +45,22 @@ const Login = () => {
     const trimmed = name.trim();
 
     if (trimmed.length < 2) {
-      message.warning("Nickname must be at least 2 characters.");
+      message.warning(LOGIN_CONTENT.nicknameMin);
       return false;
     }
 
     if (trimmed.length > 15) {
-      message.warning("Nickname must be no more than 15 characters.");
+      message.warning(LOGIN_CONTENT.nicknameMax);
       return false;
     }
 
     if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
-      message.warning("Nickname can only contain letters, numbers, and underscores.");
+      message.warning(LOGIN_CONTENT.nicknameCharacters);
       return false;
     }
 
     if (filter.isProfane(trimmed)) {
-      message.error("Inappropriate nickname.");
+      message.error(LOGIN_CONTENT.inappropriateNickname);
       return false;
     }
 
@@ -73,7 +74,7 @@ const Login = () => {
     sessionStorage.setItem("nickname", cleanName);
 
     setLoading(true);
-    const hide = message.loading("Creating player...", 0);
+    const hide = message.loading(LOGIN_CONTENT.creatingPlayer, 0);
 
     try {
       const res = await apiFetch("/api/player-state/create", {
@@ -96,7 +97,7 @@ const Login = () => {
     } catch (err) {
       console.error(err);
       hide();
-      message.error("Could not save nickname. Try again.");
+      message.error(LOGIN_CONTENT.createFailed);
       setLoading(false);
     }
   };
@@ -114,7 +115,7 @@ const Login = () => {
         <div className="w-[800px] flex flex-col gap-5 items-center pb-5">
           <img src={monopoly_logo} alt="logo" className="mb-5" />
           <Button type="primary" onClick={handleStartClick} className="px-5">
-            Start
+            {LOGIN_CONTENT.start}
           </Button>
         </div>
       </div>
@@ -122,16 +123,16 @@ const Login = () => {
       <Modal
         centered
         width={400}
-        title="Choose a Nickname"
+        title={LOGIN_CONTENT.chooseNickname}
         open={isModalOpen}
         onOk={handleOk}
         onCancel={() => setIsModalOpen(false)}
-        okText="Continue"
+        okText={LOGIN_CONTENT.continue}
         confirmLoading={loading}
       >
         <Input
           ref={inputRef}
-          placeholder="Enter your nickname"
+          placeholder={LOGIN_CONTENT.nicknamePlaceholder}
           value={nickname}
           onChange={(e) => setNickname(sanitizeText(e.target.value))}
           onKeyDown={handleKeyDown}

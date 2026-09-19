@@ -13,6 +13,7 @@ import { LoadingOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { sanitizeText } from "../../utils/sanitize";
 import bgImg from "../../assets/images/monopoly_bg.png";
+import { SEARCH_GAME_CONTENT } from "../../features/game/content/el.js";
 
 const antIcon = <LoadingOutlined style={{ fontSize: 24 }} spin />;
 
@@ -29,13 +30,13 @@ function SearchGame() {
      ───────────────────────────────────────────────────────────── */
   const columns = [
     {
-      title: "Creator",
+      title: SEARCH_GAME_CONTENT.creator,
       dataIndex: "Creator",
       key: "Creator",
       sorter: (a, b) => a.Creator.localeCompare(b.Creator),
     },
     {
-      title: "Players",
+      title: SEARCH_GAME_CONTENT.players,
       dataIndex: "PlayerCount",
       key: "PlayerCount",
       sorter: (a, b) =>
@@ -43,7 +44,7 @@ function SearchGame() {
         parseInt(b.PlayerCount.split("/")[0]),
     },
     {
-      title: "Action",
+      title: SEARCH_GAME_CONTENT.action,
       key: "action",
       render: (_, record) => {
         const current = parseInt(record.PlayerCount.split("/")[0]);
@@ -57,11 +58,11 @@ function SearchGame() {
                 await GameAPI.joinGame(record.GameId, record.StateVersion);
                 navigate(`/lobby?game_id=${record.GameId}`);
               } catch (err) {
-                message.error("Failed to join game.");
+                message.error(SEARCH_GAME_CONTENT.failedJoin);
               }
             }}
           >
-            {disabled ? "Full" : "Join"}
+            {disabled ? SEARCH_GAME_CONTENT.full : SEARCH_GAME_CONTENT.join}
           </Button>
         );
       },
@@ -83,7 +84,7 @@ function SearchGame() {
       }));
       setGames(formatted);
     } catch (err) {
-      message.error("Failed to load games");
+      message.error(SEARCH_GAME_CONTENT.failedLoad);
     } finally {
       setLoading(false);
     }
@@ -109,12 +110,12 @@ function SearchGame() {
       // ⬅️ now use the helper
       const { gameId } = await GameAPI.joinWithInvite(code);
 
-      message.success("Joined private game!");
+      message.success(SEARCH_GAME_CONTENT.joinedPrivate);
       setModalOpen(false);
       setInviteCode("");
       navigate(`/lobby?game_id=${gameId}&visibility=${"private"}`);
     } catch (err) {
-      message.error("Invalid or expired invite code.");
+      message.error(SEARCH_GAME_CONTENT.invalidInvite);
     }
   };
 
@@ -128,8 +129,8 @@ function SearchGame() {
 
       <div className="bg-[rgba(255,236,195,0.8)] pt-[50px] pb-[20px] px-5 backdrop-blur-sm border-solid border-[rgba(255,255,255,0.6)] rounded-md min-w-[700px]">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Public Lobbies</h2>
-          <Button onClick={() => setModalOpen(true)}>Join by Code</Button>
+          <h2 className="text-xl font-bold">{SEARCH_GAME_CONTENT.publicLobbies}</h2>
+          <Button onClick={() => setModalOpen(true)}>{SEARCH_GAME_CONTENT.joinByCode}</Button>
         </div>
 
         {loading ? (
@@ -152,18 +153,18 @@ function SearchGame() {
       </div>
 
       <Modal
-        title="Join Private Game"
+        title={SEARCH_GAME_CONTENT.joinPrivate}
         open={modalOpen}
         onOk={handleJoinByInvite}
         onCancel={() => setModalOpen(false)}
-        okText="Join"
+        okText={SEARCH_GAME_CONTENT.join}
         centered
         destroyOnClose
         afterOpenChange={(open) => open && inputRef.current?.focus()}
       >
         <Input
           ref={inputRef} 
-          placeholder="Enter invite code..."
+          placeholder={SEARCH_GAME_CONTENT.invitePlaceholder}
           value={inviteCode}
           onChange={(e) => setInviteCode(cleanInvite(e.target.value))}
           onPressEnter={handleJoinByInvite}
