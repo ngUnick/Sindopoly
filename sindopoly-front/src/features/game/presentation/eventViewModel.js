@@ -1,9 +1,14 @@
 import {
+  GAMEPLAY_FEEDBACK_CONTENT,
   GAME_EVENT_FACT_TYPES,
   formatDiceResult,
   formatGameEventFact,
 } from "../content/el.js";
 import { buildDicePresentationModel } from "./dicePresentationModel.js";
+import {
+  GAMEPLAY_FEEDBACK_SURFACES,
+  buildGameplayFeedback,
+} from "./gameplayFeedbackModel.js";
 
 /** Projects one validated event; history ownership and ordering remain outside this module. */
 export function buildEventViewModel({
@@ -137,19 +142,116 @@ export function buildEventViewModel({
   }
 
   if (textParts.length === 0) return null;
+  const text = textParts.join(" ");
+  const feedback = buildEventFeedback({
+    event,
+    actorName,
+    text,
+    emphasis,
+    card,
+    available,
+    purchased,
+    declined,
+    rent,
+    tax,
+    jailed,
+    released,
+    jailOffer,
+    moneyReceived,
+    destinationId,
+    playerName,
+    squareName,
+  });
   return Object.freeze({
     id: event.eventId,
     stateVersion: event.stateVersion,
     occurredAt: event.occurredAt,
     kind: event.payload.reason,
     actorPlayerId,
-    text: textParts.join(" "),
+    text,
     emphasis,
+    feedback,
     dice: dice == null ? null : buildDicePresentationModel({
       ...dice,
       presentationId: event.stateVersion,
     }),
   });
+}
+
+function buildEventFeedback({
+  event,
+  actorName,
+  text,
+  emphasis,
+  card,
+  available,
+  purchased,
+  declined,
+  rent,
+  tax,
+  jailed,
+  released,
+  jailOffer,
+  moneyReceived,
+  destinationId,
+  playerName,
+  squareName,
+}) {
+  const contextual = (kind, title, body = text, tone = emphasis) => buildGameplayFeedback({
+    kind,
+    title,
+    body,
+    tone,
+    surface: GAMEPLAY_FEEDBACK_SURFACES.CONTEXTUAL,
+  });
+  const toast = kind => buildGameplayFeedback({ kind, body: text, tone: emphasis });
+  const startText = moneyReceived && formatGameEventFact({
+    type: GAME_EVENT_FACT_TYPES.START_REWARD,
+    playerName: actorName,
+    amount: moneyReceived.amount,
+  });
+
+  if (event.payload.reason === "TURN_TIMED_OUT") {
+    return contextual("TURN_TIMEOUT", GAMEPLAY_FEEDBACK_CONTENT.timeout);
+  }
+  if (purchased && typeof squareName === "function") {
+    const purchaseText = formatGameEventFact({
+      type: GAME_EVENT_FACT_TYPES.PURCHASE,
+      playerName: actorName,
+      squareName: squareName(purchased.squareId),
+      amount: purchased.amount,
+    });
+    return contextual("PURCHASE", GAMEPLAY_FEEDBACK_CONTENT.purchase,
+      [purchaseText, startText].filter(Boolean).join(" "), "positive");
+  }
+  if (rent) {
+    const rentText = formatGameEventFact({
+      type: GAME_EVENT_FACT_TYPES.RENT,
+      playerName: actorName,
+      amount: rent.amount,
+      counterpartyName: playerName(rent.counterpartyPlayerId),
+    });
+    return contextual("RENT", GAMEPLAY_FEEDBACK_CONTENT.rent,
+      [rentText, startText].filter(Boolean).join(" "), "negative");
+  }
+  if (tax) {
+    const taxText = formatGameEventFact({
+      type: GAME_EVENT_FACT_TYPES.TAX,
+      playerName: actorName,
+      amount: tax.amount,
+    });
+    return contextual("TAX", GAMEPLAY_FEEDBACK_CONTENT.tax,
+      [taxText, startText].filter(Boolean).join(" "), "negative");
+  }
+  if (moneyReceived) {
+    return contextual("START_REWARD", GAMEPLAY_FEEDBACK_CONTENT.start, startText, "positive");
+  }
+  // Card and jail-specific visuals are intentionally deferred; their confirmed text remains readable.
+  if (card || jailed || released || jailOffer) {
+    return contextual(event.payload.reason, GAMEPLAY_FEEDBACK_CONTENT.contextualEvent);
+  }
+  if (available || declined || destinationId != null) return toast(event.payload.reason);
+  return toast(event.payload.reason);
 }
 
 function isPresentableEvent(event) {

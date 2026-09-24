@@ -26,6 +26,7 @@ import {
   lobbySnapshot,
   purchaseOptionalActionSnapshot,
   rentEvent,
+  taxEvent,
   turnTimeoutEvent,
   turnUpdatedEvent,
 } from "../test-fixtures/gameRealtimeFixtures.js";
@@ -408,18 +409,82 @@ test("event model presents rent facts", () => {
   const model = eventModel(rentEvent, 102);
   assert.match(model.text, /BaselineHost: πλήρωσε 100€ για ενοίκιο σε BaselineGuest/);
   assert.equal(model.emphasis, "negative");
+  assert.deepEqual(model.feedback, {
+    kind: "RENT",
+    title: "Πληρωμή ενοικίου",
+    body: "BaselineHost: πλήρωσε 100€ για ενοίκιο σε BaselineGuest.",
+    tone: "negative",
+    surface: "contextual",
+  });
+});
+
+test("event model maps tax into contextual payment feedback", () => {
+  const model = eventModel(taxEvent, 102);
+  assert.equal(model.feedback.kind, "TAX");
+  assert.equal(model.feedback.title, "Πληρωμή φόρου");
+  assert.match(model.feedback.body, /BaselineHost: πλήρωσε φόρο 200€/);
+  assert.equal(model.feedback.surface, "contextual");
 });
 
 test("event model preserves server card content", () => {
   const model = eventModel(cardEvent, 102);
   assert.match(model.text, /Έληξε η κάρτα του ΟΑΣΘ\. Πλήρωσε €50\./);
   assert.equal(model.emphasis, "highlight");
+  assert.equal(model.feedback.kind, "ROLL_COMPLETED");
+  assert.equal(model.feedback.title, "Εξέλιξη παιχνιδιού");
+  assert.equal(model.feedback.surface, "contextual");
 });
 
 test("event model presents timeout facts", () => {
   const model = eventModel(turnTimeoutEvent, 102);
   assert.equal(model.text, "BaselineHost: ο χρόνος έληξε.");
   assert.equal(model.emphasis, "warning");
+  assert.deepEqual(model.feedback, {
+    kind: "TURN_TIMEOUT",
+    title: "Λήξη χρόνου",
+    body: "BaselineHost: ο χρόνος έληξε.",
+    tone: "warning",
+    surface: "contextual",
+  });
+});
+
+test("ordinary landing remains a lightweight toast", () => {
+  const model = eventModel(turnUpdatedEvent, 102);
+  assert.equal(model.feedback.surface, "toast");
+  assert.equal(model.feedback.body, model.text);
+});
+
+test("purchase success uses confirmed buyer, square and price", () => {
+  const fixture = structuredClone(turnUpdatedEvent);
+  fixture.eventId = "00000000-0000-4000-8000-000000000006";
+  fixture.stateVersion = 10;
+  fixture.payload.details = [
+    { type: "PROPERTY_PURCHASED", squareId: 6, amount: 100 },
+    { type: "TURN_CHANGED", nextPlayerId: 102 },
+  ];
+  const model = eventModel(fixture, 102);
+
+  assert.equal(model.feedback.kind, "PURCHASE");
+  assert.equal(model.feedback.title, "Νέα ιδιοκτησία");
+  assert.equal(model.feedback.body, "BaselineHost αγόρασε: ΣΤΑΣΗ ΔΙΠΑΕ, 100€.");
+  assert.equal(model.feedback.tone, "positive");
+  assert.equal(model.feedback.surface, "contextual");
+});
+
+test("START reward uses the authoritative amount", () => {
+  const fixture = structuredClone(turnUpdatedEvent);
+  fixture.eventId = "00000000-0000-4000-8000-000000000007";
+  fixture.stateVersion = 11;
+  fixture.payload.details = [
+    { type: "MONEY_RECEIVED", amount: 200 },
+    { type: "TURN_CHANGED", nextPlayerId: 102 },
+  ];
+  const model = eventModel(fixture, 102);
+
+  assert.equal(model.feedback.kind, "START_REWARD");
+  assert.equal(model.feedback.title, "Πέρασμα από την ΑΦΕΤΗΡΙΑ");
+  assert.match(model.feedback.body, /BaselineHost: πέρασε από την ΑΦΕΤΗΡΙΑ και έλαβε 200€/);
+  assert.equal(model.feedback.tone, "positive");
 });
 
 test("unsupported event is not presentable", () => {

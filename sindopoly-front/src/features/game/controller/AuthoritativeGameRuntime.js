@@ -25,6 +25,7 @@ import {
   PRESENTATION_PHASES,
 } from "../presentation/presentationTransaction.js";
 import {
+  GAMEPLAY_FEEDBACK_CONTENT,
   GAMEPLAY_CONTENT,
   formatJailExitOffer,
   formatLandingOutcome,
@@ -36,6 +37,10 @@ import {
   formatTurnDestination,
   formatTurnMoney,
 } from "../content/el.js";
+import {
+  GAMEPLAY_FEEDBACK_SURFACES,
+  buildGameplayFeedback,
+} from "../presentation/gameplayFeedbackModel.js";
 
 const POLL_INTERVAL_MS = 15_000;
 const BUSY_COMMAND_STATUSES = new Set([
@@ -446,6 +451,7 @@ export class AuthoritativeGameRuntime {
         text: eventModel.text,
         emphasis: eventModel.emphasis,
         dismissible: true,
+        feedback: eventModel.feedback,
       } : null,
     };
   }
@@ -599,7 +605,45 @@ function buildThrowOutcome(result, metadata, snapshot) {
     // The roll response confirms passage but carries the landing mechanic in data, not the Start amount.
     text = `${formatStartPassOutcome()} ${text}`;
   }
-  return { kind: "ROLL_RESULT", text, emphasis, dismissible: true };
+  return {
+    kind: "ROLL_RESULT",
+    text,
+    emphasis,
+    dismissible: true,
+    feedback: buildThrowFeedback({ result, square, squareName, text, emphasis }),
+  };
+}
+
+function buildThrowFeedback({ result, square, squareName, text, emphasis }) {
+  let kind = "ROLL_RESULT";
+  let title = null;
+  let surface = GAMEPLAY_FEEDBACK_SURFACES.TOAST;
+
+  if (result.squareType === 3) {
+    kind = "RENT";
+    title = GAMEPLAY_FEEDBACK_CONTENT.rent;
+    surface = GAMEPLAY_FEEDBACK_SURFACES.CONTEXTUAL;
+  } else if (result.squareType === 6) {
+    kind = "TAX";
+    title = GAMEPLAY_FEEDBACK_CONTENT.tax;
+    surface = GAMEPLAY_FEEDBACK_SURFACES.CONTEXTUAL;
+  } else if ((result.squareType === 4 && square?.type === "START") || result.passedGo === true) {
+    kind = "START_REWARD";
+    title = GAMEPLAY_FEEDBACK_CONTENT.start;
+    surface = GAMEPLAY_FEEDBACK_SURFACES.CONTEXTUAL;
+  } else if ([1, 2, 7, 8, 9, 10].includes(result.squareType)) {
+    // Card and jail-specific treatments are deferred; confirmed result text uses the safe contextual fallback.
+    kind = result.squareType === 1 || result.squareType === 2 ? "CARD" : "SPECIAL_SQUARE";
+    title = GAMEPLAY_FEEDBACK_CONTENT.contextualEvent;
+    surface = GAMEPLAY_FEEDBACK_SURFACES.CONTEXTUAL;
+  } else if (result.squareType === 5) {
+    kind = "PURCHASE_AVAILABLE";
+  } else if (result.squareType === 4) {
+    kind = "LANDING";
+    title = squareName;
+  }
+
+  return buildGameplayFeedback({ kind, title, body: text, tone: emphasis, surface });
 }
 
 function playerSlot(snapshot, playerId) {

@@ -3,6 +3,7 @@ import {
   isBoardPosition,
   isPawnSlot,
 } from "../board/boardCalibration.js";
+import { buildGameplayFeedback } from "./gameplayFeedbackModel.js";
 
 export const PRESENTATION_PHASES = Object.freeze({
   IDLE: "IDLE",
@@ -158,11 +159,14 @@ function normalizeOutcome(value) {
       || typeof value.dismissible !== "boolean") {
     return null;
   }
+  const feedback = value.feedback == null ? null : buildGameplayFeedback(value.feedback);
+  if (value.feedback != null && feedback == null) return null;
   return Object.freeze({
     kind: value.kind,
     text: value.text,
     emphasis: value.emphasis,
     dismissible: value.dismissible,
+    ...(feedback && { feedback }),
   });
 }
 

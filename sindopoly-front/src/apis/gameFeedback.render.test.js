@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  OBSERVER_NOTIFICATION_DURATION_MS, ObserverNotificationToast, TurnResultModal,
+  GameplayFeedback,
+  OBSERVER_NOTIFICATION_DURATION_MS,
+  ObserverNotificationToast,
+  TurnResultModal,
 } from "../components/GameFeedback.js";
 import { enqueueNotification, observerNotification } from "./gameEvents.js";
 import { parseGameEvent } from "./realtimeSync.js";
@@ -39,6 +42,50 @@ function renderObserver(rawEvent) {
 
 test("observer notification duration leaves twelve seconds for contextual feedback", () => {
   assert.equal(OBSERVER_NOTIFICATION_DURATION_MS, 12_000);
+});
+
+test("contextual gameplay feedback exposes one polite non-modal live region", () => {
+  const html = renderToStaticMarkup(React.createElement(GameplayFeedback, {
+    outcome: {
+      kind: "ROLL_COMPLETED",
+      text: "BaselineHost: πλήρωσε φόρο 200€.",
+      emphasis: "negative",
+      dismissible: true,
+      feedback: {
+        kind: "TAX",
+        title: "Πληρωμή φόρου",
+        body: "BaselineHost: πλήρωσε φόρο 200€.",
+        tone: "negative",
+        surface: "contextual",
+      },
+    },
+  }));
+
+  assert.match(html, /role="status"/);
+  assert.match(html, /aria-live="polite"/);
+  assert.match(html, /aria-atomic="true"/);
+  assert.match(html, /data-game-feedback="contextual"/);
+  assert.match(html, /data-feedback-kind="TAX"/);
+  assert.match(html, /Πληρωμή φόρου/);
+  assert.match(html, /BaselineHost: πλήρωσε φόρο 200€/);
+  assert.match(html, /aria-label="Κλείσιμο ειδοποίησης"/);
+  assert.doesNotMatch(html, /role="dialog"|aria-modal/);
+});
+
+test("legacy outcome uses the quiet safe fallback without inventing controls", () => {
+  const html = renderToStaticMarkup(React.createElement(GameplayFeedback, {
+    outcome: {
+      kind: "FUTURE_CONFIRMED_EVENT",
+      text: "Το παιχνίδι ενημερώθηκε.",
+      emphasis: "neutral",
+      dismissible: false,
+    },
+  }));
+
+  assert.match(html, /data-game-feedback="toast"/);
+  assert.match(html, /data-feedback-kind="FUTURE_CONFIRMED_EVENT"/);
+  assert.match(html, /Το παιχνίδι ενημερώθηκε/);
+  assert.doesNotMatch(html, /<button/);
 });
 
 test("rendered P2 observer notification shows a P1 property landing", () => {

@@ -169,7 +169,9 @@
     min-height: 24rem;
   }
 
-  .game-live-board-region [data-game-feedback="observer"] {
+  .game-live-board-region [data-game-feedback="observer"],
+  .game-live-board-region [data-game-feedback="contextual"],
+  .game-live-board-region [data-game-feedback="toast"] {
     left: var(--space-2);
     right: var(--space-2);
     max-width: none;

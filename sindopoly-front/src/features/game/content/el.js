@@ -166,6 +166,15 @@ export const HUD_CONTENT = Object.freeze({
   away: "Απών",
 });
 
+export const GAMEPLAY_FEEDBACK_CONTENT = Object.freeze({
+  contextualEvent: "Εξέλιξη παιχνιδιού",
+  rent: "Πληρωμή ενοικίου",
+  tax: "Πληρωμή φόρου",
+  start: "Πέρασμα από την ΑΦΕΤΗΡΙΑ",
+  purchase: "Νέα ιδιοκτησία",
+  timeout: "Λήξη χρόνου",
+});
+
 export const CONNECTION_CONTENT = Object.freeze({
   connected: "Η σύνδεση είναι ενεργή.",
   sessionLoading: "Έλεγχος συνεδρίας…",

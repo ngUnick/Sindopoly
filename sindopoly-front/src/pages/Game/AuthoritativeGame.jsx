@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AuthContext from "../../AuthContext/AuthContext.jsx";
-import { ObserverNotificationToast } from "../../components/GameFeedback.js";
+import { GameplayFeedback } from "../../components/GameFeedback.js";
 import { GAMEPLAY_CONTENT } from "../../features/game/content/el.js";
 import {
   ContextPanel,
@@ -15,6 +15,7 @@ import { readCompletionNavigationState } from "../../features/game/presentation/
 import GameShell from "../../features/game/shell/GameShell.jsx";
 import { useAuthoritativeGame } from "../../hooks/useAuthoritativeGame.js";
 import GameBoard from "./GameBoard.jsx";
+import "../../components/GameFeedback.css";
 
 /** Live FE-REVAMP-021 route: HUD emits intent into one authoritative runtime. */
 export default function AuthoritativeGame() {
@@ -43,8 +44,8 @@ export default function AuthoritativeGame() {
   const board = (
     <div className="game-live-board-region">
       <GameBoard onSceneReady={handleSceneReady} />
-      <ObserverNotificationToast
-        notification={game.outcome ? { message: game.outcome.text } : null}
+      <GameplayFeedback
+        outcome={game.outcome}
         onDismiss={game.dismissOutcome}
       />
     </div>
