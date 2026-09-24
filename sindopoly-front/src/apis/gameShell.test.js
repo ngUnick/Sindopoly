@@ -92,6 +92,7 @@ test("responsive contract defines tablet from 761px through 1100px", () => {
     styles,
     /@media \(min-width: 761px\) and \(max-width: 1100px\)/,
   );
+  assert.match(styles, /height: 100vh;\s+height: 100dvh;\s+min-height: 0;/);
 });
 
 test("responsive contract defines phone at 760px", () => {

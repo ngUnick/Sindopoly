@@ -170,6 +170,15 @@ test("purchase action is exposed to its exact viewer", () => {
   assert.equal(action.enabled, true);
 });
 
+test("purchase action reuses already loaded board metadata as display context", () => {
+  const boardMetadata = buildBoardMetadataIndex(
+    decodeBoardMetadata(createBoardMetadataPayload()),
+  );
+  const action = gameModel(purchaseOptionalActionSnapshot, 101, { boardMetadata }).action;
+  assert.equal(action.propertyName, boardMetadata.byPosition[6].name);
+  assert.equal(action.costText, "100€");
+});
+
 test("purchase action is not exposed to another viewer", () => {
   const action = gameModel(purchaseOptionalActionSnapshot, 102).action;
   assert.equal(action.kind, ACTION_KINDS.WAITING);

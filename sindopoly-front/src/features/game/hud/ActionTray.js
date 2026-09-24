@@ -31,6 +31,12 @@ export default function ActionTray({
     React.createElement(
       "div",
       { className: "action-tray__copy" },
+      action.propertyName && React.createElement(
+        "div",
+        { className: "action-tray__context" },
+        React.createElement("p", { className: "action-tray__property" }, action.propertyName),
+        action.costText && React.createElement("p", { className: "action-tray__cost u-tabular-numbers" }, action.costText),
+      ),
       action.statusText && React.createElement("p", { className: "action-tray__status" }, action.statusText),
       errorText && React.createElement("p", { className: "action-tray__error", role: "alert" }, errorText),
     ),
@@ -70,6 +76,8 @@ ActionTray.propTypes = {
     primaryLabel: PropTypes.string,
     secondaryLabel: PropTypes.string,
     canDecline: PropTypes.bool,
+    propertyName: PropTypes.string,
+    costText: PropTypes.string,
     statusText: PropTypes.string,
     error: PropTypes.shape({ message: PropTypes.string.isRequired }),
   }),

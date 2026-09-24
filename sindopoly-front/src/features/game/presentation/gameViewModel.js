@@ -71,6 +71,7 @@ export function buildGameViewModel({
     activePlayerName: activePlayer?.nickname ?? null,
     commandState,
     connection,
+    boardMetadata,
   });
   const squareIds = Object.keys(resolvedOwnership?.ownerBySquareId ?? {})
     .map(Number)
@@ -156,6 +157,7 @@ export function buildActionViewModel({
   activePlayerName = null,
   commandState = null,
   connection = null,
+  boardMetadata = null,
 } = {}) {
   const pending = Boolean(commandState?.pending);
   const error = commandState?.errorCode
@@ -188,6 +190,8 @@ export function buildActionViewModel({
     }
     if (optionalAction.type === ACTION_KINDS.PURCHASE_PROPERTY) {
       const canDecline = optionalAction.declinable === true;
+      // Square metadata is already loaded for the board; reuse it as display context only.
+      const propertyName = getSquareMetadata(boardMetadata, optionalAction.squareId)?.name ?? null;
       return Object.freeze({
         ...actionModel(
           ACTION_KINDS.PURCHASE_PROPERTY,
@@ -199,6 +203,7 @@ export function buildActionViewModel({
           error,
         ),
         propertyId: optionalAction.squareId,
+        propertyName,
         cost: optionalAction.cost,
         costText: formatMoney(optionalAction.cost),
         canDecline,

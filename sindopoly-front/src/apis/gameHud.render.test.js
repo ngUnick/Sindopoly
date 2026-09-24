@@ -274,6 +274,22 @@ test("ActionTray renders purchase accept and decline actions", () => {
   assert.ok(html.includes("Αγορά για 100€") && html.includes("Δεν αγοράζω"));
 });
 
+test("ActionTray renders supplied purchase destination and authoritative cost", () => {
+  const html = render(ActionTray, {
+    action: action({
+      kind: ACTION_KINDS.PURCHASE_PROPERTY,
+      primaryLabel: "Αγορά για 100€",
+      secondaryLabel: "Δεν αγοράζω",
+      canDecline: true,
+      propertyName: "ΣΤΑΣΗ ΔΙΠΑΕ",
+      costText: "100€",
+    }),
+    onPrimaryAction: () => {},
+    onSecondaryAction: () => {},
+  });
+  assert.ok(html.includes("ΣΤΑΣΗ ΔΙΠΑΕ") && html.includes("100€"));
+});
+
 test("ActionTray renders jail payment and skip actions", () => {
   const html = render(ActionTray, {
     action: action({
