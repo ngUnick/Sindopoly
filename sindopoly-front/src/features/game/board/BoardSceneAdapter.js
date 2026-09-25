@@ -31,6 +31,17 @@ const DICE_SETTLED_POSITIONS = Object.freeze([
   Object.freeze([-2.1, 0.25, 0.5]),
   Object.freeze([2.1, 0.25, 0.5]),
 ]);
+const DIRECTIONAL_SHADOW_BOUNDS = Object.freeze({
+  left: -28,
+  right: 28,
+  top: 28,
+  bottom: -28,
+  near: 1,
+  far: 80,
+  mapSize: 1024,
+  bias: -0.00015,
+  normalBias: 0.025,
+});
 
 /**
  * Root rotations calibrated against the rendered Dice.glb. The model's original
@@ -161,6 +172,9 @@ export class BoardSceneAdapter {
     );
     this.renderer = this.createRenderer();
     this.renderer.setClearColor(0x000000, 0);
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setSize(width, height);
     this.container.appendChild(this.renderer.domElement);
 
@@ -185,15 +199,19 @@ export class BoardSceneAdapter {
     ambientLight.position.set(0, 250, 0);
     this.scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xfff0cf, 6);
-    directionalLight.position.set(10, 40, -10);
+    const directionalLight = new THREE.DirectionalLight(0xfff0cf, 3.25);
+    directionalLight.position.set(18, 36, -16);
     directionalLight.castShadow = true;
-    directionalLight.shadow.camera.top = 2;
-    directionalLight.shadow.camera.bottom = -2;
-    directionalLight.shadow.camera.left = -2;
-    directionalLight.shadow.camera.right = 2;
-    directionalLight.shadow.camera.near = 0.1;
-    directionalLight.shadow.camera.far = 40;
+    directionalLight.shadow.mapSize.set(DIRECTIONAL_SHADOW_BOUNDS.mapSize, DIRECTIONAL_SHADOW_BOUNDS.mapSize);
+    directionalLight.shadow.camera.top = DIRECTIONAL_SHADOW_BOUNDS.top;
+    directionalLight.shadow.camera.bottom = DIRECTIONAL_SHADOW_BOUNDS.bottom;
+    directionalLight.shadow.camera.left = DIRECTIONAL_SHADOW_BOUNDS.left;
+    directionalLight.shadow.camera.right = DIRECTIONAL_SHADOW_BOUNDS.right;
+    directionalLight.shadow.camera.near = DIRECTIONAL_SHADOW_BOUNDS.near;
+    directionalLight.shadow.camera.far = DIRECTIONAL_SHADOW_BOUNDS.far;
+    directionalLight.shadow.bias = DIRECTIONAL_SHADOW_BOUNDS.bias;
+    directionalLight.shadow.normalBias = DIRECTIONAL_SHADOW_BOUNDS.normalBias;
+    directionalLight.shadow.camera.updateProjectionMatrix();
     this.scene.add(directionalLight);
   }
 
@@ -219,6 +237,8 @@ export class BoardSceneAdapter {
         board.scale.set(0.035, 0.035, 0.035);
         board.position.set(0, 0, 0);
         board.rotation.set(0, Math.PI / 2, 0);
+        // The tabletop receives movable-piece shadows but does not self-shadow its artwork.
+        setShadowParticipation(board, { castShadow: false, receiveShadow: true });
         this.boardModel = board;
         this.scene.add(board);
         this.invalidate();
@@ -246,6 +266,8 @@ export class BoardSceneAdapter {
         dice2.position.set(...DICE_SETTLED_POSITIONS[1]);
         dice1.visible = false;
         dice2.visible = false;
+        setShadowParticipation(dice1, { castShadow: true, receiveShadow: true });
+        setShadowParticipation(dice2, { castShadow: true, receiveShadow: true });
         this.diceModels = [dice1, dice2];
         this.scene.add(dice1, dice2);
         if (this.pendingDicePresentation) {
@@ -926,6 +948,8 @@ function createPawn(geometry, color, position, fallbackY) {
   const pawn = new THREE.Group();
   const fallback = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color }));
   fallback.position.y = fallbackY;
+  fallback.castShadow = true;
+  fallback.receiveShadow = true;
   pawn.add(fallback);
   pawn.position.set(...position);
   pawn.userData.primitiveFallback = fallback;
@@ -933,6 +957,14 @@ function createPawn(geometry, color, position, fallbackY) {
   pawn.userData.caseNumber = 1;
   pawn.userData.money = 1500;
   return pawn;
+}
+
+function setShadowParticipation(root, { castShadow, receiveShadow }) {
+  root.traverse(object => {
+    if (!object.isMesh) return;
+    object.castShadow = castShadow;
+    object.receiveShadow = receiveShadow;
+  });
 }
 
 function replaceAccentMaterials(material, accents, accentColor) {

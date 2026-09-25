@@ -25,6 +25,9 @@ test("mount creates one scene, renderer, canvas, frame and listener set", () => 
   assert.equal(harness.environment.pendingFrames.size, 1);
   assert.equal(harness.environment.listenerCount("resize"), 1);
   assertCanvasListeners(harness.renderers[0].domElement, 1);
+  assert.equal(harness.renderers[0].outputColorSpace, THREE.SRGBColorSpace);
+  assert.equal(harness.renderers[0].shadowMap.enabled, true);
+  assert.equal(harness.renderers[0].shadowMap.type, THREE.PCFSoftShadowMap);
 
   harness.environment.runNextFrame();
   assert.equal(harness.renderers[0].renderCalls, 1);
@@ -89,6 +92,33 @@ test("pointer orbit remains bounded to the mounted listener lifecycle", () => {
   assert.deepEqual(canvas.releasedPointers, [7]);
   assert.equal(prevented, 1, "an intentional canvas drag cannot scroll an overflowing page");
   assert.equal(harness.environment.pendingFrames.size, 1);
+});
+
+test("lighting uses one soft board-sized key shadow with readable ambient fill", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  const ambient = adapter.scene.children.find(object => object.isAmbientLight);
+  const directional = adapter.scene.children.find(object => object.isDirectionalLight);
+
+  assert.equal(ambient.intensity, 1);
+  assert.equal(directional.intensity, 3.25);
+  assert.deepEqual(directional.position.toArray(), [18, 36, -16]);
+  assert.equal(directional.castShadow, true);
+  assert.equal(directional.shadow.mapSize.x, 1024);
+  assert.equal(directional.shadow.mapSize.y, 1024);
+  assert.deepEqual({
+    left: directional.shadow.camera.left,
+    right: directional.shadow.camera.right,
+    top: directional.shadow.camera.top,
+    bottom: directional.shadow.camera.bottom,
+    near: directional.shadow.camera.near,
+    far: directional.shadow.camera.far,
+  }, { left: -28, right: 28, top: 28, bottom: -28, near: 1, far: 80 });
+  assert.equal(directional.shadow.bias, -0.00015);
+  assert.equal(directional.shadow.normalBias, 0.025);
+  assert.ok(adapter.pawns.every(pawn => pawn.userData.primitiveFallback.castShadow
+    && pawn.userData.primitiveFallback.receiveShadow));
 });
 
 test("camera interaction begins only on the canvas and pointer cancellation cannot stick", () => {
@@ -246,6 +276,9 @@ test("loaded board-like and Dice-like graphs are disposed with the adapter", () 
   assert.equal(adapter.boardModel.parent, adapter.scene);
   assert.equal(adapter.diceModels.length, 2);
   assert.ok(adapter.diceModels.every(model => model.visible === false));
+  assert.ok(adapter.boardModel.children[0].receiveShadow);
+  assert.equal(adapter.boardModel.children[0].castShadow, false);
+  assert.ok(adapter.diceModels.every(model => model.children[0].castShadow && model.children[0].receiveShadow));
   adapter.dispose();
 
   assert.equal(board.geometryDispose.count, 1);
@@ -630,6 +663,8 @@ test("pawn templates replace only their matching fallback and isolate accent mat
   assert.equal(visualAccent.color.getHexString(), "00796b");
   assert.equal(templateAccent.color.getHexString(), "ffffff");
   assert.equal(visual.getObjectByName("body").material, template.body);
+  assert.ok(visual.getObjectByName("accent").castShadow);
+  assert.ok(visual.getObjectByName("accent").receiveShadow);
   assert.equal(adapter.pawns[1].userData.primitiveFallback.visible, true);
 });
 
@@ -979,6 +1014,8 @@ function createRenderer() {
     renderCalls: 0,
     disposeCalls: 0,
     renderListDisposeCalls: 0,
+    outputColorSpace: null,
+    shadowMap: { enabled: false, type: null },
     setClearColor() {},
     setSize(width, height) { this.sizes.push([width, height]); },
     setPixelRatio(ratio) { this.pixelRatios.push(ratio); },
