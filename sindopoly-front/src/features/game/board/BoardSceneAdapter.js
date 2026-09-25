@@ -6,6 +6,7 @@ import {
   isBoardPosition,
   isPawnSlot,
 } from "./boardCalibration.js";
+import { PAWN_SLOT_ASSETS } from "./pawnAssets.js";
 
 const CANVAS_INTERACTION_EVENTS = ["pointerdown", "pointermove", "pointerup", "pointercancel"];
 const CAMERA_TRANSITION_DURATION_MS = 460;
@@ -49,17 +50,24 @@ export const DICE_FACE_ORIENTATIONS = Object.freeze({
  * The caller must only pass graphs whose resources it owns.
  */
 export function disposeObjectGraph(root) {
+  return disposeObjectGraphs([root]);
+}
+
+/** Disposes a related group of owned graphs with one shared resource ledger. */
+export function disposeObjectGraphs(roots) {
   const disposed = {
     geometries: new Set(),
     materials: new Set(),
     textures: new Set(),
   };
 
-  root?.traverse?.(object => {
-    disposeOnce(object.geometry, disposed.geometries);
-    const materials = Array.isArray(object.material) ? object.material : [object.material];
-    for (const material of materials) disposeMaterial(material, disposed);
-  });
+  for (const root of roots ?? []) {
+    root?.traverse?.(object => {
+      disposeOnce(object.geometry, disposed.geometries);
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of materials) disposeMaterial(material, disposed);
+    });
+  }
 
   return disposed;
 }
@@ -93,9 +101,10 @@ function disposeOnce(resource, seen) {
 
 /** Owns the current Board Three.js scene and no application/game authority. */
 export class BoardSceneAdapter {
-  constructor({ boardModelUrl, diceModelUrl, reducedMotion = false, dependencies = {} } = {}) {
+  constructor({ boardModelUrl, diceModelUrl, pawnModelUrls = {}, reducedMotion = false, dependencies = {} } = {}) {
     this.boardModelUrl = boardModelUrl;
     this.diceModelUrl = diceModelUrl;
+    this.pawnModelUrls = pawnModelUrls;
     this.environment = dependencies.environment ?? globalThis.window;
     this.createRenderer = dependencies.createRenderer ?? (() => new THREE.WebGLRenderer());
     this.createLoader = dependencies.createLoader ?? (() => new GLTFLoader());
@@ -107,6 +116,7 @@ export class BoardSceneAdapter {
     this.boardModel = null;
     this.diceModels = [];
     this.pawns = [];
+    this.pawnTemplates = new Map();
     this.pawnsByPlayerId = new Map();
     this.rafId = null;
     this.diceAnimation = null;
@@ -165,6 +175,7 @@ export class BoardSceneAdapter {
     }
     this.loadBoard(generation);
     this.loadDice(generation);
+    this.loadPawnTemplates(generation);
     this.invalidate();
     return true;
   }
@@ -188,10 +199,10 @@ export class BoardSceneAdapter {
 
   addPrimitivePawns() {
     this.pawns = [
-      createPawn(new THREE.BoxGeometry(), 0xff0000, [22, 0.5, -22]),
-      createPawn(new THREE.SphereGeometry(0.5, 32, 32), 0x00ff00, [23, 0.7, -23]),
-      createPawn(new THREE.TorusGeometry(0.5, 0.2, 16, 100), 0x0000ff, [21.5, 0.8, -23]),
-      createPawn(new THREE.ConeGeometry(0.5, 1, 32), 0xf2ff00, [23.5, 0.5, -22]),
+      createPawn(new THREE.BoxGeometry(), PAWN_SLOT_ASSETS[0].accentColor, [22, 0.5, -22], 0.5),
+      createPawn(new THREE.SphereGeometry(0.5, 32, 32), PAWN_SLOT_ASSETS[1].accentColor, [23, 0.5, -23], 0.5),
+      createPawn(new THREE.TorusGeometry(0.5, 0.2, 16, 100), PAWN_SLOT_ASSETS[2].accentColor, [21.5, 0.5, -23], 0.7),
+      createPawn(new THREE.ConeGeometry(0.5, 1, 32), PAWN_SLOT_ASSETS[3].accentColor, [23.5, 0.5, -22], 0.5),
     ];
     for (const pawn of this.pawns) this.scene.add(pawn);
   }
@@ -268,6 +279,48 @@ export class BoardSceneAdapter {
     }
     canvas.addEventListener("wheel", this.onWheel, { passive: false });
     this.environment.addEventListener("resize", this.onResize);
+  }
+
+  loadPawnTemplates(generation) {
+    for (const [slot, asset] of PAWN_SLOT_ASSETS.entries()) {
+      const url = this.pawnModelUrls?.[asset.id];
+      if (!url) continue;
+      this.createLoader().load(
+        url,
+        gltf => {
+          if (!this.isCurrent(generation)) {
+            disposeObjectGraph(gltf?.scene);
+            return;
+          }
+          this.pawnTemplates.set(asset.id, gltf.scene);
+          this.attachPawnVisual(slot, gltf.scene, asset.accentColor);
+          this.invalidate();
+        },
+        undefined,
+        error => {
+          // Loading is optional presentation: the mounted primitive remains usable.
+          if (this.isCurrent(generation)) console.error(`Error loading ${asset.id} pawn GLB model`, error);
+        },
+      );
+    }
+  }
+
+  attachPawnVisual(slot, template, accentColor) {
+    const pawn = this.pawns[slot];
+    if (!pawn || pawn.userData.glbVisual) return false;
+    const visual = template.clone(true);
+    const accents = new Map();
+    visual.traverse(object => {
+      if (!object.isMesh) return;
+      object.castShadow = true;
+      object.receiveShadow = true;
+      object.material = replaceAccentMaterials(object.material, accents, accentColor);
+    });
+    pawn.userData.glbVisual = visual;
+    pawn.userData.ownedAccentMaterials = [...accents.values()];
+    pawn.userData.primitiveFallback.visible = false;
+    pawn.add(visual);
+    return true;
   }
 
   listenerFor(event) {
@@ -825,7 +878,9 @@ export class BoardSceneAdapter {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
 
-    disposeObjectGraph(this.scene);
+    // Templates share neutral resources with their visual clones, so dispose every
+    // owned graph through one ledger rather than disposing each clone separately.
+    disposeObjectGraphs([this.scene, ...this.pawnTemplates.values()]);
     this.renderer?.renderLists?.dispose?.();
     this.renderer?.dispose?.();
     if (canvas && canvas.parentNode === this.container) this.container.removeChild(canvas);
@@ -837,6 +892,7 @@ export class BoardSceneAdapter {
     this.boardModel = null;
     this.diceModels = [];
     this.pawns = [];
+    this.pawnTemplates.clear();
     this.pawnsByPlayerId.clear();
     this.lastDicePresentationId = -1;
     this.activePointerId = null;
@@ -866,11 +922,28 @@ function lerpAngle(start, end, alpha) {
   return start + delta * alpha;
 }
 
-function createPawn(geometry, color, position) {
-  const pawn = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color }));
+function createPawn(geometry, color, position, fallbackY) {
+  const pawn = new THREE.Group();
+  const fallback = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color }));
+  fallback.position.y = fallbackY;
+  pawn.add(fallback);
   pawn.position.set(...position);
+  pawn.userData.primitiveFallback = fallback;
   pawn.userData.stepCounter = 0;
   pawn.userData.caseNumber = 1;
   pawn.userData.money = 1500;
   return pawn;
+}
+
+function replaceAccentMaterials(material, accents, accentColor) {
+  if (Array.isArray(material)) {
+    return material.map(entry => replaceAccentMaterials(entry, accents, accentColor));
+  }
+  if (!material || material.name !== "M_Accent") return material;
+  if (!accents.has(material)) {
+    const accent = material.clone();
+    accent.color.set(accentColor);
+    accents.set(material, accent);
+  }
+  return accents.get(material);
 }

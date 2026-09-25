@@ -9,7 +9,9 @@ import {
   DICE_FACE_ORIENTATIONS,
   PAWN_MOVEMENT_TIMING,
   disposeObjectGraph,
+  disposeObjectGraphs,
 } from "../features/game/board/BoardSceneAdapter.js";
+import { PAWN_SLOT_ASSETS } from "../features/game/board/pawnAssets.js";
 import { getPawnAnchor } from "../features/game/board/boardCalibration.js";
 
 test("mount creates one scene, renderer, canvas, frame and listener set", () => {
@@ -178,8 +180,8 @@ test("dispose cancels RAF, removes listeners, canvas and all retained resources"
   const harness = createHarness();
   const adapter = harness.createAdapter();
   adapter.mount(harness.container);
-  const geometryDispose = spyDispose(adapter.pawns[0].geometry);
-  const materialDispose = spyDispose(adapter.pawns[0].material);
+  const geometryDispose = spyDispose(adapter.pawns[0].userData.primitiveFallback.geometry);
+  const materialDispose = spyDispose(adapter.pawns[0].userData.primitiveFallback.material);
   const renderer = harness.renderers[0];
   const pendingFrame = adapter.rafId;
 
@@ -602,6 +604,111 @@ test("DIRECT movement remains an immediate safe calibrated placement", () => {
   }), false);
 });
 
+test("pawn registry keeps the approved stable models and semantic accent palette", () => {
+  assert.deepEqual(PAWN_SLOT_ASSETS.map(asset => asset.id), [
+    "backpack", "frappeCup", "graduationCap", "laptop",
+  ]);
+  assert.deepEqual(PAWN_SLOT_ASSETS.map(asset => asset.accentColor), [
+    "#00796B", "#B23A48", "#3F60B5", "#8B5A00",
+  ]);
+});
+
+test("pawn templates replace only their matching fallback and isolate accent materials", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  const template = pawnTemplate();
+
+  harness.completeLoad("Backpack.glb", template.root);
+  const first = adapter.pawns[0];
+  assert.equal(first.userData.primitiveFallback.visible, false);
+  assert.equal(first.children.length, 2);
+  const visual = first.userData.glbVisual;
+  const visualAccent = visual.getObjectByName("accent").material;
+  const templateAccent = template.accent;
+  assert.notEqual(visualAccent, templateAccent);
+  assert.equal(visualAccent.color.getHexString(), "00796b");
+  assert.equal(templateAccent.color.getHexString(), "ffffff");
+  assert.equal(visual.getObjectByName("body").material, template.body);
+  assert.equal(adapter.pawns[1].userData.primitiveFallback.visible, true);
+});
+
+test("separate slots keep their own semantic accent materials after parallel loads", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  const backpack = pawnTemplate();
+  const cup = pawnTemplate();
+  harness.completeLoad("Backpack.glb", backpack.root);
+  harness.completeLoad("FrappeCup.glb", cup.root);
+
+  const backpackAccent = adapter.pawns[0].userData.glbVisual.getObjectByName("accent").material;
+  const cupAccent = adapter.pawns[1].userData.glbVisual.getObjectByName("accent").material;
+  assert.notEqual(backpackAccent, cupAccent);
+  assert.equal(backpackAccent.color.getHexString(), "00796b");
+  assert.equal(cupAccent.color.getHexString(), "b23a48");
+  assert.equal(backpack.accent.color.getHexString(), "ffffff");
+  assert.equal(cup.accent.color.getHexString(), "ffffff");
+});
+
+test("failed pawn loads preserve fallbacks while other pawn templates still attach", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  const originalConsoleError = console.error;
+  try {
+    console.error = () => {};
+    harness.failLoad("FrappeCup.glb", new Error("unavailable"));
+  } finally {
+    console.error = originalConsoleError;
+  }
+  harness.completeLoad("Laptop.glb", pawnTemplate().root);
+  assert.equal(adapter.pawns[1].userData.primitiveFallback.visible, true);
+  assert.equal(adapter.pawns[1].userData.glbVisual, undefined);
+  assert.equal(adapter.pawns[3].userData.primitiveFallback.visible, false);
+});
+
+test("pawn template disposal releases shared resources once and owned accents once", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  const template = pawnTemplate();
+  const geometryDispose = spyDispose(template.geometry);
+  const bodyDispose = spyDispose(template.body);
+  const accentDispose = spyDispose(adapter.pawns[0].userData.primitiveFallback.material);
+  harness.completeLoad("Backpack.glb", template.root);
+  const visualAccentDispose = spyDispose(adapter.pawns[0].userData.glbVisual.getObjectByName("accent").material);
+  adapter.dispose();
+  assert.equal(geometryDispose.count, 1);
+  assert.equal(bodyDispose.count, 1);
+  assert.equal(visualAccentDispose.count, 1);
+  assert.equal(accentDispose.count, 1);
+});
+
+test("late pawn loads are released without resurrecting disposed wrappers", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  adapter.dispose();
+  const template = pawnTemplate();
+  const geometryDispose = spyDispose(template.geometry);
+  const materialDispose = spyDispose(template.body);
+  harness.completeLoad("GraduationCap.glb", template.root);
+  assert.equal(adapter.scene, null);
+  assert.equal(geometryDispose.count, 1);
+  assert.equal(materialDispose.count, 1);
+});
+
+test("aggregate disposal does not double-dispose shared clone resources", () => {
+  const template = pawnTemplate();
+  const clone = template.root.clone(true);
+  const geometryDispose = spyDispose(template.geometry);
+  const bodyDispose = spyDispose(template.body);
+  disposeObjectGraphs([template.root, clone]);
+  assert.equal(geometryDispose.count, 1);
+  assert.equal(bodyDispose.count, 1);
+});
+
 test("forward pawn animation follows every calibrated tile, wraps START and settles exactly", async () => {
   const harness = createHarness();
   const adapter = harness.createAdapter();
@@ -756,6 +863,12 @@ function createHarness() {
       return new BoardSceneAdapter({
         boardModelUrl: "board.glb",
         diceModelUrl: "Dice.glb",
+        pawnModelUrls: {
+          backpack: "Backpack.glb",
+          frappeCup: "FrappeCup.glb",
+          graduationCap: "GraduationCap.glb",
+          laptop: "Laptop.glb",
+        },
         ...options,
         dependencies: {
           environment,
@@ -919,6 +1032,19 @@ function trackedModel() {
   const materialDispose = spyDispose(material);
   root.add(new THREE.Mesh(geometry, material));
   return { root, geometryDispose, materialDispose };
+}
+
+function pawnTemplate() {
+  const root = new THREE.Group();
+  const geometry = new THREE.BoxGeometry();
+  const accent = new THREE.MeshStandardMaterial({ color: 0xffffff, name: "M_Accent" });
+  const body = new THREE.MeshStandardMaterial({ color: 0x333333, name: "M_Body" });
+  const accentMesh = new THREE.Mesh(geometry, accent);
+  accentMesh.name = "accent";
+  const bodyMesh = new THREE.Mesh(geometry, body);
+  bodyMesh.name = "body";
+  root.add(accentMesh, bodyMesh);
+  return { root, geometry, accent, body };
 }
 
 function spyDispose(resource) {
