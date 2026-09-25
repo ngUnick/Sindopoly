@@ -7,7 +7,17 @@ import {
   isPawnSlot,
 } from "./boardCalibration.js";
 
-const INTERACTION_EVENTS = ["mousedown", "mousemove", "mouseup"];
+const CANVAS_INTERACTION_EVENTS = ["pointerdown", "pointermove", "pointerup", "pointercancel"];
+const CAMERA_TRANSITION_DURATION_MS = 460;
+const CAMERA_ZOOM_DURATION_MS = 180;
+const CAMERA_ROTATION_RADIANS_PER_PIXEL = 0.0024;
+const CAMERA_WHEEL_DISTANCE_PER_PIXEL = 0.012;
+export const CAMERA_ZOOM_BOUNDS = Object.freeze({ minimum: 42, maximum: 62 });
+export const DEFAULT_CAMERA_STATE = Object.freeze({
+  position: Object.freeze([42, 32, 0]),
+  target: Object.freeze([0, 0, 0]),
+  fov: 65,
+});
 const DICE_ANIMATION_DURATION_MS = 760;
 const DICE_SETTLED_POSITIONS = Object.freeze([
   Object.freeze([-2.1, 0.25, 0.5]),
@@ -76,7 +86,7 @@ function disposeOnce(resource, seen) {
 
 /** Owns the current Board Three.js scene and no application/game authority. */
 export class BoardSceneAdapter {
-  constructor({ boardModelUrl, diceModelUrl, dependencies = {} } = {}) {
+  constructor({ boardModelUrl, diceModelUrl, reducedMotion = false, dependencies = {} } = {}) {
     this.boardModelUrl = boardModelUrl;
     this.diceModelUrl = diceModelUrl;
     this.environment = dependencies.environment ?? globalThis.window;
@@ -97,16 +107,20 @@ export class BoardSceneAdapter {
     this.diceCompletion = null;
     this.lastDicePresentationId = -1;
     this.resizeObserver = null;
+    this.cameraTarget = new THREE.Vector3(...DEFAULT_CAMERA_STATE.target);
+    this.cameraTransition = null;
+    this.reducedMotion = reducedMotion === true;
 
     this.mounted = false;
     this.disposed = false;
     this.generation = 0;
-    this.isDragging = false;
-    this.previousMouseX = 0;
+    this.activePointerId = null;
+    this.previousPointerX = 0;
 
-    this.onMouseDown = this.onMouseDown.bind(this);
-    this.onMouseMove = this.onMouseMove.bind(this);
-    this.onMouseUp = this.onMouseUp.bind(this);
+    this.onPointerDown = this.onPointerDown.bind(this);
+    this.onPointerMove = this.onPointerMove.bind(this);
+    this.onPointerEnd = this.onPointerEnd.bind(this);
+    this.onWheel = this.onWheel.bind(this);
     this.onResize = this.onResize.bind(this);
     this.renderFrame = this.renderFrame.bind(this);
   }
@@ -121,7 +135,7 @@ export class BoardSceneAdapter {
     this.scene = new THREE.Scene();
     const { width, height } = this.measureContainer();
     this.camera = new THREE.PerspectiveCamera(
-      75,
+      DEFAULT_CAMERA_STATE.fov,
       width / height,
       0.1,
       100,
@@ -133,8 +147,7 @@ export class BoardSceneAdapter {
 
     this.addLights();
     this.addPrimitivePawns();
-    this.camera.position.set(40, 25, 0);
-    this.camera.lookAt(0, 0, 0);
+    this.applyCameraState(DEFAULT_CAMERA_STATE);
     this.registerListeners();
     const ResizeObserver = this.environment.ResizeObserver ?? globalThis.ResizeObserver;
     if (typeof ResizeObserver === "function") {
@@ -239,40 +252,65 @@ export class BoardSceneAdapter {
   }
 
   registerListeners() {
-    for (const event of INTERACTION_EVENTS) {
-      this.environment.addEventListener(event, this.listenerFor(event), false);
+    const canvas = this.renderer.domElement;
+    canvas.style.touchAction = "none";
+    for (const event of CANVAS_INTERACTION_EVENTS) {
+      canvas.addEventListener(event, this.listenerFor(event), false);
     }
+    canvas.addEventListener("wheel", this.onWheel, { passive: false });
     this.environment.addEventListener("resize", this.onResize);
   }
 
   listenerFor(event) {
-    if (event === "mousedown") return this.onMouseDown;
-    if (event === "mousemove") return this.onMouseMove;
-    return this.onMouseUp;
+    if (event === "pointerdown") return this.onPointerDown;
+    if (event === "pointermove") return this.onPointerMove;
+    return this.onPointerEnd;
   }
 
-  onMouseDown(event) {
-    if (!this.mounted) return;
-    this.isDragging = true;
-    this.previousMouseX = event.clientX;
+  onPointerDown(event) {
+    if (!this.mounted || this.activePointerId != null || event.button !== 0) return;
+    event.preventDefault?.();
+    this.cancelCameraTransition();
+    this.activePointerId = event.pointerId;
+    this.previousPointerX = event.clientX;
+    this.renderer.domElement.setPointerCapture?.(event.pointerId);
   }
 
-  onMouseMove(event) {
-    if (!this.mounted || !this.isDragging) return;
-    const angle = (event.clientX - this.previousMouseX) * 0.003;
-    const { x, y, z } = this.camera.position;
+  onPointerMove(event) {
+    if (!this.mounted || event.pointerId !== this.activePointerId) return;
+    const angle = (event.clientX - this.previousPointerX) * CAMERA_ROTATION_RADIANS_PER_PIXEL;
+    const relative = this.camera.position.clone().sub(this.cameraTarget);
     this.camera.position.set(
-      Math.cos(angle) * x - Math.sin(angle) * z,
-      y,
-      Math.sin(angle) * x + Math.cos(angle) * z,
+      this.cameraTarget.x + Math.cos(angle) * relative.x - Math.sin(angle) * relative.z,
+      this.cameraTarget.y + relative.y,
+      this.cameraTarget.z + Math.sin(angle) * relative.x + Math.cos(angle) * relative.z,
     );
-    this.camera.lookAt(0, 0, 0);
-    this.previousMouseX = event.clientX;
+    this.camera.lookAt(this.cameraTarget);
+    this.previousPointerX = event.clientX;
+    event.preventDefault?.();
     this.invalidate();
   }
 
-  onMouseUp() {
-    this.isDragging = false;
+  onPointerEnd(event) {
+    if (event.pointerId !== this.activePointerId) return;
+    this.renderer?.domElement?.releasePointerCapture?.(event.pointerId);
+    this.activePointerId = null;
+  }
+
+  onWheel(event) {
+    if (!this.mounted || !Number.isFinite(event.deltaY)) return;
+    event.preventDefault?.();
+    this.cancelCameraTransition();
+    const relative = this.camera.position.clone().sub(this.cameraTarget);
+    const currentDistance = relative.length();
+    const distance = clamp(
+      currentDistance + event.deltaY * CAMERA_WHEEL_DISTANCE_PER_PIXEL,
+      CAMERA_ZOOM_BOUNDS.minimum,
+      CAMERA_ZOOM_BOUNDS.maximum,
+    );
+    if (Math.abs(distance - currentDistance) < 0.001) return;
+    const position = relative.normalize().multiplyScalar(distance).add(this.cameraTarget);
+    this.transitionCamera({ position, duration: CAMERA_ZOOM_DURATION_MS });
   }
 
   onResize() {
@@ -305,12 +343,70 @@ export class BoardSceneAdapter {
 
   orientCameraForPosition(position) {
     if (!this.mounted || !isBoardPosition(position)) return false;
-    if (position <= 10) this.camera.position.set(40, 25, 0);
-    else if (position <= 20) this.camera.position.set(0, 25, 40);
-    else if (position <= 30) this.camera.position.set(-40, 25, 0);
-    else this.camera.position.set(0, 25, -40);
-    this.camera.lookAt(0, 0, 0);
+    const relative = this.camera.position.clone().sub(this.cameraTarget);
+    const radius = Math.hypot(relative.x, relative.z);
+    const components = position <= 10 ? [radius, relative.y, 0]
+      : position <= 20 ? [0, relative.y, radius]
+        : position <= 30 ? [-radius, relative.y, 0]
+          : [0, relative.y, -radius];
+    return this.transitionCamera({
+      position: new THREE.Vector3(...components).add(this.cameraTarget),
+    });
+  }
+
+  /** Starts one replaceable local camera move; later presentation work can reuse this seam. */
+  transitionCamera({
+    position,
+    target = this.cameraTarget,
+    fov = this.camera?.fov,
+    duration = CAMERA_TRANSITION_DURATION_MS,
+    reducedMotion = this.reducedMotion,
+  } = {}) {
+    if (!this.mounted || !this.camera) return false;
+    const nextPosition = toVector3(position);
+    const nextTarget = toVector3(target);
+    if (!nextPosition || !nextTarget || !Number.isFinite(fov)) return false;
+    this.cancelCameraTransition();
+    if (reducedMotion === true || !Number.isFinite(duration) || duration <= 0) {
+      this.applyCameraState({ position: nextPosition, target: nextTarget, fov });
+      this.invalidate();
+      return true;
+    }
+    this.cameraTransition = {
+      startedAt: null,
+      duration,
+      startPosition: this.camera.position.clone(),
+      startTarget: this.cameraTarget.clone(),
+      startFov: this.camera.fov,
+      endPosition: nextPosition,
+      endTarget: nextTarget,
+      endFov: fov,
+    };
     this.invalidate();
+    return true;
+  }
+
+  resetCamera(options = {}) {
+    return this.transitionCamera({ ...DEFAULT_CAMERA_STATE, ...options });
+  }
+
+  cancelCameraTransition() {
+    const hadTransition = this.cameraTransition != null;
+    this.cameraTransition = null;
+    return hadTransition;
+  }
+
+  applyCameraState({ position, target, fov }) {
+    const resolvedPosition = toVector3(position);
+    const resolvedTarget = toVector3(target);
+    if (!resolvedPosition || !resolvedTarget) return false;
+    this.camera.position.copy(resolvedPosition);
+    this.cameraTarget.copy(resolvedTarget);
+    if (Number.isFinite(fov) && this.camera.fov !== fov) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
+    this.camera.lookAt(this.cameraTarget);
     return true;
   }
 
@@ -371,6 +467,7 @@ export class BoardSceneAdapter {
   }
 
   cancelPawnPresentation() {
+    this.cancelCameraTransition();
     return this.mounted && !this.disposed;
   }
 
@@ -519,6 +616,15 @@ export class BoardSceneAdapter {
     this.rafId = null;
     if (!this.mounted || this.disposed) return;
     let animationContinues = false;
+    if (this.cameraTransition) {
+      const now = Number.isFinite(timestamp) ? timestamp : 0;
+      if (this.cameraTransition.startedAt === null) this.cameraTransition.startedAt = now;
+      const elapsed = Math.max(0, now - this.cameraTransition.startedAt);
+      const progress = Math.min(elapsed / this.cameraTransition.duration, 1);
+      this.applyCameraTransitionFrame(this.cameraTransition, progress);
+      if (progress >= 1) this.cameraTransition = null;
+      else animationContinues = true;
+    }
     if (this.diceAnimation) {
       const now = Number.isFinite(timestamp) ? timestamp : 0;
       if (this.diceAnimation.startedAt === null) this.diceAnimation.startedAt = now;
@@ -537,6 +643,15 @@ export class BoardSceneAdapter {
     if (animationContinues) this.invalidate();
   }
 
+  applyCameraTransitionFrame(transition, progress) {
+    const eased = 1 - ((1 - progress) ** 3);
+    this.camera.position.lerpVectors(transition.startPosition, transition.endPosition, eased);
+    this.cameraTarget.lerpVectors(transition.startTarget, transition.endTarget, eased);
+    this.camera.fov = THREE.MathUtils.lerp(transition.startFov, transition.endFov, eased);
+    this.camera.updateProjectionMatrix();
+    this.camera.lookAt(this.cameraTarget);
+  }
+
   settleDiceCompletion(completed) {
     const completion = this.diceCompletion;
     this.diceCompletion = null;
@@ -552,12 +667,18 @@ export class BoardSceneAdapter {
     if (this.rafId !== null) this.environment?.cancelAnimationFrame(this.rafId);
     this.rafId = null;
     this.diceAnimation = null;
+    this.cameraTransition = null;
     this.pendingDicePresentation = null;
     this.settleDiceCompletion(false);
-    if (this.environment?.removeEventListener) {
-      for (const event of INTERACTION_EVENTS) {
-        this.environment.removeEventListener(event, this.listenerFor(event), false);
+    const canvas = this.renderer?.domElement;
+    if (canvas?.removeEventListener) {
+      for (const event of CANVAS_INTERACTION_EVENTS) {
+        canvas.removeEventListener(event, this.listenerFor(event), false);
       }
+      canvas.removeEventListener("wheel", this.onWheel, false);
+      if (this.activePointerId != null) canvas.releasePointerCapture?.(this.activePointerId);
+    }
+    if (this.environment?.removeEventListener) {
       this.environment.removeEventListener("resize", this.onResize);
     }
     this.resizeObserver?.disconnect();
@@ -566,7 +687,6 @@ export class BoardSceneAdapter {
     disposeObjectGraph(this.scene);
     this.renderer?.renderLists?.dispose?.();
     this.renderer?.dispose?.();
-    const canvas = this.renderer?.domElement;
     if (canvas && canvas.parentNode === this.container) this.container.removeChild(canvas);
 
     this.container = null;
@@ -578,7 +698,7 @@ export class BoardSceneAdapter {
     this.pawns = [];
     this.pawnsByPlayerId.clear();
     this.lastDicePresentationId = -1;
-    this.isDragging = false;
+    this.activePointerId = null;
   }
 }
 
@@ -588,6 +708,16 @@ function isDieValue(value) {
 
 function positiveDimension(value) {
   return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function toVector3(value) {
+  if (value instanceof THREE.Vector3) return value.clone();
+  if (!Array.isArray(value) || value.length !== 3 || !value.every(Number.isFinite)) return null;
+  return new THREE.Vector3(...value);
+}
+
+function clamp(value, minimum, maximum) {
+  return Math.min(Math.max(value, minimum), maximum);
 }
 
 function createPawn(geometry, color, position) {

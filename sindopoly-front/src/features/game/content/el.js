@@ -203,6 +203,7 @@ export const ACCESSIBILITY_CONTENT = Object.freeze({
   close: "Κλείσιμο",
   closeCard: "Κλείσιμο κάρτας",
   closeNotification: "Κλείσιμο ειδοποίησης",
+  resetCamera: "Επαναφορά κάμερας",
   turnResultDialog: "Αποτέλεσμα γύρου",
   returnToAction: "Επιστροφή στη δράση",
   refreshConnection: "Ανανέωση σύνδεσης",

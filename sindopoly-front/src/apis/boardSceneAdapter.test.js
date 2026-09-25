@@ -4,6 +4,8 @@ import test from "node:test";
 import * as THREE from "three";
 import {
   BoardSceneAdapter,
+  CAMERA_ZOOM_BOUNDS,
+  DEFAULT_CAMERA_STATE,
   DICE_FACE_ORIENTATIONS,
   disposeObjectGraph,
 } from "../features/game/board/BoardSceneAdapter.js";
@@ -17,9 +19,8 @@ test("mount creates one scene, renderer, canvas, frame and listener set", () => 
   assert.equal(harness.renderers.length, 1);
   assert.equal(harness.container.children.length, 1);
   assert.equal(harness.environment.pendingFrames.size, 1);
-  for (const event of ["mousedown", "mousemove", "mouseup", "resize"]) {
-    assert.equal(harness.environment.listenerCount(event), 1);
-  }
+  assert.equal(harness.environment.listenerCount("resize"), 1);
+  assertCanvasListeners(harness.renderers[0].domElement, 1);
 
   harness.environment.runNextFrame();
   assert.equal(harness.renderers[0].renderCalls, 1);
@@ -39,9 +40,8 @@ test("resize updates renderer, camera projection and schedules no extra listener
   assert.equal(adapter.camera.aspect, 2);
   assert.notDeepEqual(adapter.camera.projectionMatrix, previousProjection);
   adapter.resize(900, 600, 1);
-  for (const event of ["mousedown", "mousemove", "mouseup", "resize"]) {
-    assert.equal(harness.environment.listenerCount(event), 1);
-  }
+  assert.equal(harness.environment.listenerCount("resize"), 1);
+  assertCanvasListeners(harness.renderers[0].domElement, 1);
   assert.equal(harness.environment.pendingFrames.size, 1, "resize invalidations coalesce");
 });
 
@@ -69,12 +69,107 @@ test("pointer orbit remains bounded to the mounted listener lifecycle", () => {
   adapter.mount(harness.container);
   harness.environment.runNextFrame();
 
-  harness.environment.emit("mousedown", { clientX: 10 });
-  harness.environment.emit("mousemove", { clientX: 20 });
-  harness.environment.emit("mouseup", {});
+  const canvas = harness.renderers[0].domElement;
+  let prevented = 0;
+  canvas.emit("pointerdown", {
+    button: 0,
+    pointerId: 7,
+    clientX: 10,
+    preventDefault: () => { prevented += 1; },
+  });
+  canvas.emit("pointermove", { pointerId: 7, clientX: 20 });
+  canvas.emit("pointerup", { pointerId: 7 });
 
   assert.notEqual(adapter.camera.position.z, 0);
+  assert.deepEqual(canvas.capturedPointers, [7]);
+  assert.deepEqual(canvas.releasedPointers, [7]);
+  assert.equal(prevented, 1, "an intentional canvas drag cannot scroll an overflowing page");
   assert.equal(harness.environment.pendingFrames.size, 1);
+});
+
+test("camera interaction begins only on the canvas and pointer cancellation cannot stick", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  const initial = adapter.camera.position.toArray();
+
+  harness.environment.emit("pointerdown", { button: 0, pointerId: 1, clientX: 10 });
+  harness.environment.emit("pointermove", { pointerId: 1, clientX: 80 });
+  assert.deepEqual(adapter.camera.position.toArray(), initial, "HUD/window input cannot orbit the canvas");
+
+  const canvas = harness.renderers[0].domElement;
+  canvas.emit("pointerdown", { button: 0, pointerId: 2, clientX: 10 });
+  canvas.emit("pointercancel", { pointerId: 2 });
+  canvas.emit("pointermove", { pointerId: 2, clientX: 80 });
+  assert.deepEqual(adapter.camera.position.toArray(), initial);
+});
+
+test("canvas wheel zoom is bounded and HUD wheel input is ignored", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter({ reducedMotion: true });
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  const canvas = harness.renderers[0].domElement;
+  let prevented = 0;
+
+  harness.environment.emit("wheel", { deltaY: -10_000 });
+  assert.equal(adapter.camera.position.length(), new THREE.Vector3(...DEFAULT_CAMERA_STATE.position).length());
+  canvas.emit("wheel", { deltaY: -10_000, preventDefault: () => { prevented += 1; } });
+  assert.ok(Math.abs(adapter.camera.position.distanceTo(adapter.cameraTarget) - CAMERA_ZOOM_BOUNDS.minimum) < 0.001);
+  canvas.emit("wheel", { deltaY: 10_000, preventDefault: () => { prevented += 1; } });
+  assert.ok(Math.abs(adapter.camera.position.distanceTo(adapter.cameraTarget) - CAMERA_ZOOM_BOUNDS.maximum) < 0.001);
+  assert.equal(prevented, 2);
+});
+
+test("reset restores the canonical camera state and reduced motion snaps", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter({ reducedMotion: true });
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  adapter.camera.position.set(-10, 45, 12);
+  adapter.cameraTarget.set(2, 0, 3);
+
+  assert.equal(adapter.resetCamera(), true);
+  assert.deepEqual(adapter.camera.position.toArray(), [...DEFAULT_CAMERA_STATE.position]);
+  assert.deepEqual(adapter.cameraTarget.toArray(), [...DEFAULT_CAMERA_STATE.target]);
+  assert.equal(adapter.camera.fov, DEFAULT_CAMERA_STATE.fov);
+  assert.equal(adapter.cameraTransition, null);
+});
+
+test("newer camera transitions replace older work and settle back to idle", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+
+  adapter.transitionCamera({ position: [0, 32, 42], duration: 400 });
+  const first = adapter.cameraTransition;
+  adapter.transitionCamera({ position: [-42, 32, 0], duration: 400 });
+  assert.notEqual(adapter.cameraTransition, first);
+  harness.environment.runNextFrame(100);
+  harness.environment.runNextFrame(500);
+  assert.deepEqual(adapter.camera.position.toArray(), [-42, 32, 0]);
+  assert.equal(adapter.cameraTransition, null);
+  assert.equal(harness.environment.pendingFrames.size, 0, "camera animation must return to idle invalidation");
+});
+
+test("manual input cancels reset motion and disposal cancels pending camera RAF safely", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  adapter.camera.position.set(0, 32, 42);
+  adapter.resetCamera();
+  const canvas = harness.renderers[0].domElement;
+  canvas.emit("pointerdown", { button: 0, pointerId: 4, clientX: 20 });
+  assert.equal(adapter.cameraTransition, null);
+  const pending = adapter.rafId;
+
+  adapter.dispose();
+  assert.ok(harness.environment.cancelledFrames.includes(pending));
+  assert.equal(harness.environment.pendingFrames.size, 0);
+  assertCanvasListeners(canvas, 0);
 });
 
 test("dispose cancels RAF, removes listeners, canvas and all retained resources", () => {
@@ -89,9 +184,8 @@ test("dispose cancels RAF, removes listeners, canvas and all retained resources"
   adapter.dispose();
 
   assert.deepEqual(harness.environment.cancelledFrames, [pendingFrame]);
-  for (const event of ["mousedown", "mousemove", "mouseup", "resize"]) {
-    assert.equal(harness.environment.listenerCount(event), 0);
-  }
+  assert.equal(harness.environment.listenerCount("resize"), 0);
+  assertCanvasListeners(renderer.domElement, 0);
   assert.equal(geometryDispose.count, 1);
   assert.equal(materialDispose.count, 1);
   assert.equal(renderer.disposeCalls, 1);
@@ -418,9 +512,8 @@ test("duplicate mount cannot create a second live renderer or listener set", () 
   assert.equal(harness.renderers.length, 1);
   assert.equal(harness.container.children.length, 1);
   assert.equal(harness.environment.pendingFrames.size, 1);
-  for (const event of ["mousedown", "mousemove", "mouseup", "resize"]) {
-    assert.equal(harness.environment.listenerCount(event), 1);
-  }
+  assert.equal(harness.environment.listenerCount("resize"), 1);
+  assertCanvasListeners(harness.renderers[0].domElement, 1);
 });
 
 test("dispose before mount permanently closes that adapter without allocating", () => {
@@ -448,9 +541,8 @@ test("StrictMode-style mount, dispose and fresh remount remains bounded", () => 
   assert.equal(harness.renderers[0].disposeCalls, 1);
   assert.equal(harness.container.children.length, 1);
   assert.equal(harness.environment.pendingFrames.size, 1);
-  for (const event of ["mousedown", "mousemove", "mouseup", "resize"]) {
-    assert.equal(harness.environment.listenerCount(event), 1);
-  }
+  assert.equal(harness.environment.listenerCount("resize"), 1);
+  assertCanvasListeners(harness.renderers[1].domElement, 1);
   second.dispose();
   assert.equal(harness.container.children.length, 0);
   assert.equal(harness.environment.pendingFrames.size, 0);
@@ -496,7 +588,10 @@ test("explicit scene movement uses canonical direct/forward modes and focuses de
     mode: "DIRECT", playerId: 1, from: 3, to: 30, slot: 0, route: null,
   }), true);
   assert.equal(adapter.pawnsByPlayerId.get("1").userData.stepCounter, 30);
-  assert.deepEqual(adapter.camera.position.toArray(), [-40, 25, 0]);
+  assert.ok(adapter.cameraTransition, "cardinal presentation changes transition instead of snapping");
+  harness.environment.runNextFrame(100);
+  harness.environment.runNextFrame(600);
+  assert.deepEqual(adapter.camera.position.toArray(), [-42, 32, 0]);
 
   assert.equal(adapter.presentPawnMovement({
     mode: "FORWARD", playerId: 1, from: 30, to: 2, slot: 0, route: [31, 32, 33, 34, 35, 36, 37, 38, 39, 0, 1, 2],
@@ -542,10 +637,11 @@ function createHarness() {
     renderers,
     loads,
     container,
-    createAdapter() {
+    createAdapter(options = {}) {
       return new BoardSceneAdapter({
         boardModelUrl: "board.glb",
         diceModelUrl: "Dice.glb",
+        ...options,
         dependencies: {
           environment,
           createRenderer: () => {
@@ -649,7 +745,7 @@ function diceRotations(adapter) {
 
 function createRenderer() {
   const renderer = {
-    domElement: { parentNode: null },
+    domElement: createEventTarget(),
     sizes: [],
     pixelRatios: [],
     renderCalls: 0,
@@ -667,6 +763,37 @@ function createRenderer() {
   };
   renderer.renderLists.owner = renderer;
   return renderer;
+}
+
+function createEventTarget() {
+  const listeners = new Map();
+  return {
+    parentNode: null,
+    style: {},
+    capturedPointers: [],
+    releasedPointers: [],
+    addEventListener(event, listener) {
+      if (!listeners.has(event)) listeners.set(event, new Set());
+      listeners.get(event).add(listener);
+    },
+    removeEventListener(event, listener) {
+      listeners.get(event)?.delete(listener);
+    },
+    listenerCount(event) {
+      return listeners.get(event)?.size ?? 0;
+    },
+    emit(event, payload = {}) {
+      for (const listener of listeners.get(event) ?? []) listener(payload);
+    },
+    setPointerCapture(pointerId) { this.capturedPointers.push(pointerId); },
+    releasePointerCapture(pointerId) { this.releasedPointers.push(pointerId); },
+  };
+}
+
+function assertCanvasListeners(canvas, expected) {
+  for (const event of ["pointerdown", "pointermove", "pointerup", "pointercancel", "wheel"]) {
+    assert.equal(canvas.listenerCount(event), expected, `${event} listener count`);
+  }
 }
 
 function trackedModel() {

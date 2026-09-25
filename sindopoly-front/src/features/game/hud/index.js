@@ -1,6 +1,7 @@
 import "./GameHud.css";
 
 export { default as ActionTray } from "./ActionTray.js";
+export { default as CameraResetControl } from "./CameraResetControl.js";
 export { default as ConnectionStatus } from "./ConnectionStatus.js";
 export { default as ContextPanel } from "./ContextPanel.js";
 export { default as MatchStatusHeader } from "./MatchStatusHeader.js";

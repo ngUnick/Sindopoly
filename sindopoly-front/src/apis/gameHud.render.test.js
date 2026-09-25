@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ActionTray from "../features/game/hud/ActionTray.js";
+import CameraResetControl from "../features/game/hud/CameraResetControl.js";
 import ConnectionStatus from "../features/game/hud/ConnectionStatus.js";
 import ContextPanel from "../features/game/hud/ContextPanel.js";
 import MatchStatusHeader from "../features/game/hud/MatchStatusHeader.js";
@@ -21,6 +22,7 @@ const sourceRoot = new URL("../", import.meta.url);
 const readSource = path => readFile(new URL(path, sourceRoot), "utf8");
 const componentPaths = [
   "features/game/hud/ActionTray.js",
+  "features/game/hud/CameraResetControl.js",
   "features/game/hud/ConnectionStatus.js",
   "features/game/hud/ContextPanel.js",
   "features/game/hud/MatchStatusHeader.js",
@@ -272,6 +274,14 @@ test("ActionTray renders purchase accept and decline actions", () => {
   });
   assert.equal((html.match(/<button/g) ?? []).length, 2);
   assert.ok(html.includes("Αγορά για 100€") && html.includes("Δεν αγοράζω"));
+});
+
+test("camera reset is a secondary Greek-labelled control", () => {
+  const html = render(CameraResetControl, { onReset: () => {} });
+  assert.match(html, /aria-label="Επαναφορά κάμερας"/);
+  assert.match(html, /title="Επαναφορά κάμερας"/);
+  assert.doesNotMatch(html, /disabled/);
+  assert.match(render(CameraResetControl, { onReset: null }), /disabled/);
 });
 
 test("ActionTray renders supplied purchase destination and authoritative cost", () => {

@@ -5,6 +5,7 @@ import { GameplayFeedback } from "../../components/GameFeedback.js";
 import { GAMEPLAY_CONTENT } from "../../features/game/content/el.js";
 import {
   ContextPanel,
+  CameraResetControl,
   MatchStatusHeader,
   PlayerRail,
 } from "../../features/game/hud/index.js";
@@ -43,7 +44,7 @@ export default function AuthoritativeGame() {
     : null;
   const board = (
     <div className="game-live-board-region">
-      <GameBoard onSceneReady={handleSceneReady} />
+      <GameBoard onSceneReady={handleSceneReady} reducedMotion={reducedMotion} />
       <GameplayFeedback
         outcome={game.outcome}
         onDismiss={game.dismissOutcome}
@@ -58,7 +59,10 @@ export default function AuthoritativeGame() {
         header={game.viewModel && (
           <div className="game-header-controls">
             <MatchStatusHeader turn={game.viewModel.turn} connection={game.viewModel.connection} />
-            <MusicControl />
+            <div className="game-header-controls__secondary">
+              <CameraResetControl onReset={scene ? () => scene.resetCamera() : null} />
+              <MusicControl />
+            </div>
           </div>
         )}
         players={game.viewModel && <PlayerRail players={game.viewModel.players} />}
