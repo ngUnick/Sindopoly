@@ -30,13 +30,14 @@ test("coordinator starts idle and orders dice, movement, then outcome", async ()
 
   assert.equal(coordinator.phase, PRESENTATION_PHASES.IDLE);
   const result = coordinator.present(transaction({
+    dice: { die1: 1, die2: 1, total: 2 },
     movement: { mode: MOVEMENT_MODES.FORWARD, playerId: 7, from: 39, to: 1, slot: 2 },
     outcome: suppliedOutcome(),
   }));
   await flush();
 
   assert.deepEqual(scene.calls.dice[0], {
-    die1: 2, die2: 5, total: 7, presentationId: 10, reducedMotion: false,
+    die1: 1, die2: 1, total: 2, presentationId: 10, reducedMotion: false,
   });
   assert.equal(coordinator.phase, PRESENTATION_PHASES.PRESENTING_DICE);
   assert.equal(scene.calls.movement.length, 0);
@@ -50,6 +51,7 @@ test("coordinator starts idle and orders dice, movement, then outcome", async ()
     to: 1,
     slot: 2,
     route: [0, 1],
+    presentationId: "event:10",
     reducedMotion: false,
   });
   assert.equal(outcomes.length, 0);
@@ -173,7 +175,7 @@ test("same-version distinct identities use one active plus one newest queued slo
 
 test("pure planning honors explicit forward, direct, snap and same-square modes", () => {
   const forward = buildPresentationPlan(transaction({
-    dice: null,
+    dice: { die1: 1, die2: 3, total: 4 },
     movement: { mode: MOVEMENT_MODES.FORWARD, playerId: 7, from: 38, to: 2, slot: 0 },
   }));
   const direct = buildPresentationPlan(transaction({
@@ -186,10 +188,15 @@ test("pure planning honors explicit forward, direct, snap and same-square modes"
     dice: null,
     movement: { mode: MOVEMENT_MODES.SNAP, playerId: 7, to: 14, slot: 0 },
   }));
-  const sameSquare = buildPresentationPlan(transaction({
+  const unsupportedForwardSameSquare = buildPresentationPlan(transaction({
     presentationId: "same",
     dice: null,
     movement: { mode: MOVEMENT_MODES.FORWARD, playerId: 7, from: 4, to: 4, slot: 0 },
+  }));
+  const diceMismatchedForward = buildPresentationPlan(transaction({
+    presentationId: "mismatched-forward",
+    dice: { die1: 1, die2: 1, total: 2 },
+    movement: { mode: MOVEMENT_MODES.FORWARD, playerId: 7, from: 38, to: 2, slot: 0 },
   }));
   const directSameSquare = buildPresentationPlan(transaction({
     presentationId: "direct-same",
@@ -197,10 +204,11 @@ test("pure planning honors explicit forward, direct, snap and same-square modes"
     movement: { mode: MOVEMENT_MODES.DIRECT, playerId: 7, from: 4, to: 4, slot: 0 },
   }));
 
-  assert.deepEqual(forward.stages[0].movement.route, [39, 0, 1, 2]);
+  assert.deepEqual(forward.stages[1].movement.route, [39, 0, 1, 2]);
   assert.equal(direct.stages[0].movement.route, null);
   assert.equal(snap.stages[0].movement.route, null);
-  assert.deepEqual(sameSquare.stages, []);
+  assert.equal(unsupportedForwardSameSquare, null);
+  assert.equal(diceMismatchedForward, null);
   assert.deepEqual(directSameSquare.stages, []);
   assert.equal(buildPresentationPlan(transaction({
     presentationId: "bad",

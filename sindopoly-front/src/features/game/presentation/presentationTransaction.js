@@ -65,7 +65,7 @@ export function buildPresentationPlan(value) {
     }));
   }
   if (transaction.movement) {
-    const movement = planMovement(transaction.movement);
+    const movement = planMovement(transaction.movement, transaction.dice);
     if (movement == null) return null;
     const sameSquare = movement.mode !== MOVEMENT_MODES.SNAP
       && movement.from === movement.to;
@@ -170,12 +170,14 @@ function normalizeOutcome(value) {
   });
 }
 
-function planMovement(movement) {
+function planMovement(movement, dice) {
   if (movement.mode !== MOVEMENT_MODES.FORWARD) {
     return Object.freeze({ ...movement, route: null });
   }
   const route = buildForwardRoute(movement.from, movement.to);
-  return route == null ? null : Object.freeze({ ...movement, route });
+  return route == null || dice == null || route.length !== dice.total
+    ? null
+    : Object.freeze({ ...movement, route });
 }
 
 function isRecord(value) {

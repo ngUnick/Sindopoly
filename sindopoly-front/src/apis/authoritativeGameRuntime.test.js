@@ -102,7 +102,7 @@ test("roll uses the accepted version, blocks double activation and reconciles by
 
   assert.equal(harness.scene.calls.dice.length, 1);
   assert.equal(harness.scene.calls.movement.length, 1);
-  assert.equal(harness.scene.calls.movement[0].mode, "DIRECT");
+  assert.equal(harness.scene.calls.movement[0].mode, "FORWARD");
   assert.equal(runtime.getState().controller.acceptedVersion, 3);
   assert.equal(runtime.getState().viewModel.action.kind, ACTION_KINDS.WAITING);
 });
@@ -125,8 +125,27 @@ test("replayed command response and matching STOMP echo share one deterministic 
     gameId: 101, stateVersion: 3, actorPlayerId: 101, die1: 2, die2: 4,
   }), "roll:101:3:101:2:4");
   assert.equal(harness.scene.calls.dice.length, 1);
+  assert.equal(harness.scene.calls.movement.length, 1);
+  assert.equal(harness.scene.calls.movement[0].mode, "FORWARD");
+  assert.deepEqual(harness.scene.calls.movement[0].route, [7, 8, 9, 10, 11, 12]);
   assert.equal(harness.commands.roll.length, 1);
   assert.equal(runtime.getState().history.entries.length, 1);
+});
+
+test("dice-mismatched transport remains DIRECT instead of inventing a forward route", async () => {
+  const afterTransport = { ...inProgressSnapshot, stateVersion: 3, playerTurn: 102 };
+  const harness = createHarness({ snapshots: [inProgressSnapshot, afterTransport], viewerPlayerId: 102 });
+  const runtime = harness.createRuntime();
+  runtime.start();
+  harness.realtime.subscribed();
+  await flush();
+
+  harness.realtime.event(eventAtVersion(3, { fromPosition: 6, toPosition: 30 }));
+  await flush(6);
+
+  assert.equal(harness.scene.calls.movement.length, 1);
+  assert.equal(harness.scene.calls.movement[0].mode, "DIRECT");
+  assert.equal(harness.scene.calls.movement[0].route, null);
 });
 
 test("observer event presents confirmed dice once, records history and wakes reconciliation", async () => {

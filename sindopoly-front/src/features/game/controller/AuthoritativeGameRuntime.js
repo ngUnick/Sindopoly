@@ -1,6 +1,7 @@
 import { deriveOwnershipProjection } from "../../../apis/ownershipProjection.js";
 import { createSnapshotSynchronizer } from "../../../apis/realtimeSync.js";
 import { buildBoardMetadataIndex, getSquareMetadata } from "../board/boardMetadata.js";
+import { buildForwardRoute } from "../board/boardCalibration.js";
 import {
   GAME_CONTROLLER_ACTIONS,
   GAME_COMMAND_STATUS,
@@ -397,7 +398,7 @@ export class AuthoritativeGameRuntime {
     if (!hasDicePair(result)) return;
     const movement = Number.isSafeInteger(fromPosition)
       ? {
-          mode: MOVEMENT_MODES.DIRECT,
+          mode: confirmedForwardMode(fromPosition, result.newPosition, result.total),
           playerId: this.viewerPlayerId,
           from: fromPosition,
           to: result.newPosition,
@@ -441,7 +442,7 @@ export class AuthoritativeGameRuntime {
       actorPlayerId,
       dice: dice ? { die1: dice.die1, die2: dice.die2, total: dice.total } : null,
       movement: movement && isPositiveInteger(actorPlayerId) ? {
-        mode: MOVEMENT_MODES.DIRECT,
+        mode: confirmedForwardMode(movement.fromPosition, movement.toPosition, dice?.total),
         playerId: actorPlayerId,
         from: movement.fromPosition,
         to: movement.toPosition,
@@ -675,6 +676,14 @@ function playerSlot(snapshot, playerId) {
     .sort((left, right) => left - right);
   const index = ordered.indexOf(playerId);
   return index >= 0 && index < 4 ? index : null;
+}
+
+/** Classifies only a dice-count-matched route as ordinary forward presentation. */
+function confirmedForwardMode(from, to, diceTotal) {
+  const route = buildForwardRoute(from, to);
+  return route != null && route.length === diceTotal
+    ? MOVEMENT_MODES.FORWARD
+    : MOVEMENT_MODES.DIRECT;
 }
 
 function hasDicePair(value) {

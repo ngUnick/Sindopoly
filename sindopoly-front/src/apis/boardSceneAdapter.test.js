@@ -7,8 +7,10 @@ import {
   CAMERA_ZOOM_BOUNDS,
   DEFAULT_CAMERA_STATE,
   DICE_FACE_ORIENTATIONS,
+  PAWN_MOVEMENT_TIMING,
   disposeObjectGraph,
 } from "../features/game/board/BoardSceneAdapter.js";
+import { getPawnAnchor } from "../features/game/board/boardCalibration.js";
 
 test("mount creates one scene, renderer, canvas, frame and listener set", () => {
   const harness = createHarness();
@@ -577,7 +579,7 @@ test("pawn updates preserve stable visual slots on canonical anchors", () => {
   assert.equal(playerTwoPawn.userData.stepCounter, 6);
 });
 
-test("explicit scene movement uses canonical direct/forward modes and focuses destination", () => {
+test("DIRECT movement remains an immediate safe calibrated placement", () => {
   const harness = createHarness();
   const adapter = harness.createAdapter();
   adapter.mount(harness.container);
@@ -585,21 +587,134 @@ test("explicit scene movement uses canonical direct/forward modes and focuses de
   adapter.setPawnPositions([{ playerId: 1, position: 3 }]);
 
   assert.equal(adapter.presentPawnMovement({
-    mode: "DIRECT", playerId: 1, from: 3, to: 30, slot: 0, route: null,
+    mode: "DIRECT", playerId: 1, from: 3, to: 30, slot: 0, route: null, presentationId: "direct-1",
   }), true);
   assert.equal(adapter.pawnsByPlayerId.get("1").userData.stepCounter, 30);
-  assert.ok(adapter.cameraTransition, "cardinal presentation changes transition instead of snapping");
-  harness.environment.runNextFrame(100);
-  harness.environment.runNextFrame(600);
-  assert.deepEqual(adapter.camera.position.toArray(), [-42, 32, 0]);
+  assert.equal(adapter.pawnAnimation, null);
+  assert.equal(adapter.cameraTransition, null, "pawn placement must not move the camera");
+  assert.deepEqual(adapter.pawnsByPlayerId.get("1").position.toArray(), [
+    getPawnAnchor(30, 0).x, getPawnAnchor(30, 0).y, getPawnAnchor(30, 0).z,
+  ]);
 
   assert.equal(adapter.presentPawnMovement({
-    mode: "FORWARD", playerId: 1, from: 30, to: 2, slot: 0, route: [31, 32, 33, 34, 35, 36, 37, 38, 39, 0, 1, 2],
-  }), true);
-  assert.equal(adapter.pawnsByPlayerId.get("1").userData.stepCounter, 2);
-  assert.equal(adapter.presentPawnMovement({
-    mode: "FORWARD", playerId: 1, from: 2, to: 4, slot: 0, route: [4],
+    mode: "FORWARD", playerId: 1, from: 30, to: 2, slot: 0,
+    route: [31, 32, 33, 34, 35, 36, 37, 38, 39, 0, 2], presentationId: "bad-route",
   }), false);
+});
+
+test("forward pawn animation follows every calibrated tile, wraps START and settles exactly", async () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  adapter.setPawnPositions([{ playerId: 1, position: 38 }]);
+  harness.environment.runNextFrame();
+
+  const completion = adapter.presentPawnMovement({
+    mode: "FORWARD", playerId: 1, from: 38, to: 2, slot: 0,
+    route: [39, 0, 1, 2], presentationId: "wrap-1",
+  });
+  assert.ok(completion instanceof Promise);
+  assert.deepEqual(adapter.pawnAnimation.segments.map(segment => segment.end.position), [39, 0, 1, 2]);
+  assert.equal(adapter.pawnAnimation.stepDuration, PAWN_MOVEMENT_TIMING.tileDurationMs);
+
+  harness.environment.runNextFrame(100);
+  harness.environment.runNextFrame(172.5);
+  const pawn = adapter.pawnsByPlayerId.get("1");
+  assert.ok(pawn.position.y > getPawnAnchor(39, 0).y, "each tile receives one restrained hop");
+  assert.ok(Number.isFinite(pawn.rotation.y), "route direction provides reusable pawn orientation");
+
+  const completedAt = 100
+    + (4 * PAWN_MOVEMENT_TIMING.tileDurationMs)
+    + PAWN_MOVEMENT_TIMING.arrivalDurationMs;
+  harness.environment.runNextFrame(completedAt);
+  assert.equal(await completion, true);
+  const destination = getPawnAnchor(2, 0);
+  assert.deepEqual(pawn.position.toArray(), [destination.x, destination.y, destination.z]);
+  assert.equal(pawn.userData.stepCounter, 2);
+  assert.equal(adapter.pawnAnimation, null);
+  assert.equal(harness.environment.pendingFrames.size, 0, "pawn animation must return to idle rendering");
+});
+
+test("recovery cancellation settles the old promise and accepts the authoritative snap", async () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  adapter.setPawnPositions([{ playerId: 1, position: 5 }]);
+  harness.environment.runNextFrame();
+  const completion = adapter.presentPawnMovement({
+    mode: "FORWARD", playerId: 1, from: 5, to: 8, slot: 0,
+    route: [6, 7, 8], presentationId: "move-5-8",
+  });
+  harness.environment.runNextFrame(100);
+  harness.environment.runNextFrame(170);
+
+  assert.equal(adapter.cancelPawnPresentation("move-5-8"), true);
+  assert.equal(await completion, false);
+  assert.equal(adapter.snapPawnPosition({ playerId: 1, position: 12, slot: 0 }), true);
+  const authoritative = getPawnAnchor(12, 0);
+  assert.deepEqual(adapter.pawnsByPlayerId.get("1").position.toArray(), [
+    authoritative.x, authoritative.y, authoritative.z,
+  ]);
+  assert.equal(adapter.pawnAnimation, null);
+});
+
+test("moving pawns retain their player identity and logical slot offsets", async () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  adapter.setPawnPositions([
+    { playerId: 2, position: 8 },
+    { playerId: 1, position: 8 },
+  ]);
+  harness.environment.runNextFrame();
+  const playerTwoPawn = adapter.pawnsByPlayerId.get("2");
+  const completion = adapter.presentPawnMovement({
+    mode: "FORWARD", playerId: 2, from: 8, to: 11, slot: 1,
+    route: [9, 10, 11], presentationId: "slot-one",
+  });
+
+  assert.equal(adapter.pawnAnimation.pawn, playerTwoPawn);
+  assert.deepEqual(adapter.pawnAnimation.segments.map(segment => segment.end), [
+    getPawnAnchor(9, 1), getPawnAnchor(10, 1), getPawnAnchor(11, 1),
+  ]);
+  assert.equal(adapter.cancelPawnPresentation("slot-one"), true);
+  assert.equal(await completion, false);
+  assert.equal(adapter.pawnsByPlayerId.get("2"), playerTwoPawn);
+  const destination = getPawnAnchor(11, 1);
+  assert.deepEqual(playerTwoPawn.position.toArray(), [destination.x, destination.y, destination.z]);
+});
+
+test("reduced motion snaps forward routes and disposal settles active pawn work", async () => {
+  const reducedHarness = createHarness();
+  const reduced = reducedHarness.createAdapter({ reducedMotion: true });
+  reduced.mount(reducedHarness.container);
+  reducedHarness.environment.runNextFrame();
+  reduced.setPawnPositions([{ playerId: 1, position: 8 }]);
+  assert.equal(reduced.presentPawnMovement({
+    mode: "FORWARD", playerId: 1, from: 8, to: 10, slot: 0,
+    route: [9, 10], presentationId: "reduced", reducedMotion: true,
+  }), true);
+  assert.equal(reduced.pawnAnimation, null);
+  assert.equal(reduced.pawnsByPlayerId.get("1").userData.stepCounter, 10);
+
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  adapter.setPawnPositions([{ playerId: 1, position: 8 }]);
+  harness.environment.runNextFrame();
+  const completion = adapter.presentPawnMovement({
+    mode: "FORWARD", playerId: 1, from: 8, to: 10, slot: 0,
+    route: [9, 10], presentationId: "dispose-move",
+  });
+  const pending = adapter.rafId;
+  adapter.dispose();
+  assert.equal(await completion, false);
+  assert.ok(harness.environment.cancelledFrames.includes(pending));
+  assert.equal(harness.environment.pendingFrames.size, 0);
 });
 
 test("adapter source stays presentation-only and owns the Three lifecycle", async () => {

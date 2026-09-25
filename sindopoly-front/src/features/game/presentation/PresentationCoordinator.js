@@ -196,6 +196,7 @@ export class PresentationCoordinator {
       return this.invokeScene("presentPawnMovement", {
         ...stage.movement,
         route: stage.movement.route == null ? null : [...stage.movement.route],
+        presentationId: transaction.presentationId,
         reducedMotion: this.reducedMotion,
       });
     }

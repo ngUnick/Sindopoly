@@ -19,6 +19,13 @@ export const DEFAULT_CAMERA_STATE = Object.freeze({
   fov: 65,
 });
 const DICE_ANIMATION_DURATION_MS = 760;
+export const PAWN_MOVEMENT_TIMING = Object.freeze({
+  tileDurationMs: 145,
+  maximumTravelDurationMs: 1_440,
+  arrivalDurationMs: 110,
+  hopHeight: 0.65,
+  arrivalLift: 0.12,
+});
 const DICE_SETTLED_POSITIONS = Object.freeze([
   Object.freeze([-2.1, 0.25, 0.5]),
   Object.freeze([2.1, 0.25, 0.5]),
@@ -106,6 +113,8 @@ export class BoardSceneAdapter {
     this.pendingDicePresentation = null;
     this.diceCompletion = null;
     this.lastDicePresentationId = -1;
+    this.pawnAnimation = null;
+    this.pawnCompletion = null;
     this.resizeObserver = null;
     this.cameraTarget = new THREE.Vector3(...DEFAULT_CAMERA_STATE.target);
     this.cameraTransition = null;
@@ -412,6 +421,7 @@ export class BoardSceneAdapter {
 
   setPawnPositions(playerRows) {
     if (!this.mounted || !Array.isArray(playerRows)) return false;
+    this.cancelPawnPresentation();
     this.assignPawns(playerRows);
     for (const pawn of this.pawns) pawn.visible = false;
     for (const row of playerRows) this.setPawnPosition(row.playerId ?? row.player_id, row.position);
@@ -428,25 +438,36 @@ export class BoardSceneAdapter {
   /** Applies an accepted final position without reconstructing historical movement. */
   snapPawnPosition({ playerId, position, slot = null } = {}) {
     if (!this.mounted || playerId == null || !isBoardPosition(position)) return false;
+    this.cancelPawnPresentation();
     const pawn = this.pawnsByPlayerId.get(String(playerId));
     if (!pawn) return false;
     const resolvedSlot = isPawnSlot(slot) ? slot : this.pawns.indexOf(pawn);
     return this.placePawnAt(pawn, position, resolvedSlot);
   }
 
-  /**
-   * Executes only the caller-selected movement mode. FE-REVAMP-021 keeps this
-   * immediate while guaranteeing that every applied coordinate is calibrated.
-   */
-  presentPawnMovement({ mode, playerId, from, to, slot = null, route = null } = {}) {
+  /** Animates only a caller-proven forward route; all other movement stays direct. */
+  presentPawnMovement({
+    mode,
+    playerId,
+    from,
+    to,
+    slot = null,
+    route = null,
+    presentationId,
+    reducedMotion = false,
+  } = {}) {
     if (!this.mounted || !["FORWARD", "DIRECT"].includes(mode)
-        || playerId == null || !isBoardPosition(from) || !isBoardPosition(to)) {
+        || playerId == null || !isBoardPosition(from) || !isBoardPosition(to)
+        || typeof presentationId !== "string" || presentationId.length === 0
+        || presentationId.length > 256) {
       return false;
     }
     if (mode === "FORWARD") {
       const expectedRoute = buildForwardRoute(from, to);
       if (expectedRoute == null
           || !Array.isArray(route)
+          || route.length === 0
+          || route.length > 12
           || expectedRoute.length !== route.length
           || expectedRoute.some((position, index) => position !== route[index])) {
         return false;
@@ -457,18 +478,75 @@ export class BoardSceneAdapter {
     const pawn = this.pawnsByPlayerId.get(String(playerId));
     if (!pawn) return false;
     const resolvedSlot = isPawnSlot(slot) ? slot : this.pawns.indexOf(pawn);
-    const positions = mode === "FORWARD" ? route : [to];
-    for (const position of positions) {
-      if (!this.placePawnAt(pawn, position, resolvedSlot, false)) return false;
+    this.cancelPawnPresentation();
+    if (mode === "DIRECT" || reducedMotion === true) {
+      if (!this.placePawnAt(pawn, to, resolvedSlot, false)) return false;
+      if (mode === "FORWARD") {
+        this.orientPawnForStep(pawn, route.at(-2) ?? from, to, resolvedSlot);
+      }
+      this.invalidate();
+      return true;
     }
-    this.orientCameraForPosition(to);
+
+    const segments = this.buildPawnSegments(from, route, resolvedSlot, pawn.rotation.y);
+    if (segments == null || segments.length === 0) return false;
+    if (!this.placePawnAt(pawn, from, resolvedSlot, false)) return false;
+    const stepDuration = Math.min(
+      PAWN_MOVEMENT_TIMING.tileDurationMs,
+      PAWN_MOVEMENT_TIMING.maximumTravelDurationMs / segments.length,
+    );
+    this.pawnAnimation = {
+      presentationId,
+      pawn,
+      slot: resolvedSlot,
+      destination: to,
+      segments,
+      stepDuration,
+      startedAt: null,
+    };
+    const completion = new Promise(resolve => {
+      this.pawnCompletion = { presentationId, resolve };
+    });
+    this.invalidate();
+    return completion;
+  }
+
+  cancelPawnPresentation(presentationId = null) {
+    const animation = this.pawnAnimation;
+    if (!animation
+        || presentationId != null && presentationId !== animation.presentationId) {
+      return false;
+    }
+    this.placePawnAt(animation.pawn, animation.destination, animation.slot, false);
+    animation.pawn.rotation.y = animation.segments.at(-1).targetYaw;
+    this.pawnAnimation = null;
+    this.settlePawnCompletion(false);
     this.invalidate();
     return true;
   }
 
-  cancelPawnPresentation() {
-    this.cancelCameraTransition();
-    return this.mounted && !this.disposed;
+  buildPawnSegments(from, route, slot, initialYaw) {
+    const segments = [];
+    let previousPosition = from;
+    let previousYaw = initialYaw;
+    for (const position of route) {
+      const start = getPawnAnchor(previousPosition, slot);
+      const end = getPawnAnchor(position, slot);
+      if (!start || !end) return null;
+      const targetYaw = Math.atan2(end.x - start.x, end.z - start.z);
+      segments.push({ start, end, startYaw: previousYaw, targetYaw });
+      previousPosition = position;
+      previousYaw = targetYaw;
+    }
+    return segments;
+  }
+
+  orientPawnForStep(pawn, from, to, slot) {
+    const start = getPawnAnchor(from, slot);
+    const end = getPawnAnchor(to, slot);
+    if (!start || !end) return false;
+    pawn.rotation.y = Math.atan2(end.x - start.x, end.z - start.z);
+    return true;
   }
 
   placePawnAt(pawn, position, slot, render = true) {
@@ -639,6 +717,16 @@ export class BoardSceneAdapter {
         animationContinues = true;
       }
     }
+    if (this.pawnAnimation) {
+      const now = Number.isFinite(timestamp) ? timestamp : 0;
+      if (this.pawnAnimation.startedAt === null) this.pawnAnimation.startedAt = now;
+      const completed = this.applyPawnAnimationFrame(
+        this.pawnAnimation,
+        Math.max(0, now - this.pawnAnimation.startedAt),
+      );
+      if (completed) this.finishPawnAnimation(true);
+      else animationContinues = true;
+    }
     this.renderer.render(this.scene, this.camera);
     if (animationContinues) this.invalidate();
   }
@@ -652,9 +740,60 @@ export class BoardSceneAdapter {
     this.camera.lookAt(this.cameraTarget);
   }
 
+  applyPawnAnimationFrame(animation, elapsed) {
+    const travelDuration = animation.stepDuration * animation.segments.length;
+    if (elapsed < travelDuration) {
+      const segmentIndex = Math.min(
+        Math.floor(elapsed / animation.stepDuration),
+        animation.segments.length - 1,
+      );
+      const segment = animation.segments[segmentIndex];
+      const progress = (elapsed - segmentIndex * animation.stepDuration) / animation.stepDuration;
+      const eased = progress * progress * (3 - 2 * progress);
+      animation.pawn.position.set(
+        THREE.MathUtils.lerp(segment.start.x, segment.end.x, eased),
+        THREE.MathUtils.lerp(segment.start.y, segment.end.y, eased)
+          + Math.sin(Math.PI * progress) * PAWN_MOVEMENT_TIMING.hopHeight,
+        THREE.MathUtils.lerp(segment.start.z, segment.end.z, eased),
+      );
+      animation.pawn.rotation.y = lerpAngle(segment.startYaw, segment.targetYaw, eased);
+      return false;
+    }
+
+    const arrivalProgress = Math.min(
+      (elapsed - travelDuration) / PAWN_MOVEMENT_TIMING.arrivalDurationMs,
+      1,
+    );
+    const anchor = getPawnAnchor(animation.destination, animation.slot);
+    animation.pawn.position.set(
+      anchor.x,
+      anchor.y + Math.sin(Math.PI * arrivalProgress)
+        * (1 - arrivalProgress) * PAWN_MOVEMENT_TIMING.arrivalLift,
+      anchor.z,
+    );
+    animation.pawn.rotation.y = animation.segments.at(-1).targetYaw;
+    return arrivalProgress >= 1;
+  }
+
+  finishPawnAnimation(completed) {
+    const animation = this.pawnAnimation;
+    if (!animation) return false;
+    this.placePawnAt(animation.pawn, animation.destination, animation.slot, false);
+    animation.pawn.rotation.y = animation.segments.at(-1).targetYaw;
+    this.pawnAnimation = null;
+    this.settlePawnCompletion(completed);
+    return true;
+  }
+
   settleDiceCompletion(completed) {
     const completion = this.diceCompletion;
     this.diceCompletion = null;
+    completion?.resolve(completed);
+  }
+
+  settlePawnCompletion(completed) {
+    const completion = this.pawnCompletion;
+    this.pawnCompletion = null;
     completion?.resolve(completed);
   }
 
@@ -668,8 +807,10 @@ export class BoardSceneAdapter {
     this.rafId = null;
     this.diceAnimation = null;
     this.cameraTransition = null;
+    this.pawnAnimation = null;
     this.pendingDicePresentation = null;
     this.settleDiceCompletion(false);
+    this.settlePawnCompletion(false);
     const canvas = this.renderer?.domElement;
     if (canvas?.removeEventListener) {
       for (const event of CANVAS_INTERACTION_EVENTS) {
@@ -718,6 +859,11 @@ function toVector3(value) {
 
 function clamp(value, minimum, maximum) {
   return Math.min(Math.max(value, minimum), maximum);
+}
+
+function lerpAngle(start, end, alpha) {
+  const delta = Math.atan2(Math.sin(end - start), Math.cos(end - start));
+  return start + delta * alpha;
 }
 
 function createPawn(geometry, color, position) {
