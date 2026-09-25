@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   GAMEPLAY_FEEDBACK_SURFACES,
+  buildCardRevealModel,
   buildGameplayFeedback,
 } from "../features/game/presentation/gameplayFeedbackModel.js";
 import { buildPresentationTransaction } from "../features/game/presentation/presentationTransaction.js";
@@ -23,6 +24,28 @@ test("feedback model copies one bounded immutable semantic presentation", () => 
     surface: "contextual",
   });
   assert.equal(Object.isFrozen(model), true);
+});
+
+test("card feedback accepts only a bounded, semantic card model", () => {
+  const card = buildCardRevealModel({
+    accent: "chance",
+    category: "Κάρτα γεγονότος",
+    title: "ΚΑΡΤΑ ΕΝΤΟΛΗΣ",
+    body: "Πήγαινε στη ΣΤΑΣΗ ΔΙΠΑΕ.",
+    effectSummary: "Μετακίνηση: ΣΤΑΣΗ ΔΙΠΑΕ",
+  });
+  const feedback = buildGameplayFeedback({
+    kind: "CARD", title: card.title, body: card.body, tone: "highlight",
+    surface: GAMEPLAY_FEEDBACK_SURFACES.CARD, card,
+  });
+
+  assert.equal(Object.isFrozen(card), true);
+  assert.equal(Object.isFrozen(feedback.card), true);
+  assert.equal(feedback.surface, "card");
+  assert.equal(buildGameplayFeedback({
+    kind: "CARD", body: "x", surface: GAMEPLAY_FEEDBACK_SURFACES.CARD,
+  }), null);
+  assert.equal(buildCardRevealModel({ accent: "future", category: "x", title: "x", body: "x" }), null);
 });
 
 test("feedback model rejects malformed or unbounded presentation data", () => {

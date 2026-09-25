@@ -167,6 +167,10 @@ export const HUD_CONTENT = Object.freeze({
 });
 
 export const GAMEPLAY_FEEDBACK_CONTENT = Object.freeze({
+  cardCash: "Μετρητά",
+  cardMovement: "Μετακίνηση",
+  cardStart: "Πέρασμα από την ΑΦΕΤΗΡΙΑ",
+  cardReveal: "Κάρτα γεγονότος",
   contextualEvent: "Εξέλιξη παιχνιδιού",
   rent: "Πληρωμή ενοικίου",
   tax: "Πληρωμή φόρου",
@@ -197,6 +201,7 @@ export const ACCESSIBILITY_CONTENT = Object.freeze({
   enableMusic: "Ενεργοποίηση μουσικής",
   showProperties: "Προβολή ιδιοκτησιών",
   close: "Κλείσιμο",
+  closeCard: "Κλείσιμο κάρτας",
   closeNotification: "Κλείσιμο ειδοποίησης",
   turnResultDialog: "Αποτέλεσμα γύρου",
   returnToAction: "Επιστροφή στη δράση",
@@ -395,10 +400,10 @@ function formatCardFact(fact) {
   return result;
 }
 
-function formatCardCategory(category) {
+export function formatCardCategory(category) {
   if (category === "Chance") return GAMEPLAY_CONTENT.chanceCard;
   if (category === "Community Chest") return GAMEPLAY_CONTENT.communityCard;
-  return hasText(category) ? category : GAMEPLAY_CONTENT.genericCard;
+  return GAMEPLAY_CONTENT.genericCard;
 }
 
 function hasText(value) {

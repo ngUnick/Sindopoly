@@ -426,13 +426,57 @@ test("event model maps tax into contextual payment feedback", () => {
   assert.equal(model.feedback.surface, "contextual");
 });
 
-test("event model preserves server card content", () => {
+test("event model presents a confirmed Community Chest card in the card surface", () => {
   const model = eventModel(cardEvent, 102);
   assert.match(model.text, /Έληξε η κάρτα του ΟΑΣΘ\. Πλήρωσε €50\./);
   assert.equal(model.emphasis, "highlight");
-  assert.equal(model.feedback.kind, "ROLL_COMPLETED");
-  assert.equal(model.feedback.title, "Εξέλιξη παιχνιδιού");
+  assert.equal(model.feedback.kind, "CARD");
+  assert.equal(model.feedback.surface, "card");
+  assert.deepEqual(model.feedback.card, {
+    accent: "community",
+    category: "Κάρτα γεγονότος",
+    title: "ΚΑΡΤΑ ΑΠΟΦΑΣΗΣ",
+    body: "Έληξε η κάρτα του ΟΑΣΘ. Πλήρωσε €50.",
+    effectSummary: "Μετρητά: -50€",
+  });
+});
+
+test("event model gives a confirmed Chance card its resolved transport destination", () => {
+  const fixture = structuredClone(turnUpdatedEvent);
+  fixture.payload.details = [
+    { type: "PLAYER_MOVED", fromPosition: 7, toPosition: 6 },
+    {
+      type: "CARD_DRAWN", squareId: 7, amount: 6,
+      card: { cardId: 1, title: "Chance", text: "Πήγαινε στη ΣΤΑΣΗ ΔΙΠΑΕ.", effect: "transport", amount: 6 },
+    },
+  ];
+  const model = eventModel(fixture, 101);
+  assert.deepEqual(model.feedback.card, {
+    accent: "chance",
+    category: "Κάρτα γεγονότος",
+    title: "ΚΑΡΤΑ ΕΝΤΟΛΗΣ",
+    body: "Πήγαινε στη ΣΤΑΣΗ ΔΙΠΑΕ.",
+    effectSummary: "Μετακίνηση: ΣΤΑΣΗ ΔΙΠΑΕ",
+  });
+});
+
+test("event model keeps a confirmed Start passage alongside its card effect", () => {
+  const fixture = structuredClone(cardEvent);
+  fixture.payload.details.push({ type: "MONEY_RECEIVED", amount: 200 });
+  const model = eventModel(fixture, 101);
+  assert.match(model.feedback.card.effectSummary, /Μετρητά: -50€/);
+  assert.match(model.feedback.card.effectSummary, /Πέρασμα από την ΑΦΕΤΗΡΙΑ/);
+});
+
+test("event model keeps unknown decoded cards on the generic safe fallback", () => {
+  const fixture = structuredClone(cardEvent);
+  fixture.payload.details.find(detail => detail.type === "CARD_DRAWN").card = {
+    cardId: 99, title: "Future deck", text: "Μελλοντικό αποτέλεσμα.", effect: "future", amount: 0,
+  };
+  const model = eventModel(fixture, 101);
   assert.equal(model.feedback.surface, "contextual");
+  assert.equal(model.feedback.title, "Εξέλιξη παιχνιδιού");
+  assert.equal(model.feedback.card, undefined);
 });
 
 test("event model presents timeout facts", () => {

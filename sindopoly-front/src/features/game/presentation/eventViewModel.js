@@ -5,6 +5,7 @@ import {
   formatGameEventFact,
 } from "../content/el.js";
 import { buildDicePresentationModel } from "./dicePresentationModel.js";
+import { buildCardRevealFeedback } from "./cardRevealModel.js";
 import {
   GAMEPLAY_FEEDBACK_SURFACES,
   buildGameplayFeedback,
@@ -149,6 +150,7 @@ export function buildEventViewModel({
     text,
     emphasis,
     card,
+    moved,
     available,
     purchased,
     declined,
@@ -183,8 +185,9 @@ function buildEventFeedback({
   actorName,
   text,
   emphasis,
-  card,
-  available,
+    card,
+    moved,
+    available,
   purchased,
   declined,
   rent,
@@ -243,11 +246,22 @@ function buildEventFeedback({
     return contextual("TAX", GAMEPLAY_FEEDBACK_CONTENT.tax,
       [taxText, startText].filter(Boolean).join(" "), "negative");
   }
+  if (card) {
+    const destinationName = card.card.effect === "transport" && moved && typeof squareName === "function"
+      ? squareName(moved.toPosition)
+      : null;
+    return buildCardRevealFeedback({
+      card: card.card,
+      destinationName,
+      supplementalEffect: moneyReceived ? GAMEPLAY_FEEDBACK_CONTENT.cardStart : null,
+    })
+      ?? contextual(event.payload.reason, GAMEPLAY_FEEDBACK_CONTENT.contextualEvent);
+  }
   if (moneyReceived) {
     return contextual("START_REWARD", GAMEPLAY_FEEDBACK_CONTENT.start, startText, "positive");
   }
-  // Card and jail-specific visuals are intentionally deferred; their confirmed text remains readable.
-  if (card || jailed || released || jailOffer) {
+  // Jail-specific visuals are intentionally deferred; their confirmed text remains readable.
+  if (jailed || released || jailOffer) {
     return contextual(event.payload.reason, GAMEPLAY_FEEDBACK_CONTENT.contextualEvent);
   }
   if (available || declined || destinationId != null) return toast(event.payload.reason);

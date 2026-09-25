@@ -90,6 +90,126 @@
   background: var(--color-selection);
 }
 
+.card-reveal {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: var(--layer-toast);
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: min(22rem, calc(100% - 2 * var(--space-4)));
+  min-height: 18rem;
+  padding: var(--space-5);
+  color: var(--color-text-primary);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-structural);
+  border-top: var(--space-1) solid var(--color-action-primary);
+  border-radius: var(--radius-major);
+  box-shadow: var(--shadow-high);
+  animation: card-reveal-enter var(--motion-duration-long) var(--motion-easing-standard) both;
+}
+
+.card-reveal[data-card-accent="community"] {
+  border-top-color: var(--color-property-cyan);
+}
+
+.card-reveal__category,
+.card-reveal__title,
+.card-reveal__body,
+.card-reveal__effect {
+  margin: 0;
+}
+
+.card-reveal__category {
+  padding-inline-end: var(--space-5);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.card-reveal__title {
+  margin-top: var(--space-2);
+  padding-inline-end: var(--space-5);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-compact);
+}
+
+.card-reveal__body {
+  align-self: center;
+  margin-top: var(--space-4);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-relaxed);
+  overflow-wrap: anywhere;
+}
+
+.card-reveal__effect {
+  align-self: end;
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  color: var(--color-text-secondary);
+  border-top: 1px solid var(--color-border-structural);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.card-reveal__dismiss {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: var(--control-min-height);
+  height: var(--control-min-height);
+  padding: 0;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  font: inherit;
+  font-size: var(--font-size-xl);
+  cursor: pointer;
+}
+
+.card-reveal__dismiss:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
+}
+
+.card-reveal__dismiss:disabled {
+  cursor: default;
+}
+
+.card-reveal[data-card-state="dismissing"] {
+  animation: card-reveal-dismiss var(--motion-duration-short) var(--motion-easing-standard) forwards;
+}
+
+@keyframes card-reveal-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-3)) scale(0.975) rotate(-0.5deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes card-reveal-dismiss {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
 @media (min-width: 761px) and (max-width: 1100px) {
   .gameplay-feedback {
     top: var(--space-2);
@@ -104,6 +224,14 @@
   .gameplay-feedback--toast {
     width: min(19rem, calc(100% - 2 * var(--space-2)));
   }
+
+  .card-reveal {
+    top: var(--space-2);
+    right: var(--space-2);
+    width: min(20rem, calc(100% - 2 * var(--space-2)));
+    min-height: 16rem;
+    padding: var(--space-4);
+  }
 }
 
 @media (max-width: 760px) {
@@ -113,4 +241,31 @@
     right: var(--space-2);
     width: auto;
   }
+
+  .card-reveal {
+    top: var(--space-2);
+    right: var(--space-2);
+    left: var(--space-2);
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-reveal {
+    animation: card-reveal-fade-in var(--motion-duration-instant) linear both;
+  }
+
+  .card-reveal[data-card-state="dismissing"] {
+    animation: card-reveal-fade-out var(--motion-duration-instant) linear forwards;
+  }
+}
+
+@keyframes card-reveal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes card-reveal-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }

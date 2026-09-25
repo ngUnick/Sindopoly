@@ -72,6 +72,36 @@ test("contextual gameplay feedback exposes one polite non-modal live region", ()
   assert.doesNotMatch(html, /role="dialog"|aria-modal/);
 });
 
+test("card gameplay feedback renders one polite non-modal reveal with a local close control", () => {
+  const html = renderToStaticMarkup(React.createElement(GameplayFeedback, {
+    outcome: {
+      kind: "ROLL_RESULT",
+      text: "Έληξε η κάρτα του ΟΑΣΘ.",
+      emphasis: "highlight",
+      presentationId: 10,
+      dismissible: true,
+      feedback: {
+        kind: "CARD", title: "ΚΑΡΤΑ ΑΠΟΦΑΣΗΣ", body: "Έληξε η κάρτα του ΟΑΣΘ.",
+        tone: "highlight", surface: "card",
+        card: {
+          accent: "community", category: "Κάρτα γεγονότος", title: "ΚΑΡΤΑ ΑΠΟΦΑΣΗΣ",
+          body: "Έληξε η κάρτα του ΟΑΣΘ.", effectSummary: "Μετρητά: -50€",
+        },
+      },
+    },
+  }));
+
+  assert.match(html, /data-game-feedback="card"/);
+  assert.match(html, /data-card-accent="community"/);
+  assert.match(html, /data-card-state="revealed"/);
+  assert.match(html, /role="status"/);
+  assert.match(html, /aria-live="polite"/);
+  assert.match(html, /Κάρτα γεγονότος/);
+  assert.match(html, /Μετρητά: -50€/);
+  assert.match(html, /aria-label="Κλείσιμο κάρτας"/);
+  assert.doesNotMatch(html, /role="dialog"|aria-modal/);
+});
+
 test("legacy outcome uses the quiet safe fallback without inventing controls", () => {
   const html = renderToStaticMarkup(React.createElement(GameplayFeedback, {
     outcome: {

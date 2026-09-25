@@ -170,6 +170,7 @@
   }
 
   .game-live-board-region [data-game-feedback="observer"],
+  .game-live-board-region [data-game-feedback="card"],
   .game-live-board-region [data-game-feedback="contextual"],
   .game-live-board-region [data-game-feedback="toast"] {
     left: var(--space-2);

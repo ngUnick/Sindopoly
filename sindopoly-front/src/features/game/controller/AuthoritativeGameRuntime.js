@@ -41,6 +41,7 @@ import {
   GAMEPLAY_FEEDBACK_SURFACES,
   buildGameplayFeedback,
 } from "../presentation/gameplayFeedbackModel.js";
+import { buildCardRevealFeedback } from "../presentation/cardRevealModel.js";
 
 const POLL_INTERVAL_MS = 15_000;
 const BUSY_COMMAND_STATUSES = new Set([
@@ -563,6 +564,9 @@ export function buildRollPresentationIdentity({
 function buildThrowOutcome(result, metadata, snapshot) {
   const square = getSquareMetadata(metadata, result.newPosition);
   const squareName = square?.name ?? `#${result.newPosition}`;
+  const destinationName = result.card?.effect === "transport"
+    ? getSquareMetadata(metadata, result.data)?.name ?? null
+    : null;
   const owner = snapshot?.players.find(player => player.properties.includes(result.newPosition));
   let text = GAMEPLAY_CONTENT.acknowledge;
   let emphasis = "neutral";
@@ -610,11 +614,28 @@ function buildThrowOutcome(result, metadata, snapshot) {
     text,
     emphasis,
     dismissible: true,
-    feedback: buildThrowFeedback({ result, square, squareName, text, emphasis }),
+    feedback: buildThrowFeedback({
+      result, square, squareName, destinationName, text, emphasis,
+      supplementalEffect: result.passedGo === true && square?.type !== "START"
+        ? GAMEPLAY_FEEDBACK_CONTENT.cardStart
+        : null,
+    }),
   };
 }
 
-function buildThrowFeedback({ result, square, squareName, text, emphasis }) {
+function buildThrowFeedback({
+  result, square, squareName, destinationName, text, emphasis, supplementalEffect,
+}) {
+  if (result.card) {
+    return buildCardRevealFeedback({ card: result.card, destinationName, supplementalEffect })
+      ?? buildGameplayFeedback({
+        kind: "CARD",
+        title: GAMEPLAY_FEEDBACK_CONTENT.contextualEvent,
+        body: text,
+        tone: emphasis,
+        surface: GAMEPLAY_FEEDBACK_SURFACES.CONTEXTUAL,
+      });
+  }
   let kind = "ROLL_RESULT";
   let title = null;
   let surface = GAMEPLAY_FEEDBACK_SURFACES.TOAST;
@@ -632,7 +653,7 @@ function buildThrowFeedback({ result, square, squareName, text, emphasis }) {
     title = GAMEPLAY_FEEDBACK_CONTENT.start;
     surface = GAMEPLAY_FEEDBACK_SURFACES.CONTEXTUAL;
   } else if ([1, 2, 7, 8, 9, 10].includes(result.squareType)) {
-    // Card and jail-specific treatments are deferred; confirmed result text uses the safe contextual fallback.
+    // Jail-specific treatment is deferred; confirmed result text uses the safe contextual fallback.
     kind = result.squareType === 1 || result.squareType === 2 ? "CARD" : "SPECIAL_SQUARE";
     title = GAMEPLAY_FEEDBACK_CONTENT.contextualEvent;
     surface = GAMEPLAY_FEEDBACK_SURFACES.CONTEXTUAL;

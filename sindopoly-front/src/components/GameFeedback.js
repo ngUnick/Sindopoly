@@ -15,6 +15,7 @@ import {
   GAMEPLAY_FEEDBACK_SURFACES,
   buildGameplayFeedback,
 } from "../features/game/presentation/gameplayFeedbackModel.js";
+import CardReveal from "./CardReveal.js";
 
 /** Quiet feedback remains readable before its local, presentation-only dismissal. */
 export const OBSERVER_NOTIFICATION_DURATION_MS = 12_000;
@@ -106,6 +107,14 @@ export function GameplayFeedback({ outcome, onDismiss = () => {} }) {
   }, [autoDismiss, onDismiss, outcome?.presentationId]);
 
   if (!feedback) return null;
+  if (feedback.surface === GAMEPLAY_FEEDBACK_SURFACES.CARD) {
+    return React.createElement(CardReveal, {
+      card: feedback.card,
+      dismissible: outcome.dismissible,
+      onDismiss,
+      presentationId: outcome.presentationId,
+    });
+  }
   const contextual = feedback.surface === GAMEPLAY_FEEDBACK_SURFACES.CONTEXTUAL;
 
   return React.createElement(
@@ -155,6 +164,13 @@ GameplayFeedback.propTypes = {
       body: PropTypes.string.isRequired,
       tone: PropTypes.string.isRequired,
       surface: PropTypes.string.isRequired,
+      card: PropTypes.shape({
+        accent: PropTypes.oneOf(["chance", "community"]).isRequired,
+        category: PropTypes.string.isRequired,
+        title: PropTypes.string.isRequired,
+        body: PropTypes.string.isRequired,
+        effectSummary: PropTypes.string,
+      }),
     }),
   }),
   onDismiss: PropTypes.func,
