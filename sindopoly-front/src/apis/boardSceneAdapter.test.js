@@ -7,12 +7,21 @@ import {
   CAMERA_ZOOM_BOUNDS,
   DEFAULT_CAMERA_STATE,
   DICE_FACE_ORIENTATIONS,
+  DICE_PRESENTATION_TIMING,
   PAWN_MOVEMENT_TIMING,
   disposeObjectGraph,
   disposeObjectGraphs,
 } from "../features/game/board/BoardSceneAdapter.js";
 import { PAWN_SLOT_ASSETS } from "../features/game/board/pawnAssets.js";
 import { getPawnAnchor } from "../features/game/board/boardCalibration.js";
+
+const DICE_MOTION_DURATION_MS = DICE_PRESENTATION_TIMING.anticipationMs
+  + DICE_PRESENTATION_TIMING.rollMs
+  + DICE_PRESENTATION_TIMING.settleMs;
+const DICE_PRESENTATION_DURATION_MS = DICE_MOTION_DURATION_MS
+  + DICE_PRESENTATION_TIMING.resultHoldMs;
+const DICE_CAMERA_RESTORE_AT_MS = DICE_MOTION_DURATION_MS
+  + DICE_PRESENTATION_TIMING.cameraRestoreDelayMs;
 
 test("mount creates one scene, renderer, canvas, frame and listener set", () => {
   const harness = createHarness();
@@ -301,6 +310,7 @@ test("Dice GLB is loaded once and its existing clone pair is reused for presenta
   }), true);
   assert.deepEqual(adapter.diceModels, pair);
   assert.ok(pair.every(die => die.visible));
+  assert.ok(pair.every(die => die.scale.equals(new THREE.Vector3(11.5, 11.5, 11.5))));
   assert.equal(harness.loads.filter(load => load.url === "Dice.glb").length, 1);
 });
 
@@ -326,6 +336,114 @@ test("all six calibrated Dice.glb face rotations settle both dice deterministica
   }
 });
 
+test("authored dice paths vary decoratively without changing the authoritative result", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  const first = Object.freeze({
+    die1: 2, die2: 5, total: 7, presentationId: 21, reducedMotion: false,
+  });
+  const second = Object.freeze({ ...first, presentationId: 22 });
+  const midRoll = DICE_PRESENTATION_TIMING.anticipationMs
+    + (DICE_PRESENTATION_TIMING.rollMs * 0.5);
+
+  adapter.applyDiceAnimationFrame(first, midRoll);
+  const firstPath = adapter.diceModels.map(die => ({
+    position: die.position.toArray(),
+    quaternion: die.quaternion.toArray(),
+  }));
+  adapter.applyDiceAnimationFrame(second, midRoll);
+  const secondPath = adapter.diceModels.map(die => ({
+    position: die.position.toArray(),
+    quaternion: die.quaternion.toArray(),
+  }));
+
+  assert.notDeepEqual(firstPath, secondPath);
+  adapter.applyDiceAnimationFrame(second, Number.POSITIVE_INFINITY);
+  assert.deepEqual(diceRotations(adapter), [
+    DICE_FACE_ORIENTATIONS[2], DICE_FACE_ORIENTATIONS[5],
+  ]);
+  assert.deepEqual(adapter.diceModels.map(die => die.position.toArray()), [
+    [-2.65, 0.25, 0.85], [2.35, 0.25, -0.65],
+  ]);
+});
+
+test("dice camera emphasis restores the exact pre-roll view before presentation completion", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  harness.environment.runNextFrame();
+  adapter.camera.position.set(-30, 35, 20);
+  adapter.cameraTarget.set(1, 0, 2);
+  adapter.camera.fov = 58;
+  const original = {
+    position: adapter.camera.position.toArray(),
+    target: adapter.cameraTarget.toArray(),
+    fov: adapter.camera.fov,
+  };
+
+  adapter.presentDiceRoll({ die1: 6, die2: 1, total: 7, presentationId: 23 });
+  assert.equal(adapter.cameraTransition.owner, "dice-emphasis");
+  harness.environment.runNextFrame(0);
+  harness.environment.runNextFrame(DICE_PRESENTATION_TIMING.cameraEmphasisMs);
+  assert.ok(adapter.camera.position.distanceTo(adapter.cameraTarget)
+    < new THREE.Vector3(...original.position).distanceTo(new THREE.Vector3(...original.target)));
+  harness.environment.runNextFrame(DICE_CAMERA_RESTORE_AT_MS);
+  assert.equal(adapter.cameraTransition.owner, "dice-restore");
+  harness.environment.runNextFrame(DICE_CAMERA_RESTORE_AT_MS + 1);
+  harness.environment.runNextFrame(DICE_CAMERA_RESTORE_AT_MS
+    + DICE_PRESENTATION_TIMING.cameraRestoreMs + 1);
+
+  assert.deepEqual(adapter.camera.position.toArray(), original.position);
+  assert.deepEqual(adapter.cameraTarget.toArray(), original.target);
+  assert.equal(adapter.camera.fov, original.fov);
+  assert.ok(adapter.diceAnimation, "camera choreography must not gate the result hold");
+  harness.environment.runNextFrame(DICE_PRESENTATION_DURATION_MS);
+  assert.equal(adapter.diceAnimation, null);
+  assert.equal(harness.environment.pendingFrames.size, 0);
+});
+
+test("manual board input cancels only dice camera choreography", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.environment.runNextFrame();
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  harness.environment.runNextFrame();
+  adapter.presentDiceRoll({ die1: 4, die2: 6, total: 10, presentationId: 24 });
+  const canvas = harness.renderers[0].domElement;
+
+  canvas.emit("pointerdown", { button: 0, pointerId: 24, clientX: 20, preventDefault: () => {} });
+  canvas.emit("pointerup", { pointerId: 24 });
+  assert.equal(adapter.cameraTransition, null);
+  assert.equal(adapter.diceCameraPresentation, null);
+  assert.ok(adapter.diceAnimation);
+
+  adapter.presentDiceRoll({ die1: 2, die2: 5, total: 7, presentationId: 25 });
+  canvas.emit("wheel", { deltaY: -20, preventDefault: () => {} });
+  assert.equal(adapter.cameraTransition.owner, null, "the user's zoom replaces dice-owned camera work");
+  assert.equal(adapter.diceCameraPresentation, null);
+  assert.equal(adapter.diceAnimation.presentation.presentationId, 25);
+
+  adapter.presentDiceRoll({ die1: 4, die2: 6, total: 10, presentationId: 26 });
+  adapter.resetCamera({ reducedMotion: true });
+  assert.equal(adapter.cameraTransition, null);
+  assert.equal(adapter.diceCameraPresentation, null);
+  assert.equal(adapter.diceAnimation.presentation.presentationId, 26);
+  harness.environment.runNextFrame(0);
+  harness.environment.runNextFrame(DICE_PRESENTATION_DURATION_MS);
+
+  assert.equal(adapter.diceAnimation, null);
+  assert.deepEqual(diceRotations(adapter), [
+    DICE_FACE_ORIENTATIONS[4], DICE_FACE_ORIENTATIONS[6],
+  ]);
+  assert.equal(harness.environment.pendingFrames.size, 0);
+});
+
 test("dice animation uses bounded RAF and drains back to zero after settling", () => {
   const harness = createHarness();
   const adapter = harness.createAdapter();
@@ -340,16 +458,20 @@ test("dice animation uses bounded RAF and drains back to zero after settling", (
   assert.equal(harness.environment.pendingFrames.size, 1);
   harness.environment.runNextFrame(100);
   assert.equal(harness.environment.pendingFrames.size, 1);
-  harness.environment.runNextFrame(860);
+  harness.environment.runNextFrame(100 + DICE_PRESENTATION_DURATION_MS);
 
   assert.equal(adapter.diceAnimation, null);
+  assert.equal(harness.environment.pendingFrames.size, 1, "camera restoration may outlive the dice hold");
+  harness.environment.runNextFrame(101 + DICE_PRESENTATION_DURATION_MS);
+  harness.environment.runNextFrame(101 + DICE_PRESENTATION_DURATION_MS
+    + DICE_PRESENTATION_TIMING.cameraRestoreMs);
   assert.equal(harness.environment.pendingFrames.size, 0);
   assert.deepEqual(diceRotations(adapter), [
     DICE_FACE_ORIENTATIONS[1], DICE_FACE_ORIENTATIONS[6],
   ]);
 });
 
-test("reduced motion settles directly with only one coalesced render", () => {
+test("reduced motion snaps faces, holds the result briefly and skips camera choreography", () => {
   const harness = createHarness();
   const adapter = harness.createAdapter();
   adapter.mount(harness.container);
@@ -360,9 +482,17 @@ test("reduced motion settles directly with only one coalesced render", () => {
   assert.equal(adapter.presentDiceRoll({
     die1: 3, die2: 4, total: 7, presentationId: 5, reducedMotion: true,
   }), true);
-  assert.equal(adapter.diceAnimation, null);
+  assert.ok(adapter.diceAnimation);
+  assert.equal(adapter.cameraTransition, null);
+  assert.deepEqual(diceRotations(adapter), [
+    DICE_FACE_ORIENTATIONS[3], DICE_FACE_ORIENTATIONS[4],
+  ]);
   assert.equal(harness.environment.pendingFrames.size, 1);
   harness.environment.runNextFrame(0);
+  harness.environment.runNextFrame(DICE_PRESENTATION_TIMING.resultHoldMs - 1);
+  assert.ok(adapter.diceAnimation);
+  harness.environment.runNextFrame(DICE_PRESENTATION_TIMING.resultHoldMs);
+  assert.equal(adapter.diceAnimation, null);
   assert.equal(harness.environment.pendingFrames.size, 0);
 });
 
@@ -383,13 +513,19 @@ test("completion-aware dice resolves only after the accepted visual settles", as
   harness.environment.runNextFrame(100);
   await Promise.resolve();
   assert.equal(settled, false);
-  harness.environment.runNextFrame(860);
+  harness.environment.runNextFrame(99 + DICE_PRESENTATION_DURATION_MS);
+  await Promise.resolve();
+  assert.equal(settled, false, "the authoritative result remains readable for the full hold");
+  harness.environment.runNextFrame(100 + DICE_PRESENTATION_DURATION_MS);
 
   assert.equal(await completion, true);
+  harness.environment.runNextFrame(101 + DICE_PRESENTATION_DURATION_MS);
+  harness.environment.runNextFrame(101 + DICE_PRESENTATION_DURATION_MS
+    + DICE_PRESENTATION_TIMING.cameraRestoreMs);
   assert.equal(harness.environment.pendingFrames.size, 0);
 });
 
-test("completion-aware reduced motion resolves without an animation loop", async () => {
+test("completion-aware reduced motion resolves after its bounded result hold", async () => {
   const harness = createHarness();
   const adapter = harness.createAdapter();
   adapter.mount(harness.container);
@@ -397,12 +533,17 @@ test("completion-aware reduced motion resolves without an animation loop", async
   harness.completeLoad("Dice.glb", trackedModel().root);
   harness.environment.runNextFrame();
 
-  assert.equal(await adapter.presentDiceRollAndWait({
+  let settled = false;
+  const completion = adapter.presentDiceRollAndWait({
     die1: 3, die2: 3, total: 6, presentationId: 7, reducedMotion: true,
-  }), true);
+  }).then(value => { settled = true; return value; });
+  harness.environment.runNextFrame(0);
+  harness.environment.runNextFrame(DICE_PRESENTATION_TIMING.resultHoldMs - 1);
+  await Promise.resolve();
+  assert.equal(settled, false);
+  harness.environment.runNextFrame(DICE_PRESENTATION_TIMING.resultHoldMs);
+  assert.equal(await completion, true);
   assert.equal(adapter.diceAnimation, null);
-  assert.equal(harness.environment.pendingFrames.size, 1, "the final orientation needs one render only");
-  harness.environment.runNextFrame();
   assert.equal(harness.environment.pendingFrames.size, 0);
 });
 
@@ -421,6 +562,8 @@ test("newer dice and explicit cancellation settle old completion handles safely"
     die1: 5, die2: 6, total: 11, presentationId: 9, reducedMotion: true,
   });
   assert.equal(await superseded, false);
+  harness.environment.runNextFrame(0);
+  harness.environment.runNextFrame(DICE_PRESENTATION_TIMING.resultHoldMs);
   assert.equal(await current, true);
 
   const canceled = adapter.presentDiceRollAndWait({
@@ -429,6 +572,7 @@ test("newer dice and explicit cancellation settle old completion handles safely"
   assert.equal(adapter.cancelDicePresentation(10), true);
   assert.equal(await canceled, false);
   harness.environment.runNextFrame(1000);
+  harness.environment.runNextFrame(1000 + DICE_PRESENTATION_TIMING.cameraRestoreMs);
   assert.equal(adapter.diceAnimation, null);
   assert.equal(harness.environment.pendingFrames.size, 0);
 });
@@ -475,7 +619,8 @@ test("newer dice presentation supersedes animation and stale IDs are ignored", (
   assert.equal(adapter.presentDiceRoll({
     die1: 2, die2: 3, total: 5, presentationId: 8, reducedMotion: true,
   }), false);
-  harness.environment.runNextFrame(1000);
+  harness.environment.runNextFrame(20);
+  harness.environment.runNextFrame(520);
 
   assert.equal(adapter.diceAnimation, null);
   assert.equal(harness.environment.pendingFrames.size, 0);

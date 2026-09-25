@@ -19,7 +19,25 @@ export const DEFAULT_CAMERA_STATE = Object.freeze({
   target: Object.freeze([0, 0, 0]),
   fov: 65,
 });
-const DICE_ANIMATION_DURATION_MS = 760;
+export const DICE_PRESENTATION_TIMING = Object.freeze({
+  anticipationMs: 110,
+  rollMs: 620,
+  settleMs: 160,
+  resultHoldMs: 500,
+  cameraEmphasisMs: 400,
+  cameraRestoreDelayMs: 120,
+  cameraRestoreMs: 360,
+});
+const DICE_PRESENTATION_DURATION_MS = DICE_PRESENTATION_TIMING.anticipationMs
+  + DICE_PRESENTATION_TIMING.rollMs
+  + DICE_PRESENTATION_TIMING.settleMs
+  + DICE_PRESENTATION_TIMING.resultHoldMs;
+// Return toward the captured user view during the hold so pawn traversal inherits that view.
+const DICE_CAMERA_RESTORE_AT_MS = DICE_PRESENTATION_TIMING.anticipationMs
+  + DICE_PRESENTATION_TIMING.rollMs
+  + DICE_PRESENTATION_TIMING.settleMs
+  + DICE_PRESENTATION_TIMING.cameraRestoreDelayMs;
+const DICE_VISUAL_SCALE = 11.5;
 export const PAWN_MOVEMENT_TIMING = Object.freeze({
   tileDurationMs: 145,
   maximumTravelDurationMs: 1_440,
@@ -28,8 +46,12 @@ export const PAWN_MOVEMENT_TIMING = Object.freeze({
   arrivalLift: 0.12,
 });
 const DICE_SETTLED_POSITIONS = Object.freeze([
-  Object.freeze([-2.1, 0.25, 0.5]),
-  Object.freeze([2.1, 0.25, 0.5]),
+  Object.freeze([-2.65, 0.25, 0.85]),
+  Object.freeze([2.35, 0.25, -0.65]),
+]);
+const DICE_LAUNCH_POSITIONS = Object.freeze([
+  Object.freeze([-5.4, 0.25, -2.2]),
+  Object.freeze([5.1, 0.25, 2.1]),
 ]);
 const DIRECTIONAL_SHADOW_BOUNDS = Object.freeze({
   left: -28,
@@ -134,6 +156,7 @@ export class BoardSceneAdapter {
     this.pendingDicePresentation = null;
     this.diceCompletion = null;
     this.lastDicePresentationId = -1;
+    this.diceCameraPresentation = null;
     this.pawnAnimation = null;
     this.pawnCompletion = null;
     this.resizeObserver = null;
@@ -260,9 +283,9 @@ export class BoardSceneAdapter {
         }
         const dice1 = gltf.scene.clone();
         const dice2 = gltf.scene.clone();
-        dice1.scale.set(10, 10, 10);
+        dice1.scale.setScalar(DICE_VISUAL_SCALE);
         dice1.position.set(...DICE_SETTLED_POSITIONS[0]);
-        dice2.scale.set(10, 10, 10);
+        dice2.scale.setScalar(DICE_VISUAL_SCALE);
         dice2.position.set(...DICE_SETTLED_POSITIONS[1]);
         dice1.visible = false;
         dice2.visible = false;
@@ -354,6 +377,7 @@ export class BoardSceneAdapter {
   onPointerDown(event) {
     if (!this.mounted || this.activePointerId != null || event.button !== 0) return;
     event.preventDefault?.();
+    this.interruptDiceCameraPresentation();
     this.cancelCameraTransition();
     this.activePointerId = event.pointerId;
     this.previousPointerX = event.clientX;
@@ -384,6 +408,7 @@ export class BoardSceneAdapter {
   onWheel(event) {
     if (!this.mounted || !Number.isFinite(event.deltaY)) return;
     event.preventDefault?.();
+    this.interruptDiceCameraPresentation();
     this.cancelCameraTransition();
     const relative = this.camera.position.clone().sub(this.cameraTarget);
     const currentDistance = relative.length();
@@ -445,6 +470,7 @@ export class BoardSceneAdapter {
     fov = this.camera?.fov,
     duration = CAMERA_TRANSITION_DURATION_MS,
     reducedMotion = this.reducedMotion,
+    owner = null,
   } = {}) {
     if (!this.mounted || !this.camera) return false;
     const nextPosition = toVector3(position);
@@ -465,12 +491,14 @@ export class BoardSceneAdapter {
       endPosition: nextPosition,
       endTarget: nextTarget,
       endFov: fov,
+      owner,
     };
     this.invalidate();
     return true;
   }
 
   resetCamera(options = {}) {
+    this.interruptDiceCameraPresentation();
     return this.transitionCamera({ ...DEFAULT_CAMERA_STATE, ...options });
   }
 
@@ -687,19 +715,21 @@ export class BoardSceneAdapter {
     }
     this.diceAnimation = null;
     this.pendingDicePresentation = null;
+    this.beginDiceCameraRestore();
     this.settleDiceCompletion(false);
     return true;
   }
 
   startDicePresentation(presentation) {
     if (presentation.reducedMotion) {
-      this.diceAnimation = null;
       this.applyFinalDiceOrientation(presentation);
+      this.beginDiceCameraRestore();
+      this.diceAnimation = { presentation, startedAt: null };
       this.invalidate();
-      this.settleDiceCompletion(true);
       return;
     }
 
+    this.beginDiceCameraEmphasis();
     this.diceAnimation = { presentation, startedAt: null };
     this.applyDiceAnimationFrame(presentation, 0);
     this.invalidate();
@@ -714,26 +744,78 @@ export class BoardSceneAdapter {
     }
   }
 
-  applyDiceAnimationFrame(presentation, progress) {
-    const eased = 1 - ((1 - progress) ** 3);
-    const remaining = 1 - eased;
+  applyDiceAnimationFrame(presentation, elapsed) {
+    if (presentation.reducedMotion) {
+      this.applyFinalDiceOrientation(presentation);
+      return elapsed >= DICE_PRESENTATION_TIMING.resultHoldMs;
+    }
+
+    const anticipationEnd = DICE_PRESENTATION_TIMING.anticipationMs;
+    const rollEnd = anticipationEnd + DICE_PRESENTATION_TIMING.rollMs;
+    const settleEnd = rollEnd + DICE_PRESENTATION_TIMING.settleMs;
+    if (elapsed >= DICE_CAMERA_RESTORE_AT_MS) this.beginDiceCameraRestore();
+
     for (const [index, value] of [presentation.die1, presentation.die2].entries()) {
       const die = this.diceModels[index];
       const settled = DICE_SETTLED_POSITIONS[index];
-      const orientation = DICE_FACE_ORIENTATIONS[value];
-      const variation = (presentation.presentationId + index * 2) % 3;
       die.visible = true;
-      die.position.set(
-        settled[0],
-        settled[1] + Math.sin(Math.PI * progress) * (2.1 + index * 0.25),
-        settled[2],
-      );
-      die.rotation.set(
-        orientation[0] + remaining * Math.PI * (4 + variation),
-        orientation[1] + remaining * Math.PI * (3 + index),
-        orientation[2] + remaining * Math.PI * (4 + ((variation + 1) % 3)),
-      );
+      if (elapsed < anticipationEnd) {
+        applyDiceAnticipation(die, settled, index, elapsed / anticipationEnd, value);
+      } else if (elapsed < rollEnd) {
+        applyDiceRoll(die, settled, index, (elapsed - anticipationEnd) / DICE_PRESENTATION_TIMING.rollMs,
+          value, presentation.presentationId);
+      } else if (elapsed < settleEnd) {
+        applyDiceSettle(die, settled, index, (elapsed - rollEnd) / DICE_PRESENTATION_TIMING.settleMs,
+          value, presentation.presentationId);
+      } else {
+        die.position.set(...settled);
+        die.rotation.set(...DICE_FACE_ORIENTATIONS[value]);
+      }
     }
+    return elapsed >= DICE_PRESENTATION_DURATION_MS;
+  }
+
+  beginDiceCameraEmphasis() {
+    // Presentation camera state is transient; the player's chosen pre-roll view remains canonical.
+    const restoreState = this.diceCameraPresentation?.restoreState ?? this.captureCameraState();
+    if (!restoreState) return false;
+    const relative = this.camera.position.clone().sub(this.cameraTarget).multiplyScalar(0.94);
+    const target = this.cameraTarget.clone().lerp(new THREE.Vector3(0, 0.2, 0), 0.4);
+    this.diceCameraPresentation = { restoreState, restoreStarted: false };
+    return this.transitionCamera({
+      position: relative.add(target),
+      target,
+      fov: this.camera.fov,
+      duration: DICE_PRESENTATION_TIMING.cameraEmphasisMs,
+      owner: "dice-emphasis",
+    });
+  }
+
+  beginDiceCameraRestore() {
+    const presentation = this.diceCameraPresentation;
+    if (!presentation || presentation.restoreStarted) return false;
+    presentation.restoreStarted = true;
+    return this.transitionCamera({
+      ...presentation.restoreState,
+      duration: DICE_PRESENTATION_TIMING.cameraRestoreMs,
+      owner: "dice-restore",
+    });
+  }
+
+  interruptDiceCameraPresentation() {
+    if (!this.diceCameraPresentation) return false;
+    this.diceCameraPresentation = null;
+    if (this.cameraTransition?.owner?.startsWith("dice-")) this.cameraTransition = null;
+    return true;
+  }
+
+  captureCameraState() {
+    if (!this.camera) return null;
+    return {
+      position: this.camera.position.clone(),
+      target: this.cameraTarget.clone(),
+      fov: this.camera.fov,
+    };
   }
 
   assignPawns(playerRows) {
@@ -770,22 +852,26 @@ export class BoardSceneAdapter {
     if (!this.mounted || this.disposed) return;
     let animationContinues = false;
     if (this.cameraTransition) {
+      const transition = this.cameraTransition;
       const now = Number.isFinite(timestamp) ? timestamp : 0;
-      if (this.cameraTransition.startedAt === null) this.cameraTransition.startedAt = now;
-      const elapsed = Math.max(0, now - this.cameraTransition.startedAt);
-      const progress = Math.min(elapsed / this.cameraTransition.duration, 1);
-      this.applyCameraTransitionFrame(this.cameraTransition, progress);
-      if (progress >= 1) this.cameraTransition = null;
+      if (transition.startedAt === null) transition.startedAt = now;
+      const elapsed = Math.max(0, now - transition.startedAt);
+      const progress = Math.min(elapsed / transition.duration, 1);
+      this.applyCameraTransitionFrame(transition, progress);
+      if (progress >= 1) {
+        this.cameraTransition = null;
+        if (transition.owner === "dice-restore") this.diceCameraPresentation = null;
+      }
       else animationContinues = true;
     }
     if (this.diceAnimation) {
       const now = Number.isFinite(timestamp) ? timestamp : 0;
       if (this.diceAnimation.startedAt === null) this.diceAnimation.startedAt = now;
       const elapsed = Math.max(0, now - this.diceAnimation.startedAt);
-      const progress = Math.min(elapsed / DICE_ANIMATION_DURATION_MS, 1);
-      this.applyDiceAnimationFrame(this.diceAnimation.presentation, progress);
-      if (progress >= 1) {
+      const completed = this.applyDiceAnimationFrame(this.diceAnimation.presentation, elapsed);
+      if (completed) {
         this.applyFinalDiceOrientation(this.diceAnimation.presentation);
+        this.beginDiceCameraRestore();
         this.diceAnimation = null;
         this.settleDiceCompletion(true);
       } else {
@@ -881,6 +967,7 @@ export class BoardSceneAdapter {
     if (this.rafId !== null) this.environment?.cancelAnimationFrame(this.rafId);
     this.rafId = null;
     this.diceAnimation = null;
+    this.diceCameraPresentation = null;
     this.cameraTransition = null;
     this.pawnAnimation = null;
     this.pendingDicePresentation = null;
@@ -942,6 +1029,73 @@ function clamp(value, minimum, maximum) {
 function lerpAngle(start, end, alpha) {
   const delta = Math.atan2(Math.sin(end - start), Math.cos(end - start));
   return start + delta * alpha;
+}
+
+function applyDiceAnticipation(die, settled, index, progress, value) {
+  const eased = smoothStep(progress);
+  const launch = DICE_LAUNCH_POSITIONS[index];
+  die.position.set(launch[0], settled[1] + eased * 0.7, launch[2]);
+  die.rotation.set(...DICE_FACE_ORIENTATIONS[value]);
+}
+
+function applyDiceRoll(die, settled, index, progress, value, presentationId) {
+  const launch = DICE_LAUNCH_POSITIONS[index];
+  const variant = diceVisualVariant(presentationId, index);
+  const travel = smoothStep(progress);
+  const lateralArc = Math.sin(Math.PI * progress);
+  const impactTexture = Math.abs(Math.sin(Math.PI * 2 * progress)) * (1 - progress);
+  die.position.set(
+    THREE.MathUtils.lerp(launch[0], settled[0], travel) + lateralArc * variant.lateralX,
+    settled[1] + (1 - travel) * 0.7 + lateralArc * variant.arcHeight + impactTexture * 0.22,
+    THREE.MathUtils.lerp(launch[2], settled[2], travel) + lateralArc * variant.lateralZ,
+  );
+
+  const orientation = DICE_FACE_ORIENTATIONS[value];
+  const freeSpin = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+    orientation[0] + progress * Math.PI * 2 * variant.turns[0],
+    orientation[1] + progress * Math.PI * 2 * variant.turns[1],
+    orientation[2] + progress * Math.PI * 2 * variant.turns[2],
+  ));
+  const finalOrientation = quaternionForFace(value);
+  const convergence = smoothStep(clamp((progress - 0.72) / 0.28, 0, 1));
+  die.quaternion.copy(freeSpin).slerp(finalOrientation, convergence).normalize();
+}
+
+function applyDiceSettle(die, settled, index, progress, value, presentationId) {
+  const variant = diceVisualVariant(presentationId, index);
+  const bounce = Math.abs(Math.sin(Math.PI * 2 * progress)) * 0.24 * (1 - progress);
+  die.position.set(settled[0], settled[1] + bounce, settled[2]);
+  const wobble = new THREE.Quaternion().setFromAxisAngle(
+    variant.wobbleAxis,
+    Math.sin(Math.PI * progress) * 0.09 * (1 - progress),
+  );
+  die.quaternion.copy(quaternionForFace(value)).multiply(wobble).normalize();
+}
+
+function diceVisualVariant(presentationId, index) {
+  // Stable presentation identity varies only cosmetic motion; face and destination stay authoritative.
+  const seed = (presentationId * 17 + index * 11) % 5;
+  const direction = index === 0 ? 1 : -1;
+  return {
+    lateralX: direction * (0.35 + seed * 0.07),
+    lateralZ: -direction * (0.28 + ((seed + 2) % 3) * 0.08),
+    arcHeight: 2.7 + index * 0.35 + seed * 0.08,
+    turns: [
+      direction * (3 + (seed % 2)),
+      -direction * (2 + ((seed + index) % 3)),
+      direction * (3 + ((seed + 1) % 3)),
+    ],
+    wobbleAxis: new THREE.Vector3(1, 0, direction * 0.65).normalize(),
+  };
+}
+
+function quaternionForFace(value) {
+  return new THREE.Quaternion().setFromEuler(new THREE.Euler(...DICE_FACE_ORIENTATIONS[value]));
+}
+
+function smoothStep(value) {
+  const bounded = clamp(value, 0, 1);
+  return bounded * bounded * (3 - 2 * bounded);
 }
 
 function createPawn(geometry, color, position, fallbackY) {

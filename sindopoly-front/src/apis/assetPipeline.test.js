@@ -65,7 +65,8 @@ test("student pawn GLBs preserve the shared mesh, material and scale contract", 
 
 test("scene adapter keeps the bounded animation and renderer frame safeguards", async () => {
   const source = await readFile(new URL("../features/game/board/BoardSceneAdapter.js", import.meta.url), "utf8");
-  assert.match(source, /const DICE_ANIMATION_DURATION_MS = 760/);
+  assert.match(source, /const DICE_PRESENTATION_DURATION_MS = DICE_PRESENTATION_TIMING\.anticipationMs/);
+  assert.match(source, /resultHoldMs: 500/);
   assert.match(source, /Math\.min\(pixelRatio \|\| 1, 2\)/);
   assert.match(source, /if \(!this\.mounted \|\| this\.rafId !== null\) return false/);
 });
