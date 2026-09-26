@@ -8,6 +8,7 @@ import { AuthoritativeGameRuntime } from "../features/game/controller/Authoritat
 const EMPTY_GAME_STATE = Object.freeze({
   controller: null,
   viewModel: null,
+  displayAction: null,
   metadata: Object.freeze({ status: "LOADING", index: null, error: null }),
   history: Object.freeze({ gameId: null, entries: Object.freeze([]), seenEventIds: Object.freeze([]) }),
   outcome: null,

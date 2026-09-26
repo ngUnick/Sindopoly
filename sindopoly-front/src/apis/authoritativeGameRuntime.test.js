@@ -132,6 +132,158 @@ test("replayed command response and matching STOMP echo share one deterministic 
   assert.equal(runtime.getState().history.entries.length, 1);
 });
 
+test("purchase authority is immediate but its controls wait for dice and pawn completion", async () => {
+  const dice = deferred();
+  const movement = deferred();
+  const afterRoll = purchaseSnapshotAt({ stateVersion: 3, position: 12 });
+  const harness = createHarness({
+    snapshots: [inProgressSnapshot, afterRoll],
+    roll: () => rollResult({ stateVersion: 3, newPosition: 12, squareType: 5, data: 100 }),
+    dice: () => dice.promise,
+    movement: () => movement.promise,
+  });
+  const runtime = harness.createRuntime();
+  runtime.start();
+  harness.realtime.subscribed();
+  await flush();
+
+  const command = runtime.primaryAction();
+  await flush(4);
+  assert.equal(runtime.getState().viewModel.action.kind, ACTION_KINDS.PURCHASE_PROPERTY);
+  assert.equal(runtime.getState().displayAction, null);
+  assert.equal(runtime.getState().presentationPhase, PRESENTATION_PHASES.PRESENTING_DICE);
+
+  dice.resolve(true);
+  await flush(4);
+  assert.equal(runtime.getState().displayAction, null);
+  assert.equal(runtime.getState().presentationPhase, PRESENTATION_PHASES.PRESENTING_MOVEMENT);
+
+  movement.resolve(true);
+  assert.equal(await command, true);
+  await flush(6);
+  assert.equal(runtime.getState().displayAction.kind, ACTION_KINDS.PURCHASE_PROPERTY);
+  assert.equal(runtime.getState().displayAction.propertyId, 12);
+});
+
+test("REST and STOMP replay produce one purchase-control reveal", async () => {
+  const dice = deferred();
+  const afterRoll = purchaseSnapshotAt({ stateVersion: 3, position: 12 });
+  const harness = createHarness({
+    snapshots: [inProgressSnapshot, afterRoll],
+    roll: () => rollResult({ stateVersion: 3, newPosition: 12, squareType: 5, data: 100 }),
+    dice: () => dice.promise,
+  });
+  const runtime = harness.createRuntime();
+  const visibleKinds = [];
+  runtime.subscribe(() => {
+    const kind = runtime.getState().displayAction?.kind ?? null;
+    if (visibleKinds.at(-1) !== kind) visibleKinds.push(kind);
+  });
+  runtime.start();
+  harness.realtime.subscribed();
+  await flush();
+
+  const command = runtime.primaryAction();
+  await flush(4);
+  harness.realtime.event(eventAtVersion(3));
+  await flush(4);
+  assert.equal(runtime.getState().displayAction, null);
+
+  dice.resolve(true);
+  assert.equal(await command, true);
+  await flush(6);
+  assert.equal(harness.scene.calls.dice.length, 1);
+  assert.equal(harness.scene.calls.movement.length, 1);
+  assert.equal(visibleKinds.filter(kind => kind === ACTION_KINDS.PURCHASE_PROPERTY).length, 1);
+});
+
+test("reduced motion and direct movement reveal purchase controls on visual completion", async () => {
+  for (const scenario of [
+    { label: "reduced motion", reducedMotion: true, position: 12, mode: "FORWARD" },
+    { label: "direct movement", reducedMotion: false, position: 30, mode: "DIRECT" },
+  ]) {
+    const afterRoll = purchaseSnapshotAt({ stateVersion: 3, position: scenario.position });
+    const harness = createHarness({
+      snapshots: [inProgressSnapshot, afterRoll],
+      roll: () => rollResult({
+        stateVersion: 3,
+        newPosition: scenario.position,
+        squareType: 5,
+        data: 100,
+      }),
+      reducedMotion: scenario.reducedMotion,
+    });
+    const runtime = harness.createRuntime();
+    runtime.start();
+    harness.realtime.subscribed();
+    await flush();
+
+    assert.equal(await runtime.primaryAction(), true, scenario.label);
+    await flush(6);
+    assert.equal(harness.scene.calls.movement[0].mode, scenario.mode, scenario.label);
+    assert.equal(runtime.getState().displayAction.kind,
+      ACTION_KINDS.PURCHASE_PROPERTY, scenario.label);
+    if (scenario.reducedMotion) {
+      assert.equal(harness.scene.calls.dice[0].reducedMotion, true);
+      assert.equal(harness.scene.calls.movement[0].reducedMotion, true);
+    }
+    runtime.dispose();
+  }
+});
+
+test("recovery reveals only the current purchase after canceling stale presentation", async () => {
+  const dice = deferred();
+  const stalePurchase = purchaseSnapshotAt({ stateVersion: 3, position: 12 });
+  const currentPurchase = purchaseSnapshotAt({ stateVersion: 4, position: 14 });
+  const harness = createHarness({
+    snapshots: [inProgressSnapshot, stalePurchase, currentPurchase],
+    roll: () => rollResult({ stateVersion: 3, newPosition: 12, squareType: 5, data: 100 }),
+    dice: () => dice.promise,
+  });
+  const runtime = harness.createRuntime();
+  runtime.start();
+  harness.realtime.subscribed();
+  await flush();
+
+  const command = runtime.primaryAction();
+  await flush(4);
+  assert.equal(runtime.getState().displayAction, null);
+
+  harness.realtime.connection(GAME_CONNECTION_STATUS.RECONNECTING);
+  harness.realtime.subscribed();
+  await flush(8);
+  assert.equal(runtime.getState().viewModel.stateVersion, 4);
+  assert.equal(runtime.getState().displayAction.propertyId, 14);
+
+  dice.resolve(true);
+  assert.equal(await command, true);
+  await flush(4);
+  assert.equal(runtime.getState().displayAction.propertyId, 14);
+});
+
+test("roll, waiting and initial purchase display remain unchanged", async () => {
+  const rollHarness = createHarness();
+  const rollRuntime = rollHarness.createRuntime();
+  rollRuntime.start();
+  rollHarness.realtime.subscribed();
+  await flush();
+  assert.equal(rollRuntime.getState().displayAction.kind, ACTION_KINDS.ROLL);
+
+  const waitingHarness = createHarness({ viewerPlayerId: 102 });
+  const waitingRuntime = waitingHarness.createRuntime();
+  waitingRuntime.start();
+  waitingHarness.realtime.subscribed();
+  await flush();
+  assert.equal(waitingRuntime.getState().displayAction.kind, ACTION_KINDS.WAITING);
+
+  const purchaseHarness = createHarness({ snapshots: [purchaseOptionalActionSnapshot] });
+  const purchaseRuntime = purchaseHarness.createRuntime();
+  purchaseRuntime.start();
+  purchaseHarness.realtime.subscribed();
+  await flush();
+  assert.equal(purchaseRuntime.getState().displayAction.kind, ACTION_KINDS.PURCHASE_PROPERTY);
+});
+
 test("dice-mismatched transport remains DIRECT instead of inventing a forward route", async () => {
   const afterTransport = { ...inProgressSnapshot, stateVersion: 3, playerTurn: 102 };
   const harness = createHarness({ snapshots: [inProgressSnapshot, afterTransport], viewerPlayerId: 102 });
@@ -364,6 +516,7 @@ test("jail payment and decline remain server-owned optional actions", async () =
   await flush();
 
   assert.equal(payment.getState().viewModel.action.kind, ACTION_KINDS.PAY_JAIL_EXIT);
+  assert.equal(payment.getState().displayAction.kind, ACTION_KINDS.PAY_JAIL_EXIT);
   assert.equal(payment.getState().viewModel.action.cost, 50);
   assert.equal(await payment.primaryAction(), true);
   await flush(6);
@@ -605,17 +758,21 @@ test("terminal and deadline facts survive the live controller path", async () =>
 });
 
 test("production source has one enabled owner and preserves layer boundaries", async () => {
-  const [runtimeSource, hookSource, gameSource, boardSource] = await Promise.all([
+  const [runtimeSource, hookSource, gameSource, authoritativeSource, boardSource] = await Promise.all([
     readFile(new URL("../features/game/controller/AuthoritativeGameRuntime.js", import.meta.url), "utf8"),
     readFile(new URL("../hooks/useAuthoritativeGame.js", import.meta.url), "utf8"),
     readFile(new URL("../pages/Game/Game.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../pages/Game/AuthoritativeGame.jsx", import.meta.url), "utf8"),
     readFile(new URL("../pages/Game/GameBoard.jsx", import.meta.url), "utf8"),
   ]);
   assert.match(gameSource, /AuthoritativeGame/u);
   assert.doesNotMatch(gameSource, /FIRST_VERTICAL_SLICE_ENABLED|legacyBoard|<Board/u);
   assert.doesNotMatch(boardSource, /TurnAPI|GameAPI|useGameRealtime|setInterval|PresentationCoordinator/u);
   assert.doesNotMatch(runtimeSource, /@stomp|sockjs|three|Redis|MariaDB/u);
+  assert.match(runtimeSource, /const action = this\.publicState\.viewModel\?\.action/u);
   assert.doesNotMatch(hookSource, /calculateRent|purchasePrice|winnerPlayerId|Math\.random/u);
+  assert.match(authoritativeSource, /action=\{game\.displayAction\}/u);
+  assert.doesNotMatch(authoritativeSource, /action=\{game\.viewModel\.action\}/u);
 });
 
 function createHarness({
@@ -625,12 +782,14 @@ function createHarness({
   resolve = () => actionResult(4),
   pass = () => actionResult(4),
   dice = () => true,
+  movement = () => true,
+  snap = () => true,
   reducedMotion = false,
 } = {}) {
   const order = [];
   const queue = [...snapshots];
   const commands = { roll: [], resolve: [], pass: [] };
-  const scene = scenePort({ dice });
+  const scene = scenePort({ dice, movement, snap });
   const realtime = realtimeHarness(order);
   const polls = [];
   let snapshotCalls = 0;
@@ -711,15 +870,15 @@ function realtimeHarness(order) {
   };
 }
 
-function scenePort({ dice }) {
+function scenePort({ dice, movement, snap }) {
   const calls = {
     dice: [], movement: [], snap: [], setPawnPositions: [], cancelDice: [], cancelPawn: [],
   };
   return {
     calls,
     presentDiceRollAndWait(value) { calls.dice.push(value); return dice(value); },
-    presentPawnMovement(value) { calls.movement.push(value); return true; },
-    snapPawnPosition(value) { calls.snap.push(value); return true; },
+    presentPawnMovement(value) { calls.movement.push(value); return movement(value); },
+    snapPawnPosition(value) { calls.snap.push(value); return snap(value); },
     setPawnPositions(value) { calls.setPawnPositions.push(value); return true; },
     orientCameraForPosition() { return true; },
     cancelDicePresentation(value) { calls.cancelDice.push(value); return true; },
@@ -741,6 +900,21 @@ function rollResult(overrides = {}) {
     replayed: false,
     card: null,
     ...overrides,
+  };
+}
+
+function purchaseSnapshotAt({ stateVersion, position }) {
+  return {
+    ...purchaseOptionalActionSnapshot,
+    stateVersion,
+    optionalAction: {
+      ...purchaseOptionalActionSnapshot.optionalAction,
+      stateVersion,
+      squareId: position,
+    },
+    players: purchaseOptionalActionSnapshot.players.map(player => player.playerId === 101
+      ? { ...player, position }
+      : player),
   };
 }
 

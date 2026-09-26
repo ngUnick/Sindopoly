@@ -70,7 +70,7 @@ export default function AuthoritativeGame() {
         context={context}
         actions={game.viewModel && (
           <ActionFocusRegion
-            action={game.viewModel.action}
+            action={game.displayAction}
             onPrimaryAction={game.onPrimaryAction}
             onSecondaryAction={game.onSecondaryAction}
           />

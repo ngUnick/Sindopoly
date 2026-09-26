@@ -105,6 +105,7 @@ export class AuthoritativeGameRuntime {
     this.outcome = null;
     this.presentationPhase = PRESENTATION_PHASES.IDLE;
     this.lastPresentationVersion = -1;
+    this.visuallySettledVersion = -1;
     this.started = false;
     this.disposed = false;
     this.hasConnected = false;
@@ -190,6 +191,7 @@ export class AuthoritativeGameRuntime {
 
     if (previous.snapshot == null) {
       this.scene.setPawnPositions?.(snapshot.players);
+      this.visuallySettledVersion = snapshot.stateVersion;
       const viewer = snapshot.players.find(player => player.playerId === this.viewerPlayerId);
       if (viewer) this.scene.orientCameraForPosition?.(viewer.position);
     } else if (snapshot.status === "ended") {
@@ -464,7 +466,12 @@ export class AuthoritativeGameRuntime {
       transaction.stateVersion,
     );
     void this.presentation.present(transaction).then(result => {
-      if (this.disposed || result !== PRESENTATION_RESULTS.FAILED) return;
+      if (this.disposed) return;
+      if (result === PRESENTATION_RESULTS.COMPLETED) {
+        this.markVisuallySettled(transaction.stateVersion);
+        return;
+      }
+      if (result !== PRESENTATION_RESULTS.FAILED) return;
       const snapshot = this.controller.snapshot;
       if (snapshot) void this.recoverScene(snapshot);
     });
@@ -482,6 +489,19 @@ export class AuthoritativeGameRuntime {
     if (!this.disposed && result === PRESENTATION_RESULTS.FAILED) {
       this.scene.setPawnPositions?.(snapshot.players);
     }
+    if (!this.disposed
+        && [PRESENTATION_RESULTS.RECOVERED, PRESENTATION_RESULTS.FAILED].includes(result)
+        && this.controller.snapshot?.stateVersion === snapshot.stateVersion) {
+      this.markVisuallySettled(snapshot.stateVersion);
+    }
+  }
+
+  /** Reveals destination controls only after this authoritative version is visually established. */
+  markVisuallySettled(stateVersion) {
+    if (!isVersion(stateVersion) || stateVersion <= this.visuallySettledVersion) return false;
+    this.visuallySettledVersion = stateVersion;
+    this.publish();
+    return true;
   }
 
   buildEventModel(event) {
@@ -515,9 +535,15 @@ export class AuthoritativeGameRuntime {
       commandState,
       connectionState: this.controller.connection,
     });
+    const displayAction = selectDisplayAction({
+      action: viewModel?.action ?? null,
+      optionalAction: snapshot?.optionalAction ?? null,
+      visuallySettledVersion: this.visuallySettledVersion,
+    });
     return Object.freeze({
       controller: this.controller,
       viewModel,
+      displayAction,
       metadata: Object.freeze({
         status: this.metadataStatus,
         index: this.metadataIndex,
@@ -549,6 +575,15 @@ export class AuthoritativeGameRuntime {
       // Diagnostics are non-authoritative and must never interrupt reconciliation.
     }
   }
+}
+
+/** Keeps command authority intact while purchase controls wait for their matching destination. */
+function selectDisplayAction({ action, optionalAction, visuallySettledVersion }) {
+  if (action?.kind !== ACTION_KINDS.PURCHASE_PROPERTY) return action;
+  return isVersion(optionalAction?.stateVersion)
+      && optionalAction.stateVersion <= visuallySettledVersion
+    ? action
+    : null;
 }
 
 /** Command responses and STOMP echoes share this identity without arrival-time assumptions. */
