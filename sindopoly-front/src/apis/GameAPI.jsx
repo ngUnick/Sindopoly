@@ -5,6 +5,7 @@ import {
   decodeArrayPayload, decodeGameSnapshot, decodeInviteMetadata, decodeRecordPayload,
 } from "./transportDecoders";
 import { readJsonResponse } from "./transportError";
+import { buildStartGameRequest } from "./gameStartRequest.js";
 
 export const GameAPI = {
   // ✅ Create Game
@@ -24,10 +25,11 @@ export const GameAPI = {
   },
 
   // ✅ Start Game
-  startGame: async (gameId, playerId) => {
+  startGame: async (gameId, playerId, stateVersion) => {
+    const request = buildStartGameRequest(gameId, playerId, stateVersion);
     const res = await apiFetch(
-      `${API_BASE_URL}/api/game-state/${gameId}/start?playerId=${playerId}`,
-      { method: "POST", headers: commandHeaders(gameId) }
+      `${API_BASE_URL}${request.path}`,
+      request.options
     );
 
     return await readCommandResponse(res, gameId);

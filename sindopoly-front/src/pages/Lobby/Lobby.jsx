@@ -21,11 +21,13 @@ const Lobby = () => {
 
   const [players, setPlayers] = useState([]);
   const [inviteCode, setInviteCode] = useState(null); // ✅ new
+  const [stateVersion, setStateVersion] = useState(null);
   const isOwner = String(playerId) === String(gameId); // ✅ owner check logic
+  const canStart = isOwner && Number.isSafeInteger(stateVersion);
 
   const handleStartGame = async () => {
     try {
-      await GameAPI.startGame(gameId, playerId);
+      await GameAPI.startGame(gameId, playerId, stateVersion);
       navigate(`/Game?game=${gameId}&player=${playerId}`);
     } catch (err) {
       console.error(err);
@@ -43,6 +45,7 @@ const Lobby = () => {
         id: player.playerId,
         nickname: player.nickname,
       })));
+      setStateVersion(snapshot.stateVersion);
       if (visibility === 'private') setInviteCode(snapshot.inviteCode ?? null);
   };
 
@@ -136,7 +139,7 @@ const Lobby = () => {
         </p>
 
         <div className="flex justify-center gap-3">
-          <Button type="primary" disabled={!isOwner} onClick={handleStartGame}>{LOBBY_CONTENT.start}</Button>
+          <Button type="primary" disabled={!canStart} onClick={handleStartGame}>{LOBBY_CONTENT.start}</Button>
           <Button type="primary" danger onClick={handleLeaveGame}>{LOBBY_CONTENT.leave}</Button>
         </div>
       </div>
