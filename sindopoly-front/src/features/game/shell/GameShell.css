@@ -99,14 +99,28 @@
   }
 }
 
+@media (min-width: 761px) {
+  .game-shell {
+    /* The header, board, and action tray share one desktop viewport frame. */
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+  }
+
+  .game-shell__layout {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .game-live-board-region,
+  .game-live-board {
+    min-height: 0;
+  }
+}
+
 @media (min-width: 761px) and (max-width: 1100px) {
   .game-shell {
     --game-shell-inset: var(--space-3);
     --game-shell-gap: var(--space-2);
-
-    height: 100vh;
-    height: 100dvh;
-    min-height: 0;
   }
 
   .game-shell__layout,
@@ -133,10 +147,6 @@
     margin-left: 0;
   }
 
-  .game-live-board-region,
-  .game-live-board {
-    min-height: 0;
-  }
 }
 
 @media (max-width: 760px) {

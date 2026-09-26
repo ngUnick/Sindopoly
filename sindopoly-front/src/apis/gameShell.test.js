@@ -87,12 +87,28 @@ test("responsive contract defines laptop from 1101px through 1500px", () => {
   );
 });
 
+test("responsive contract fixes the desktop and tablet shell to the viewport", () => {
+  const desktopFrameStart = styles.indexOf("@media (min-width: 761px) {");
+  const tabletFrameStart = styles.indexOf(
+    "@media (min-width: 761px) and (max-width: 1100px)",
+  );
+  const desktopFrame = styles.slice(desktopFrameStart, tabletFrameStart);
+
+  assert.ok(desktopFrameStart >= 0);
+  assert.match(desktopFrame, /height: 100vh;\s+height: 100dvh;\s+min-height: 0;/);
+  assert.match(desktopFrame, /grid-template-rows: minmax\(0, 1fr\)/);
+  assert.match(
+    desktopFrame,
+    /\.game-live-board-region,\s+\.game-live-board\s+\{\s+min-height: 0;/,
+  );
+});
+
 test("responsive contract defines tablet from 761px through 1100px", () => {
   assert.match(
     styles,
     /@media \(min-width: 761px\) and \(max-width: 1100px\)/,
   );
-  assert.match(styles, /height: 100vh;\s+height: 100dvh;\s+min-height: 0;/);
+  assert.match(styles, /grid-template-rows: auto minmax\(0, 1fr\)/);
 });
 
 test("responsive contract defines phone at 760px", () => {
