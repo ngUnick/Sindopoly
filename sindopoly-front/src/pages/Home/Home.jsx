@@ -1,44 +1,42 @@
-import monopoly_logo from "../../assets/images/monopoly_logo.png";
 import {
-  Button,
-  ConfigProvider,
   Avatar,
+  Button,
   Modal,
   Radio,
-  message,
   Tooltip,
+  message,
 } from "antd";
 import {
+  BarChartOutlined,
+  LogoutOutlined,
+  PlayCircleOutlined,
+  PlusOutlined,
+  SearchOutlined,
   UserOutlined,
-  LogoutOutlined,      // ⬅️ icon
 } from "@ant-design/icons";
-import { useEffect, useState } from "react";
-import { useContext } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { GameAPI } from "../../apis/GameAPI";
 import { AuthAPI } from "../../apis/AuthAPI";
+import { GameAPI } from "../../apis/GameAPI";
 import { continueGameRoute } from "../../apis/currentGame";
-import bgImg from "../../assets/images/monopoly_bg.png";
 import AuthContext from "../../AuthContext/AuthContext";
 import {
   HOME_CONTENT,
   contentForTransportError,
 } from "../../features/game/content/el.js";
+import PregameShell from "../../features/pregame/PregameShell.jsx";
 
 function Home() {
   const navigate = useNavigate();
   const { logout, currentPlayer } = useContext(AuthContext);
-
-  /* -------------------------- state -------------------------- */
   const [currentGameState, setCurrentGameState] = useState({ status: "loading", game: null });
   const [isModalOpen, setModalOpen] = useState(false);
   const [visibility, setVisibility] = useState("public");
 
-  const nickname = currentPlayer?.nickname || "Guest";
+  const nickname = currentPlayer?.nickname || "Επισκέπτης";
   const playerId = currentPlayer?.id;
 
-  /* ---------------------- helpers ---------------------------- */
-  const fetchCurrentGame = async () => {
+  const fetchCurrentGame = useCallback(async () => {
     setCurrentGameState({ status: "loading", game: null });
     try {
       const game = await AuthAPI.getCurrentGame();
@@ -52,10 +50,9 @@ function Home() {
       setCurrentGameState({ status: "error", game: null });
       message.error(contentForTransportError(error).message);
     }
-  };
+  }, [logout]);
 
-  /* run once */
-  useEffect(() => { void fetchCurrentGame(); }, []);
+  useEffect(() => { void fetchCurrentGame(); }, [fetchCurrentGame]);
 
   const handleContinueGame = () => {
     const route = continueGameRoute(currentGameState.game, playerId);
@@ -67,11 +64,10 @@ function Home() {
     navigate(route);
   };
 
-  /* create-game flow */
   const handleCreateGame = async () => {
     try {
-      const res     = await GameAPI.createGame(visibility);
-      const gameId  = res.gameId ?? res.id ?? res.game_id;
+      const res = await GameAPI.createGame(visibility);
+      const gameId = res.gameId ?? res.id ?? res.game_id;
       navigate(`/lobby?game_id=${gameId}&visibility=${visibility}`);
     } catch (error) {
       console.error(error);
@@ -79,91 +75,104 @@ function Home() {
     }
   };
 
-  /* leave / change nickname */
-  const handleLeave = async () => {
-    await logout();
-  };
-
-  /* ------------------------ UI ------------------------------- */
   return (
-    <div className="flex-grow flex justify-center items-center bg-cover bg-no-repeat" style={{ backgroundImage: `url(${bgImg})` }}>
-      {/* vignette */}
-      <div className="fixed w-full h-full shadow-[0_0_80px_rgba(255,255,255,0.7)_inset] left-0 top-0" />
+    <>
+      <PregameShell
+        variant="wide"
+        title={`${HOME_CONTENT.welcome}, ${nickname}`}
+        description={HOME_CONTENT.chooseNextStep}
+      >
+        {currentGameState.status === "ready" ? (
+          <div className="pregame-actions">
+            <Button
+              type="primary"
+              size="large"
+              className="pregame-primary"
+              icon={<PlayCircleOutlined />}
+              onClick={handleContinueGame}
+            >
+              {HOME_CONTENT.continueGame}
+            </Button>
+          </div>
+        ) : currentGameState.status === "loading" ? (
+          <div className="pregame-status" role="status" aria-live="polite">
+            <p>{HOME_CONTENT.checkingCurrentGame}</p>
+          </div>
+        ) : currentGameState.status === "error" ? (
+          <div className="pregame-status" role="alert">
+            <p>{HOME_CONTENT.currentGameUnavailable}</p>
+            <Button className="pregame-utility" onClick={fetchCurrentGame}>
+              {HOME_CONTENT.retry}
+            </Button>
+          </div>
+        ) : (
+          <div className="pregame-actions">
+            <Button
+              type="primary"
+              size="large"
+              className="pregame-primary"
+              icon={<PlusOutlined />}
+              onClick={() => setModalOpen(true)}
+            >
+              {HOME_CONTENT.createGame}
+            </Button>
+            <div className="pregame-actions pregame-actions--secondary">
+              <Button
+                className="pregame-secondary"
+                icon={<SearchOutlined />}
+                onClick={() => navigate("/searchGame")}
+              >
+                {HOME_CONTENT.joinGame}
+              </Button>
+              <Button
+                className="pregame-secondary"
+                icon={<BarChartOutlined />}
+                onClick={() => navigate("/statistics")}
+              >
+                {HOME_CONTENT.statistics}
+              </Button>
+            </div>
+          </div>
+        )}
 
-      <div className="relative bg-[rgba(255,236,195,0.8)] pt-[50px] pb-[20px] px-5
-                      backdrop-blur-sm border-solid border-[rgba(255,255,255,0.6)] rounded-md">
-        <div className="w-[800px] flex flex-col gap-5">
-          <img src={monopoly_logo} alt="logo" />
-          <ConfigProvider theme={{ token: { colorPrimary: "#cf971c" } }}>
-            {currentGameState.status === "ready" ? (
-              <div className="flex flex-col items-center gap-5">
-                <Button
-                  type="primary"
-                  onClick={handleContinueGame}
-                >
-                  {HOME_CONTENT.continueGame}
-                </Button>
-              </div>
-            ) : currentGameState.status === "loading" ? (
-              <div className="flex flex-col items-center gap-5">
-                <Button type="primary" disabled>{HOME_CONTENT.checkingCurrentGame}</Button>
-              </div>
-            ) : currentGameState.status === "error" ? (
-              <div className="flex flex-col items-center gap-5">
-                <Button type="primary" disabled>{HOME_CONTENT.currentGameUnavailable}</Button>
-                <Button type="primary" onClick={fetchCurrentGame}>{HOME_CONTENT.retry}</Button>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-5">
-                <Button type="primary" onClick={() => setModalOpen(true)}>
-                  {HOME_CONTENT.createGame}
-                </Button>
-                <Button type="primary" onClick={() => navigate("/searchGame")}>
-                  {HOME_CONTENT.joinGame}
-                </Button>
-                <Button type="primary" onClick={() => navigate("/statistics")}>
-                  {HOME_CONTENT.statistics}
-                </Button>
-              </div>
-            )}
-          </ConfigProvider>
-        </div>
-
-        {/* nickname + leave icon */}
-        <div className="absolute bottom-3 right-5 flex items-center gap-2 text-gray-800 text-sm">
+        <div className="pregame-account">
           <Avatar size="small" icon={<UserOutlined />} />
-          <span className="font-medium">{nickname}</span>
-
+          <span className="pregame-account__name">{nickname}</span>
           <Tooltip title={HOME_CONTENT.leaveChangeNickname}>
             <Button
               type="text"
-              size="small"
+              className="pregame-utility"
               icon={<LogoutOutlined />}
-              onClick={handleLeave}
-              style={{ color: "white", backgroundColor: "red", hover: { color: "white", backgroundColor: "#ff4d4f" }, fontWeight: "bold" }}
+              aria-label={HOME_CONTENT.leaveChangeNickname}
+              onClick={logout}
             />
           </Tooltip>
         </div>
-      </div>
+      </PregameShell>
 
-      {/* create-game modal */}
       <Modal
+        centered
+        width={440}
+        rootClassName="pregame-modal"
         title={HOME_CONTENT.createNewGame}
         open={isModalOpen}
         onOk={handleCreateGame}
         onCancel={() => setModalOpen(false)}
         okText={HOME_CONTENT.create}
-        centered
+        cancelText={HOME_CONTENT.cancel}
       >
+        <p>{HOME_CONTENT.visibilityPrompt}</p>
         <Radio.Group
-          onChange={(e) => setVisibility(e.target.value)}
+          className="pregame-visibility-options"
+          aria-label={HOME_CONTENT.visibilityPrompt}
+          onChange={(event) => setVisibility(event.target.value)}
           value={visibility}
         >
           <Radio value="public">{HOME_CONTENT.public}</Radio>
           <Radio value="private">{HOME_CONTENT.private}</Radio>
         </Radio.Group>
       </Modal>
-    </div>
+    </>
   );
 }
 

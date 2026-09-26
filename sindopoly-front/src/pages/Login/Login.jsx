@@ -1,13 +1,12 @@
-import { useState, useEffect, useRef, useContext } from "react";
-import { Button, Modal, Input, message } from "antd";
-import monopoly_logo from "../../assets/images/monopoly_logo.png";
+import { useContext, useEffect, useRef, useState } from "react";
+import { Button, Input, Modal, message } from "antd";
 import { useNavigate } from "react-router-dom";
-import { validateNickname } from "../../features/player/nicknamePolicy.js";
-import bgImg from "../../assets/images/monopoly_bg.png";
-import AuthContext from "../../AuthContext/AuthContext";
 import { AuthAPI } from "../../apis/AuthAPI";
 import { apiFetch, clearCsrfToken } from "../../apis/apiClient";
+import AuthContext from "../../AuthContext/AuthContext";
 import { LOGIN_CONTENT } from "../../features/game/content/el.js";
+import PregameShell from "../../features/pregame/PregameShell.jsx";
+import { validateNickname } from "../../features/player/nicknamePolicy.js";
 
 const Login = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -18,20 +17,8 @@ const Login = () => {
   const { login, currentPlayer, loading: sessionLoading } = useContext(AuthContext);
 
   useEffect(() => {
-    if (isModalOpen && inputRef.current) {
-      setTimeout(() => inputRef.current.focus(), 50);
-    }
-  }, [isModalOpen]);
-
-  useEffect(() => {
-    if (!sessionLoading && currentPlayer) {
-      navigate("/", { replace: true });
-    }
+    if (!sessionLoading && currentPlayer) navigate("/", { replace: true });
   }, [currentPlayer, navigate, sessionLoading]);
-
-  const handleStartClick = () => {
-    setIsModalOpen(true);
-  };
 
   const isNicknameValid = (name) => {
     const result = validateNickname(name);
@@ -68,7 +55,7 @@ const Login = () => {
       if (currentPlayer.id !== playerId) throw new Error("Session identity mismatch");
       login(currentPlayer);
       sessionStorage.setItem("nickname", currentPlayer.nickname);
-      hide(); // hide loading
+      hide();
       setLoading(false);
       navigate("/");
     } catch (err) {
@@ -79,43 +66,52 @@ const Login = () => {
     }
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
-      handleOk();
-    }
+  const handleKeyDown = (event) => {
+    if (event.key === "Enter") handleOk();
   };
 
   return (
-    <div className="flex-grow flex justify-center items-center bg-cover bg-no-repeat" style={{ backgroundImage: `url(${bgImg})` }}>
-      <div className="fixed w-full h-full shadow-[0_0_80px_rgba(255,255,255,0.7)_inset] left-0 top-0"></div>
-      <div className="bg-[rgba(255,236,195,0.8)] pt-[50px] pb-[20px] px-5 backdrop-blur-sm border-solid border-[rgba(255,255,255,0.6)] rounded-md">
-        <div className="w-[800px] flex flex-col gap-5 items-center pb-5">
-          <img src={monopoly_logo} alt="logo" className="mb-5" />
-          <Button type="primary" onClick={handleStartClick} className="px-5">
+    <>
+      <PregameShell title={LOGIN_CONTENT.title} description={LOGIN_CONTENT.description}>
+        <div className="pregame-actions">
+          <Button
+            type="primary"
+            size="large"
+            className="pregame-primary"
+            onClick={() => setIsModalOpen(true)}
+          >
             {LOGIN_CONTENT.start}
           </Button>
         </div>
-      </div>
+      </PregameShell>
 
       <Modal
         centered
-        width={400}
+        width={440}
+        rootClassName="pregame-modal"
         title={LOGIN_CONTENT.chooseNickname}
         open={isModalOpen}
         onOk={handleOk}
         onCancel={() => setIsModalOpen(false)}
+        afterOpenChange={open => open && inputRef.current?.focus()}
         okText={LOGIN_CONTENT.continue}
+        cancelText={LOGIN_CONTENT.cancel}
         confirmLoading={loading}
+        cancelButtonProps={{ disabled: loading }}
       >
         <Input
           ref={inputRef}
+          autoFocus
+          size="large"
+          aria-label={LOGIN_CONTENT.nicknamePlaceholder}
           placeholder={LOGIN_CONTENT.nicknamePlaceholder}
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
           onKeyDown={handleKeyDown}
+          autoComplete="nickname"
         />
       </Modal>
-    </div>
+    </>
   );
 };
 

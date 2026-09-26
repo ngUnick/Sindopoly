@@ -49,12 +49,16 @@ export function contentForTransportError(error) {
 }
 
 export const HOME_CONTENT = Object.freeze({
+  welcome: "Καλώς ήρθες",
+  chooseNextStep: "Διάλεξε πώς θέλεις να συνεχίσεις στο Sindopoly.",
   createGame: "Δημιουργία παιχνιδιού",
   joinGame: "Συμμετοχή σε παιχνίδι",
   statistics: "Στατιστικά",
   leaveChangeNickname: "Έξοδος και αλλαγή ψευδωνύμου",
   createNewGame: "Δημιουργία νέου παιχνιδιού",
   create: "Δημιουργία",
+  cancel: "Ακύρωση",
+  visibilityPrompt: "Επίλεξε ποιοι θα μπορούν να βρουν το νέο παιχνίδι.",
   public: "Δημόσιο",
   private: "Ιδιωτικό",
   continueGame: "Συνέχεια παιχνιδιού",
@@ -65,9 +69,12 @@ export const HOME_CONTENT = Object.freeze({
 });
 
 export const LOGIN_CONTENT = Object.freeze({
+  title: "Το παιχνίδι της πανεπιστημιούπολης",
+  description: "Μπες στον κόσμο του Sindopoly και ξεκίνησε τη δική σου παρτίδα.",
   start: "Έναρξη",
   chooseNickname: "Επίλεξε ψευδώνυμο",
   continue: "Συνέχεια",
+  cancel: "Ακύρωση",
   nicknamePlaceholder: "Πληκτρολόγησε το ψευδώνυμό σου",
   nicknameMin: "Το ψευδώνυμο πρέπει να έχει τουλάχιστον 2 χαρακτήρες.",
   nicknameMax: "Το ψευδώνυμο δεν μπορεί να ξεπερνά τους 15 χαρακτήρες.",

@@ -1,0 +1,301 @@
+.pregame-shell {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(var(--space-4), 4vw, var(--space-7));
+  color: var(--color-text-primary);
+  background-image: url("../../assets/images/monopoly_bg.png");
+  background-position: center;
+  background-size: cover;
+}
+
+.pregame-shell,
+.pregame-shell *,
+.pregame-modal,
+.pregame-modal * {
+  font-family: var(--font-family-interface);
+}
+
+.pregame-shell__scrim {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 42%, transparent 0 12%, var(--color-scrim-background-wide) 100%),
+    linear-gradient(var(--color-scrim-background-wide), var(--color-scrim-background-wide));
+}
+
+.pregame-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: min(100%, 34rem);
+  padding: clamp(var(--space-5), 4vw, var(--space-6));
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-structural);
+  border-radius: var(--radius-major);
+  box-shadow: var(--shadow-high);
+}
+
+.pregame-panel--wide {
+  width: min(100%, 48rem);
+}
+
+.pregame-panel__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: center;
+}
+
+.pregame-panel__logo {
+  display: block;
+  width: clamp(12rem, 28vw, 18rem);
+  max-width: 100%;
+  height: auto;
+}
+
+.pregame-panel__copy {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 38rem;
+}
+
+.pregame-panel__copy h1 {
+  color: var(--color-text-primary);
+  font-size: clamp(var(--font-size-xl), 4vw, var(--font-size-display));
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-compact);
+}
+
+.pregame-panel__copy p {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-relaxed);
+}
+
+.pregame-actions {
+  display: grid;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.pregame-actions--secondary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pregame-primary.ant-btn,
+.pregame-secondary.ant-btn,
+.pregame-utility.ant-btn {
+  min-height: var(--control-min-height);
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  transition:
+    color var(--motion-duration-short) var(--motion-easing-standard),
+    background-color var(--motion-duration-short) var(--motion-easing-standard),
+    border-color var(--motion-duration-short) var(--motion-easing-standard),
+    transform var(--motion-duration-instant) var(--motion-easing-standard);
+}
+
+.pregame-primary.ant-btn {
+  min-height: 3.25rem;
+  color: var(--color-text-inverse);
+  background: var(--color-action-primary);
+  border-color: var(--color-action-primary);
+  box-shadow: var(--shadow-low);
+}
+
+.pregame-primary.ant-btn:not(:disabled):hover {
+  color: var(--color-text-inverse) !important;
+  background: var(--color-action-primary-hover) !important;
+  border-color: var(--color-action-primary-hover) !important;
+}
+
+.pregame-primary.ant-btn:not(:disabled):active {
+  color: var(--color-text-inverse) !important;
+  background: var(--color-action-primary-active) !important;
+  transform: translateY(1px);
+}
+
+.pregame-secondary.ant-btn {
+  justify-content: flex-start;
+  min-height: 4rem;
+  padding-inline: var(--space-4);
+  color: var(--color-text-primary);
+  background: var(--color-surface-elevated);
+  border-color: var(--color-border-structural);
+  box-shadow: none;
+}
+
+.pregame-secondary.ant-btn:not(:disabled):hover {
+  color: var(--color-action-primary) !important;
+  background: var(--color-surface-hover) !important;
+  border-color: var(--color-action-primary) !important;
+}
+
+.pregame-status {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  color: var(--color-text-secondary);
+  text-align: center;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-structural);
+  border-radius: var(--radius-panel);
+}
+
+.pregame-status .ant-btn {
+  justify-self: center;
+}
+
+.pregame-account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-top: var(--space-4);
+  color: var(--color-text-secondary);
+  border-top: 1px solid var(--color-border-structural);
+}
+
+.pregame-account__name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pregame-account .pregame-utility.ant-btn {
+  margin-left: auto;
+  color: var(--color-action-destructive);
+  background: transparent;
+  border-color: transparent;
+}
+
+.pregame-account .pregame-utility.ant-btn:hover {
+  color: var(--color-text-inverse) !important;
+  background: var(--color-action-destructive) !important;
+}
+
+.pregame-modal .ant-modal {
+  max-width: calc(100vw - (2 * var(--space-4)));
+}
+
+.pregame-modal .ant-modal-content {
+  padding: var(--space-5);
+  color: var(--color-text-primary);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-structural);
+  border-radius: var(--radius-major);
+  box-shadow: var(--shadow-high);
+}
+
+.pregame-modal .ant-modal-header {
+  margin-bottom: var(--space-4);
+  background: transparent;
+}
+
+.pregame-modal .ant-modal-title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+}
+
+.pregame-modal .ant-modal-body {
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-default);
+}
+
+.pregame-modal .ant-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.pregame-modal .ant-input {
+  min-height: var(--control-min-height);
+  color: var(--color-text-primary);
+  background: var(--color-surface-elevated);
+  border-color: var(--color-border-control);
+  border-radius: var(--radius-control);
+}
+
+.pregame-modal .ant-input:hover,
+.pregame-modal .ant-input:focus {
+  border-color: var(--color-action-primary);
+}
+
+.pregame-modal .ant-btn-primary {
+  color: var(--color-text-inverse);
+  background: var(--color-action-primary);
+  border-color: var(--color-action-primary);
+}
+
+.pregame-modal .ant-btn-primary:not(:disabled):hover {
+  color: var(--color-text-inverse) !important;
+  background: var(--color-action-primary-hover) !important;
+  border-color: var(--color-action-primary-hover) !important;
+}
+
+.pregame-modal .ant-btn-default {
+  color: var(--color-text-secondary);
+  background: transparent;
+  border-color: var(--color-border-control);
+}
+
+.pregame-modal .ant-radio-group {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+@media (max-width: 520px) {
+  .pregame-shell {
+    align-items: start;
+    padding: var(--space-4);
+  }
+
+  .pregame-panel {
+    gap: var(--space-4);
+    padding: var(--space-5) var(--space-4);
+  }
+
+  .pregame-panel__logo {
+    width: min(13rem, 72vw);
+  }
+
+  .pregame-actions--secondary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pregame-secondary.ant-btn {
+    min-height: 3.5rem;
+  }
+
+  .pregame-modal .ant-modal {
+    width: calc(100% - (2 * var(--space-4))) !important;
+    margin: var(--space-4) auto;
+  }
+
+  .pregame-modal .ant-modal-content {
+    padding: var(--space-4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pregame-primary.ant-btn,
+  .pregame-secondary.ant-btn,
+  .pregame-utility.ant-btn {
+    transition-duration: var(--motion-duration-reduced);
+  }
+}
