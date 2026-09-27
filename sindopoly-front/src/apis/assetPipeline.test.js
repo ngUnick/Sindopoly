@@ -14,7 +14,7 @@ test("asset manifest validates every board, dice and pawn GLB within budgets", a
   const report = JSON.parse(stdout);
   assert.equal(report.schemaVersion, 1);
   assert.equal(report.frameBudgetMs, 16.67);
-  assert.equal(report.assets.length, 10);
+  assert.equal(report.assets.length, 6);
   assert.deepEqual(
     report.assets.filter(asset => asset.id.startsWith("pawn-") && asset.maxTriangles === 3000)
       .map(asset => asset.id),

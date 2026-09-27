@@ -19,38 +19,6 @@
       "maxTriangles": 50000
     },
     {
-      "id": "pawn-iron",
-      "path": "src/assets/models/pawns/Iron.glb",
-      "kind": "pawn",
-      "provenance": "Existing Sindopoly repository asset; source/license metadata requires product-owner confirmation.",
-      "maxBytes": 100000,
-      "maxTriangles": 50000
-    },
-    {
-      "id": "pawn-thimble",
-      "path": "src/assets/models/pawns/Thimble.glb",
-      "kind": "pawn",
-      "provenance": "Existing Sindopoly repository asset; source/license metadata requires product-owner confirmation.",
-      "maxBytes": 100000,
-      "maxTriangles": 50000
-    },
-    {
-      "id": "pawn-top-hat",
-      "path": "src/assets/models/pawns/TopHat.glb",
-      "kind": "pawn",
-      "provenance": "Existing Sindopoly repository asset; source/license metadata requires product-owner confirmation.",
-      "maxBytes": 100000,
-      "maxTriangles": 50000
-    },
-    {
-      "id": "pawn-wheelbarrow",
-      "path": "src/assets/models/pawns/WheelBarrow.glb",
-      "kind": "pawn",
-      "provenance": "Existing Sindopoly repository asset; source/license metadata requires product-owner confirmation.",
-      "maxBytes": 100000,
-      "maxTriangles": 50000
-    },
-    {
       "id": "pawn-backpack",
       "path": "src/assets/models/pawns/Backpack.glb",
       "kind": "pawn",

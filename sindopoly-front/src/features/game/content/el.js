@@ -163,8 +163,6 @@ export const GAMEPLAY_CONTENT = Object.freeze({
   chanceCard: "ΚΑΡΤΑ ΕΝΤΟΛΗΣ",
   communityCard: "ΚΑΡΤΑ ΑΠΟΦΑΣΗΣ",
   genericCard: "ΚΑΡΤΑ",
-  confirm: "Ναι",
-  decline: "Όχι",
   acknowledge: "Εντάξει",
   board: "Ταμπλό",
   boardMetadataUnavailable: "Τα στοιχεία του ταμπλό δεν είναι διαθέσιμα.",
@@ -232,7 +230,6 @@ export const ACCESSIBILITY_CONTENT = Object.freeze({
   closeCard: "Κλείσιμο κάρτας",
   closeNotification: "Κλείσιμο ειδοποίησης",
   resetCamera: "Επαναφορά κάμερας",
-  turnResultDialog: "Αποτέλεσμα γύρου",
   returnToAction: "Επιστροφή στη δράση",
   refreshConnection: "Ανανέωση σύνδεσης",
 });

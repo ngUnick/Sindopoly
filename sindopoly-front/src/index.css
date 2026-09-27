@@ -2,10 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --disabled-item: rgb(179, 179, 179);
-}
-
 * {
   padding: 0;
   margin: 0;
@@ -31,8 +27,4 @@
 .ant-btn:hover {
   color: rgb(0, 0, 0) !important;
   background-color: rgba(240, 169, 16, 0.842) !important;
-}
-
-.animated-box {
-  border: 3px solid black !important;
 }
