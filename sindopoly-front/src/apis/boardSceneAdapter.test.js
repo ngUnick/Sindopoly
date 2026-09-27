@@ -4,6 +4,7 @@ import test from "node:test";
 import * as THREE from "three";
 import {
   BOARD_SURFACE_Y,
+  BOARD_ARTWORK_EMISSIVE_INTENSITY,
   BoardSceneAdapter,
   CAMERA_ZOOM_BOUNDS,
   DEFAULT_CAMERA_STATE,
@@ -13,6 +14,7 @@ import {
   PAWN_MOVEMENT_TIMING,
   disposeObjectGraph,
   disposeObjectGraphs,
+  calibrateBoardArtworkMaterials,
 } from "../features/game/board/BoardSceneAdapter.js";
 import { PAWN_SLOT_ASSETS } from "../features/game/board/pawnAssets.js";
 import { getPawnAnchor } from "../features/game/board/boardCalibration.js";
@@ -337,6 +339,51 @@ test("all six calibrated Dice.glb face rotations settle both dice deterministica
       assertDiceAboveBoard(die);
     }
   }
+});
+
+test("board artwork receives an isolated low emissive lift without changing PBR, texture color space or shadows", () => {
+  const root = new THREE.Group();
+  const sharedArtwork = new THREE.MeshStandardMaterial({
+    name: "01_-_Default",
+    color: 0xffffff,
+    map: new THREE.Texture(),
+    normalMap: new THREE.Texture(),
+    roughness: 0.8929713368415833,
+    metalness: 0,
+  });
+  sharedArtwork.map.colorSpace = THREE.SRGBColorSpace;
+  const border = new THREE.MeshStandardMaterial({ name: "02_-_Default", color: 0x000000 });
+  const first = new THREE.Mesh(new THREE.PlaneGeometry(), sharedArtwork);
+  const second = new THREE.Mesh(new THREE.PlaneGeometry(), sharedArtwork);
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(), border);
+  root.add(first, second, edge);
+
+  const calibrated = calibrateBoardArtworkMaterials(root);
+  const artwork = first.material;
+
+  assert.equal(calibrated.size, 1);
+  assert.ok(artwork.isMeshStandardMaterial);
+  assert.notEqual(artwork, sharedArtwork, "runtime calibration cannot mutate a shared source material");
+  assert.equal(second.material, artwork, "multiple artwork meshes share one owned calibrated clone");
+  assert.equal(edge.material, border, "untextured board trim remains physically lit only");
+  assert.equal(artwork.map, sharedArtwork.map, "no duplicate texture is allocated");
+  assert.equal(artwork.map.colorSpace, THREE.SRGBColorSpace);
+  assert.equal(artwork.normalMap, sharedArtwork.normalMap);
+  assert.equal(artwork.roughness, sharedArtwork.roughness);
+  assert.equal(artwork.metalness, sharedArtwork.metalness);
+  assert.equal(artwork.emissive.getHexString(), "ffffff");
+  assert.equal(artwork.emissiveMap, artwork.map);
+  assert.equal(artwork.emissiveIntensity, BOARD_ARTWORK_EMISSIVE_INTENSITY);
+  assert.equal(sharedArtwork.emissiveIntensity, 1, "source material remains untouched");
+  assert.equal(first.castShadow, false);
+  first.receiveShadow = true;
+  assert.equal(first.receiveShadow, true, "material lift does not alter board shadow reception");
+
+  const artworkDispose = spyDispose(artwork);
+  const artworkMapDispose = spyDispose(artwork.map);
+  disposeObjectGraph(root);
+  assert.equal(artworkDispose.count, 1, "the isolated material is released with its board graph");
+  assert.equal(artworkMapDispose.count, 1, "the reused artwork texture is released once");
 });
 
 test("dice geometry stays above the board through anticipation, roll, both impacts and rest", () => {

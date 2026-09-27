@@ -38,6 +38,8 @@ const DICE_CAMERA_RESTORE_AT_MS = DICE_PRESENTATION_TIMING.anticipationMs
   + DICE_PRESENTATION_TIMING.settleMs
   + DICE_PRESENTATION_TIMING.cameraRestoreDelayMs;
 const DICE_VISUAL_SCALE = 11.5;
+// A restrained printed-ink lift: the board still receives directional light and shadows.
+export const BOARD_ARTWORK_EMISSIVE_INTENSITY = 0.32;
 // The board artwork lies on source Z=5 after the authored board transform and 0.035 runtime scale.
 export const BOARD_SURFACE_Y = 0.043653335571289066;
 export const DICE_SURFACE_CLEARANCE = 0.03;
@@ -260,6 +262,7 @@ export class BoardSceneAdapter {
           return;
         }
         const board = gltf.scene.clone();
+        calibrateBoardArtworkMaterials(board);
         board.scale.set(0.035, 0.035, 0.035);
         board.position.set(0, 0, 0);
         board.rotation.set(0, Math.PI / 2, 0);
@@ -1163,6 +1166,38 @@ function setShadowParticipation(root, { castShadow, receiveShadow }) {
     object.castShadow = castShadow;
     object.receiveShadow = receiveShadow;
   });
+}
+
+/**
+ * Isolates the board artwork material before adding a small self-lit component.
+ * The GLB artwork is otherwise a very rough, normal-mapped PBR surface, which
+ * makes its printed whites appear muted at the normal overview camera. Reusing
+ * the existing sRGB base-color texture as the emissive map preserves the ink
+ * detail while still allowing the tabletop to receive directional shadows.
+ */
+export function calibrateBoardArtworkMaterials(root) {
+  const calibrated = new Map();
+  root?.traverse?.(object => {
+    if (!object.isMesh) return;
+    object.material = calibrateBoardMaterial(object.material, calibrated);
+  });
+  return calibrated;
+}
+
+function calibrateBoardMaterial(material, calibrated) {
+  if (Array.isArray(material)) {
+    return material.map(entry => calibrateBoardMaterial(entry, calibrated));
+  }
+  if (!material?.isMeshStandardMaterial || !material.map?.isTexture) return material;
+  if (!calibrated.has(material)) {
+    const artwork = material.clone();
+    artwork.emissive.set(0xffffff);
+    artwork.emissiveMap = artwork.map;
+    artwork.emissiveIntensity = BOARD_ARTWORK_EMISSIVE_INTENSITY;
+    artwork.needsUpdate = true;
+    calibrated.set(material, artwork);
+  }
+  return calibrated.get(material);
 }
 
 function replaceAccentMaterials(material, accents, accentColor) {
