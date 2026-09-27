@@ -131,28 +131,66 @@
 
 .endgame-celebration {
   position: absolute;
+  z-index: 0;
   inset: 0;
   pointer-events: none;
 }
 
-.endgame-spark {
-  position: absolute;
-  width: 0.4rem;
-  height: 0.4rem;
-  background: var(--color-active-player-border);
-  border-radius: 50%;
-  opacity: 0;
-  animation: endgame-spark 820ms var(--motion-easing-standard) both;
+.endgame-winner > :not(.endgame-celebration) {
+  position: relative;
+  z-index: 1;
 }
 
-.endgame-spark--1 { top: 22%; left: 10%; animation-delay: 80ms; }
-.endgame-spark--2 { top: 52%; left: 16%; animation-delay: 180ms; }
-.endgame-spark--3 { top: 18%; left: 27%; animation-delay: 260ms; }
-.endgame-spark--4 { top: 65%; left: 31%; animation-delay: 120ms; }
-.endgame-spark--5 { top: 20%; right: 12%; animation-delay: 220ms; }
-.endgame-spark--6 { top: 54%; right: 18%; animation-delay: 100ms; }
-.endgame-spark--7 { top: 16%; right: 31%; animation-delay: 300ms; }
-.endgame-spark--8 { top: 68%; right: 29%; animation-delay: 200ms; }
+.endgame-firework {
+  position: absolute;
+  width: 0;
+  height: 0;
+  color: var(--color-active-player-border);
+}
+
+.endgame-firework--1 {
+  top: 26%;
+  left: 17%;
+}
+
+.endgame-firework--2 {
+  top: 23%;
+  right: 17%;
+  color: var(--color-player-1);
+}
+
+.endgame-firework--3 {
+  top: 60%;
+  left: 13%;
+  color: var(--color-player-2);
+  transform: scale(0.8);
+}
+
+.endgame-firework__ray {
+  position: absolute;
+  width: 0.42rem;
+  height: 0.42rem;
+  background: currentColor;
+  border-radius: 50%;
+  opacity: 0;
+  box-shadow: 0 0 0.65rem currentColor;
+  animation: endgame-firework-ray 1.2s var(--motion-easing-standard) both;
+}
+
+.endgame-firework--1 .endgame-firework__ray { animation-delay: 0ms; }
+.endgame-firework--2 .endgame-firework__ray { animation-delay: 320ms; }
+.endgame-firework--3 .endgame-firework__ray { animation-delay: 700ms; }
+
+.endgame-firework__ray--1 { --firework-x: 0; --firework-y: -3.25rem; }
+.endgame-firework__ray--2 { --firework-x: 1.9rem; --firework-y: -2.65rem; }
+.endgame-firework__ray--3 { --firework-x: 3.05rem; --firework-y: -1rem; }
+.endgame-firework__ray--4 { --firework-x: 2.75rem; --firework-y: 1.45rem; }
+.endgame-firework__ray--5 { --firework-x: 1.15rem; --firework-y: 2.8rem; }
+.endgame-firework__ray--6 { --firework-x: -1.15rem; --firework-y: 2.8rem; }
+.endgame-firework__ray--7 { --firework-x: -2.75rem; --firework-y: 1.45rem; }
+.endgame-firework__ray--8 { --firework-x: -3.05rem; --firework-y: -1rem; }
+.endgame-firework__ray--9 { --firework-x: -1.9rem; --firework-y: -2.65rem; }
+.endgame-firework__ray--10 { --firework-x: 0; --firework-y: 3.25rem; }
 
 .endgame-standings {
   display: grid;
@@ -296,10 +334,11 @@
   to { opacity: 1; transform: scale(1) rotate(0); }
 }
 
-@keyframes endgame-spark {
-  0% { opacity: 0; transform: scale(0.4); }
-  35% { opacity: 0.85; transform: scale(1); }
-  100% { opacity: 0; transform: translateY(-0.75rem) scale(0.5); }
+@keyframes endgame-firework-ray {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+  14% { opacity: 0.95; }
+  78% { opacity: 0.7; transform: translate(calc(-50% + var(--firework-x)), calc(-50% + var(--firework-y))) scale(1); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--firework-x)), calc(-50% + var(--firework-y))) scale(0.55); }
 }
 
 @media (max-width: 40rem) {
@@ -310,6 +349,10 @@
 
   .endgame-winner {
     padding: var(--space-4);
+  }
+
+  .endgame-firework {
+    transform: scale(0.76);
   }
 
   .endgame-winner__summary {
@@ -425,11 +468,11 @@
 @media (prefers-reduced-motion: reduce) {
   .endgame-result,
   .endgame-winner__trophy,
-  .endgame-spark {
+  .endgame-firework__ray {
     animation: none;
   }
 
-  .endgame-spark {
+  .endgame-celebration {
     display: none;
   }
 }

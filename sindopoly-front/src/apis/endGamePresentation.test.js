@@ -60,7 +60,7 @@ test("four-player completion preserves long identities and authoritative ranking
   assert.equal(routeCompletion.winnerPlayerId, 101);
 });
 
-test("EndGame copy is Greek and celebration is finite, decorative, and reduced-motion safe", async () => {
+test("EndGame copy is Greek and fireworks are finite, decorative, and reduced-motion safe", async () => {
   const [source, css] = await Promise.all([
     readSource("pages/Game/EndGame.jsx"),
     readSource("pages/Game/EndGame.css"),
@@ -70,8 +70,13 @@ test("EndGame copy is Greek and celebration is finite, decorative, and reduced-m
   assert.match(END_GAME_CONTENT.finalStandings, /[Α-ω]/u);
   assert.match(END_GAME_CONTENT.returnHome, /[Α-ω]/u);
   assert.match(source, /className="endgame-celebration" aria-hidden="true"/);
+  assert.match(source, /const FIREWORK_BURSTS = 3/);
+  assert.match(source, /const FIREWORK_RAYS = 10/);
+  assert.match(source, /endgame-firework__ray/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(css, /\.endgame-spark\s*\{[\s\S]*?display: none;/);
+  assert.match(css, /\.endgame-celebration\s*\{[\s\S]*?display: none;/);
+  assert.match(css, /animation: endgame-firework-ray 1\.2s/);
+  assert.match(css, /animation-delay: 700ms/);
+  assert.match(css, /pointer-events: none/);
   assert.doesNotMatch(css, /animation[^;]*infinite/);
-  assert.doesNotMatch(source, /firework-/);
 });

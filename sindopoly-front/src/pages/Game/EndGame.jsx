@@ -6,7 +6,8 @@ import { END_GAME_CONTENT } from "../../features/game/content/el.js";
 import { readCompletionNavigationState } from "../../features/game/presentation/gameViewModel.js";
 import "./EndGame.css";
 
-const CELEBRATION_SPARKS = 8;
+const FIREWORK_BURSTS = 3;
+const FIREWORK_RAYS = 10;
 
 const EndGame = () => {
   const navigate = useNavigate();
@@ -27,8 +28,12 @@ const EndGame = () => {
           <>
             <section className="endgame-winner" aria-labelledby="endgame-winner-name">
               <div className="endgame-celebration" aria-hidden="true">
-                {Array.from({ length: CELEBRATION_SPARKS }, (_, index) => (
-                  <span key={index} className={`endgame-spark endgame-spark--${index + 1}`} />
+                {Array.from({ length: FIREWORK_BURSTS }, (_, burstIndex) => (
+                  <span key={burstIndex} className={`endgame-firework endgame-firework--${burstIndex + 1}`}>
+                    {Array.from({ length: FIREWORK_RAYS }, (_, rayIndex) => (
+                      <span key={rayIndex} className={`endgame-firework__ray endgame-firework__ray--${rayIndex + 1}`} />
+                    ))}
+                  </span>
                 ))}
               </div>
               <div className="endgame-winner__trophy" aria-hidden="true">
