@@ -361,6 +361,7 @@ test("board artwork corrects the GLB metallic default without changing color spa
   const calibrated = calibrateBoardArtworkMaterials(root);
   const artwork = first.material;
 
+  assert.equal(BOARD_ARTWORK_COLOR_MULTIPLIER, 0.82, "the final board-only lift stays deliberately conservative");
   assert.equal(calibrated.size, 1);
   assert.ok(artwork.isMeshStandardMaterial);
   assert.notEqual(artwork, sharedArtwork, "runtime calibration cannot mutate a shared source material");
