@@ -38,8 +38,7 @@ const DICE_CAMERA_RESTORE_AT_MS = DICE_PRESENTATION_TIMING.anticipationMs
   + DICE_PRESENTATION_TIMING.settleMs
   + DICE_PRESENTATION_TIMING.cameraRestoreDelayMs;
 const DICE_VISUAL_SCALE = 11.5;
-// A restrained printed-ink lift: the board still receives directional light and shadows.
-export const BOARD_ARTWORK_EMISSIVE_INTENSITY = 0.32;
+export const BOARD_ARTWORK_COLOR_MULTIPLIER = 0.72;
 // The board artwork lies on source Z=5 after the authored board transform and 0.035 runtime scale.
 export const BOARD_SURFACE_Y = 0.043653335571289066;
 export const DICE_SURFACE_CLEARANCE = 0.03;
@@ -1169,11 +1168,11 @@ function setShadowParticipation(root, { castShadow, receiveShadow }) {
 }
 
 /**
- * Isolates the board artwork material before adding a small self-lit component.
- * The GLB artwork is otherwise a very rough, normal-mapped PBR surface, which
- * makes its printed whites appear muted at the normal overview camera. Reusing
- * the existing sRGB base-color texture as the emissive map preserves the ink
- * detail while still allowing the tabletop to receive directional shadows.
+ * Isolates the artwork material before correcting the GLB's implicit metallic
+ * default. Printed cardboard is dielectric, not metal; keeping it metallic
+ * suppresses its diffuse response. Its authored white multiplier is then
+ * calibrated for the deliberately bright shared room lights without changing
+ * dice, pawn, or shadow treatment.
  */
 export function calibrateBoardArtworkMaterials(root) {
   const calibrated = new Map();
@@ -1191,9 +1190,8 @@ function calibrateBoardMaterial(material, calibrated) {
   if (!material?.isMeshStandardMaterial || !material.map?.isTexture) return material;
   if (!calibrated.has(material)) {
     const artwork = material.clone();
-    artwork.emissive.set(0xffffff);
-    artwork.emissiveMap = artwork.map;
-    artwork.emissiveIntensity = BOARD_ARTWORK_EMISSIVE_INTENSITY;
+    artwork.metalness = 0;
+    artwork.color.multiplyScalar(BOARD_ARTWORK_COLOR_MULTIPLIER);
     artwork.needsUpdate = true;
     calibrated.set(material, artwork);
   }

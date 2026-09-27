@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "three";
 import {
+  BOARD_ARTWORK_COLOR_MULTIPLIER,
   BOARD_SURFACE_Y,
-  BOARD_ARTWORK_EMISSIVE_INTENSITY,
   BoardSceneAdapter,
   CAMERA_ZOOM_BOUNDS,
   DEFAULT_CAMERA_STATE,
@@ -341,7 +341,7 @@ test("all six calibrated Dice.glb face rotations settle both dice deterministica
   }
 });
 
-test("board artwork receives an isolated low emissive lift without changing PBR, texture color space or shadows", () => {
+test("board artwork corrects the GLB metallic default without changing color space or shadows", () => {
   const root = new THREE.Group();
   const sharedArtwork = new THREE.MeshStandardMaterial({
     name: "01_-_Default",
@@ -349,7 +349,7 @@ test("board artwork receives an isolated low emissive lift without changing PBR,
     map: new THREE.Texture(),
     normalMap: new THREE.Texture(),
     roughness: 0.8929713368415833,
-    metalness: 0,
+    metalness: 1,
   });
   sharedArtwork.map.colorSpace = THREE.SRGBColorSpace;
   const border = new THREE.MeshStandardMaterial({ name: "02_-_Default", color: 0x000000 });
@@ -370,11 +370,13 @@ test("board artwork receives an isolated low emissive lift without changing PBR,
   assert.equal(artwork.map.colorSpace, THREE.SRGBColorSpace);
   assert.equal(artwork.normalMap, sharedArtwork.normalMap);
   assert.equal(artwork.roughness, sharedArtwork.roughness);
-  assert.equal(artwork.metalness, sharedArtwork.metalness);
-  assert.equal(artwork.emissive.getHexString(), "ffffff");
-  assert.equal(artwork.emissiveMap, artwork.map);
-  assert.equal(artwork.emissiveIntensity, BOARD_ARTWORK_EMISSIVE_INTENSITY);
-  assert.equal(sharedArtwork.emissiveIntensity, 1, "source material remains untouched");
+  assert.equal(artwork.metalness, 0, "printed board artwork must retain a diffuse PBR response");
+  assert.equal(sharedArtwork.metalness, 1, "source material remains untouched");
+  assert.equal(artwork.color.r, BOARD_ARTWORK_COLOR_MULTIPLIER);
+  assert.equal(artwork.color.g, BOARD_ARTWORK_COLOR_MULTIPLIER);
+  assert.equal(artwork.color.b, BOARD_ARTWORK_COLOR_MULTIPLIER);
+  assert.equal(artwork.emissive.getHexString(), "000000");
+  assert.equal(artwork.emissiveMap, null);
   assert.equal(first.castShadow, false);
   first.receiveShadow = true;
   assert.equal(first.receiveShadow, true, "material lift does not alter board shadow reception");
