@@ -3,11 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "three";
 import {
+  BOARD_SURFACE_Y,
   BoardSceneAdapter,
   CAMERA_ZOOM_BOUNDS,
   DEFAULT_CAMERA_STATE,
   DICE_FACE_ORIENTATIONS,
   DICE_PRESENTATION_TIMING,
+  DICE_SURFACE_CLEARANCE,
   PAWN_MOVEMENT_TIMING,
   disposeObjectGraph,
   disposeObjectGraphs,
@@ -110,8 +112,8 @@ test("lighting uses one soft board-sized key shadow with readable ambient fill",
   const ambient = adapter.scene.children.find(object => object.isAmbientLight);
   const directional = adapter.scene.children.find(object => object.isDirectionalLight);
 
-  assert.equal(ambient.intensity, 1);
-  assert.equal(directional.intensity, 3.25);
+  assert.equal(ambient.intensity, 2);
+  assert.equal(directional.intensity, 3.75);
   assert.deepEqual(directional.position.toArray(), [18, 36, -16]);
   assert.equal(directional.castShadow, true);
   assert.equal(directional.shadow.mapSize.x, 1024);
@@ -332,8 +334,66 @@ test("all six calibrated Dice.glb face rotations settle both dice deterministica
     }), true);
     for (const die of adapter.diceModels) {
       assert.deepEqual([die.rotation.x, die.rotation.y, die.rotation.z], DICE_FACE_ORIENTATIONS[value]);
+      assertDiceAboveBoard(die);
     }
   }
+});
+
+test("dice geometry stays above the board through anticipation, roll, both impacts and rest", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  const anticipationEnd = DICE_PRESENTATION_TIMING.anticipationMs;
+  const rollEnd = anticipationEnd + DICE_PRESENTATION_TIMING.rollMs;
+  const settleEnd = rollEnd + DICE_PRESENTATION_TIMING.settleMs;
+  const sampleTimes = [
+    0,
+    anticipationEnd * 0.5,
+    anticipationEnd,
+    ...Array.from({ length: 25 }, (_, index) => anticipationEnd
+      + (DICE_PRESENTATION_TIMING.rollMs * index / 24)),
+    rollEnd + (DICE_PRESENTATION_TIMING.settleMs * 0.25),
+    rollEnd + (DICE_PRESENTATION_TIMING.settleMs * 0.5),
+    rollEnd + (DICE_PRESENTATION_TIMING.settleMs * 0.75),
+    settleEnd,
+    DICE_PRESENTATION_DURATION_MS,
+  ];
+  const presentations = [
+    { die1: 1, die2: 2, total: 3, presentationId: 31, reducedMotion: false },
+    { die1: 3, die2: 5, total: 8, presentationId: 32, reducedMotion: false },
+    { die1: 6, die2: 6, total: 12, presentationId: 33, reducedMotion: false },
+  ];
+
+  for (const presentation of presentations) {
+    for (const elapsed of sampleTimes) {
+      adapter.applyDiceAnimationFrame(presentation, elapsed);
+      for (const die of adapter.diceModels) assertDiceAboveBoard(die);
+    }
+  }
+});
+
+test("both authored settle impacts rebound without sacrificing floor clearance", () => {
+  const harness = createHarness();
+  const adapter = harness.createAdapter();
+  adapter.mount(harness.container);
+  harness.completeLoad("Dice.glb", trackedModel().root);
+  const presentation = {
+    die1: 2, die2: 5, total: 7, presentationId: 34, reducedMotion: false,
+  };
+  const settleStart = DICE_PRESENTATION_TIMING.anticipationMs + DICE_PRESENTATION_TIMING.rollMs;
+  const minimumY = elapsed => {
+    adapter.applyDiceAnimationFrame(presentation, elapsed);
+    return diceWorldMinimumY(adapter.diceModels[0]);
+  };
+  const floorY = minimumY(settleStart);
+  const firstImpactReboundY = minimumY(settleStart + DICE_PRESENTATION_TIMING.settleMs * 0.25);
+  const betweenImpactsY = minimumY(settleStart + DICE_PRESENTATION_TIMING.settleMs * 0.5);
+  const secondImpactReboundY = minimumY(settleStart + DICE_PRESENTATION_TIMING.settleMs * 0.75);
+
+  assert.ok(firstImpactReboundY > floorY);
+  assert.ok(secondImpactReboundY > betweenImpactsY);
+  assertDiceAboveBoard(adapter.diceModels[0]);
 });
 
 test("authored dice paths vary decoratively without changing the authoritative result", () => {
@@ -365,9 +425,10 @@ test("authored dice paths vary decoratively without changing the authoritative r
   assert.deepEqual(diceRotations(adapter), [
     DICE_FACE_ORIENTATIONS[2], DICE_FACE_ORIENTATIONS[5],
   ]);
-  assert.deepEqual(adapter.diceModels.map(die => die.position.toArray()), [
-    [-2.65, 0.25, 0.85], [2.35, 0.25, -0.65],
+  assert.deepEqual(adapter.diceModels.map(die => [die.position.x, die.position.z]), [
+    [-2.65, 0.85], [2.35, -0.65],
   ]);
+  for (const die of adapter.diceModels) assertDiceAboveBoard(die);
 });
 
 test("dice camera emphasis restores the exact pre-roll view before presentation completion", () => {
@@ -1149,6 +1210,19 @@ function createEnvironment() {
 
 function diceRotations(adapter) {
   return adapter.diceModels.map(die => [die.rotation.x, die.rotation.y, die.rotation.z]);
+}
+
+function diceWorldMinimumY(die) {
+  die.updateWorldMatrix(true, true);
+  return new THREE.Box3().setFromObject(die).min.y;
+}
+
+function assertDiceAboveBoard(die) {
+  const expectedMinimum = BOARD_SURFACE_Y + DICE_SURFACE_CLEARANCE;
+  assert.ok(
+    diceWorldMinimumY(die) >= expectedMinimum - 1e-9,
+    `dice minimum Y must remain at or above ${expectedMinimum}`,
+  );
 }
 
 function createRenderer() {

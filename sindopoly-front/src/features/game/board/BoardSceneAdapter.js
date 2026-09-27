@@ -38,6 +38,9 @@ const DICE_CAMERA_RESTORE_AT_MS = DICE_PRESENTATION_TIMING.anticipationMs
   + DICE_PRESENTATION_TIMING.settleMs
   + DICE_PRESENTATION_TIMING.cameraRestoreDelayMs;
 const DICE_VISUAL_SCALE = 11.5;
+// The board artwork lies on source Z=5 after the authored board transform and 0.035 runtime scale.
+export const BOARD_SURFACE_Y = 0.043653335571289066;
+export const DICE_SURFACE_CLEARANCE = 0.03;
 export const PAWN_MOVEMENT_TIMING = Object.freeze({
   tileDurationMs: 145,
   maximumTravelDurationMs: 1_440,
@@ -45,13 +48,13 @@ export const PAWN_MOVEMENT_TIMING = Object.freeze({
   hopHeight: 0.65,
   arrivalLift: 0.12,
 });
-const DICE_SETTLED_POSITIONS = Object.freeze([
-  Object.freeze([-2.65, 0.25, 0.85]),
-  Object.freeze([2.35, 0.25, -0.65]),
+const DICE_SETTLED_XZ = Object.freeze([
+  Object.freeze([-2.65, 0.85]),
+  Object.freeze([2.35, -0.65]),
 ]);
-const DICE_LAUNCH_POSITIONS = Object.freeze([
-  Object.freeze([-5.4, 0.25, -2.2]),
-  Object.freeze([5.1, 0.25, 2.1]),
+const DICE_LAUNCH_XZ = Object.freeze([
+  Object.freeze([-5.4, -2.2]),
+  Object.freeze([5.1, 2.1]),
 ]);
 const DIRECTIONAL_SHADOW_BOUNDS = Object.freeze({
   left: -28,
@@ -218,11 +221,11 @@ export class BoardSceneAdapter {
   }
 
   addLights() {
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 2);
     ambientLight.position.set(0, 250, 0);
     this.scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xfff0cf, 3.25);
+    const directionalLight = new THREE.DirectionalLight(0xfff0cf, 3.75);
     directionalLight.position.set(18, 36, -16);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.set(DIRECTIONAL_SHADOW_BOUNDS.mapSize, DIRECTIONAL_SHADOW_BOUNDS.mapSize);
@@ -284,9 +287,11 @@ export class BoardSceneAdapter {
         const dice1 = gltf.scene.clone();
         const dice2 = gltf.scene.clone();
         dice1.scale.setScalar(DICE_VISUAL_SCALE);
-        dice1.position.set(...DICE_SETTLED_POSITIONS[0]);
         dice2.scale.setScalar(DICE_VISUAL_SCALE);
-        dice2.position.set(...DICE_SETTLED_POSITIONS[1]);
+        captureDiceLocalBounds(dice1);
+        captureDiceLocalBounds(dice2);
+        setGroundedDicePosition(dice1, ...DICE_SETTLED_XZ[0]);
+        setGroundedDicePosition(dice2, ...DICE_SETTLED_XZ[1]);
         dice1.visible = false;
         dice2.visible = false;
         setShadowParticipation(dice1, { castShadow: true, receiveShadow: true });
@@ -739,8 +744,8 @@ export class BoardSceneAdapter {
     for (const [index, value] of [die1, die2].entries()) {
       const die = this.diceModels[index];
       die.visible = true;
-      die.position.set(...DICE_SETTLED_POSITIONS[index]);
       die.rotation.set(...DICE_FACE_ORIENTATIONS[value]);
+      setGroundedDicePosition(die, ...DICE_SETTLED_XZ[index]);
     }
   }
 
@@ -757,7 +762,7 @@ export class BoardSceneAdapter {
 
     for (const [index, value] of [presentation.die1, presentation.die2].entries()) {
       const die = this.diceModels[index];
-      const settled = DICE_SETTLED_POSITIONS[index];
+      const settled = DICE_SETTLED_XZ[index];
       die.visible = true;
       if (elapsed < anticipationEnd) {
         applyDiceAnticipation(die, settled, index, elapsed / anticipationEnd, value);
@@ -768,8 +773,8 @@ export class BoardSceneAdapter {
         applyDiceSettle(die, settled, index, (elapsed - rollEnd) / DICE_PRESENTATION_TIMING.settleMs,
           value, presentation.presentationId);
       } else {
-        die.position.set(...settled);
         die.rotation.set(...DICE_FACE_ORIENTATIONS[value]);
+        setGroundedDicePosition(die, ...settled);
       }
     }
     return elapsed >= DICE_PRESENTATION_DURATION_MS;
@@ -1033,22 +1038,17 @@ function lerpAngle(start, end, alpha) {
 
 function applyDiceAnticipation(die, settled, index, progress, value) {
   const eased = smoothStep(progress);
-  const launch = DICE_LAUNCH_POSITIONS[index];
-  die.position.set(launch[0], settled[1] + eased * 0.7, launch[2]);
+  const launch = DICE_LAUNCH_XZ[index];
   die.rotation.set(...DICE_FACE_ORIENTATIONS[value]);
+  setGroundedDicePosition(die, launch[0], launch[1], eased * 0.7);
 }
 
 function applyDiceRoll(die, settled, index, progress, value, presentationId) {
-  const launch = DICE_LAUNCH_POSITIONS[index];
+  const launch = DICE_LAUNCH_XZ[index];
   const variant = diceVisualVariant(presentationId, index);
   const travel = smoothStep(progress);
   const lateralArc = Math.sin(Math.PI * progress);
   const impactTexture = Math.abs(Math.sin(Math.PI * 2 * progress)) * (1 - progress);
-  die.position.set(
-    THREE.MathUtils.lerp(launch[0], settled[0], travel) + lateralArc * variant.lateralX,
-    settled[1] + (1 - travel) * 0.7 + lateralArc * variant.arcHeight + impactTexture * 0.22,
-    THREE.MathUtils.lerp(launch[2], settled[2], travel) + lateralArc * variant.lateralZ,
-  );
 
   const orientation = DICE_FACE_ORIENTATIONS[value];
   const freeSpin = new THREE.Quaternion().setFromEuler(new THREE.Euler(
@@ -1059,17 +1059,61 @@ function applyDiceRoll(die, settled, index, progress, value, presentationId) {
   const finalOrientation = quaternionForFace(value);
   const convergence = smoothStep(clamp((progress - 0.72) / 0.28, 0, 1));
   die.quaternion.copy(freeSpin).slerp(finalOrientation, convergence).normalize();
+  setGroundedDicePosition(
+    die,
+    THREE.MathUtils.lerp(launch[0], settled[0], travel) + lateralArc * variant.lateralX,
+    THREE.MathUtils.lerp(launch[1], settled[1], travel) + lateralArc * variant.lateralZ,
+    (1 - travel) * 0.7 + lateralArc * variant.arcHeight + impactTexture * 0.22,
+  );
 }
 
 function applyDiceSettle(die, settled, index, progress, value, presentationId) {
   const variant = diceVisualVariant(presentationId, index);
   const bounce = Math.abs(Math.sin(Math.PI * 2 * progress)) * 0.24 * (1 - progress);
-  die.position.set(settled[0], settled[1] + bounce, settled[2]);
   const wobble = new THREE.Quaternion().setFromAxisAngle(
     variant.wobbleAxis,
     Math.sin(Math.PI * progress) * 0.09 * (1 - progress),
   );
   die.quaternion.copy(quaternionForFace(value)).multiply(wobble).normalize();
+  setGroundedDicePosition(die, settled[0], settled[1], bounce);
+}
+
+/** Captures the scaled authored model once; active frames use an axis projection, not Box3 work. */
+function captureDiceLocalBounds(die) {
+  die.position.set(0, 0, 0);
+  die.rotation.set(0, 0, 0);
+  die.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(die);
+  die.userData.diceLocalBounds = Object.freeze({
+    min: bounds.min.clone(),
+    max: bounds.max.clone(),
+  });
+}
+
+/** Keeps the loaded geometry above the real board surface for every transient root rotation. */
+function setGroundedDicePosition(die, x, z, lift = 0) {
+  const bounds = die.userData.diceLocalBounds;
+  if (!bounds) {
+    die.position.set(x, BOARD_SURFACE_Y + DICE_SURFACE_CLEARANCE + Math.max(0, lift), z);
+    return;
+  }
+  const lowestRelativeY = rotatedBoundsMinimumY(bounds, die.quaternion);
+  const groundedRootY = BOARD_SURFACE_Y + DICE_SURFACE_CLEARANCE - lowestRelativeY;
+  die.position.set(x, groundedRootY + Math.max(0, lift), z);
+}
+
+function rotatedBoundsMinimumY(bounds, quaternion) {
+  const { x, y, z, w } = quaternion;
+  const rowX = 2 * ((x * y) + (z * w));
+  const rowY = 1 - (2 * ((x * x) + (z * z)));
+  const rowZ = 2 * ((y * z) - (x * w));
+  return minimumAxisContribution(rowX, bounds.min.x, bounds.max.x)
+    + minimumAxisContribution(rowY, bounds.min.y, bounds.max.y)
+    + minimumAxisContribution(rowZ, bounds.min.z, bounds.max.z);
+}
+
+function minimumAxisContribution(coefficient, minimum, maximum) {
+  return coefficient * (coefficient >= 0 ? minimum : maximum);
 }
 
 function diceVisualVariant(presentationId, index) {
