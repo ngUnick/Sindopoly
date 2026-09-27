@@ -1,89 +1,44 @@
-import { useEffect, useState, useRef } from "react";
-import { GameAPI } from "../../apis/GameAPI";
-import {
-  Button,
-  Table,
-  Spin,
-  Modal,
-  Input,
-  message,
-  ConfigProvider,
-} from "antd";
-import { LoadingOutlined } from "@ant-design/icons";
+import { useEffect, useRef, useState } from "react";
+import { Button, Input, Modal, Spin, message } from "antd";
+import { ArrowLeftOutlined, KeyOutlined, UsergroupAddOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
-import { sanitizeText } from "../../utils/sanitize";
-import bgImg from "../../assets/images/monopoly_bg.png";
+import { GameAPI } from "../../apis/GameAPI";
 import { SEARCH_GAME_CONTENT } from "../../features/game/content/el.js";
-
-const antIcon = <LoadingOutlined style={{ fontSize: 24 }} spin />;
+import PregameShell from "../../features/pregame/PregameShell.jsx";
+import { sanitizeText } from "../../utils/sanitize";
 
 function SearchGame() {
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
-  const inputRef = useRef(null); 
+  const inputRef = useRef(null);
   const navigate = useNavigate();
 
-  /* ─────────────────────────────────────────────────────────────
-     columns – now sortable on Creator & Players
-     ───────────────────────────────────────────────────────────── */
-  const columns = [
-    {
-      title: SEARCH_GAME_CONTENT.creator,
-      dataIndex: "Creator",
-      key: "Creator",
-      sorter: (a, b) => a.Creator.localeCompare(b.Creator),
-    },
-    {
-      title: SEARCH_GAME_CONTENT.players,
-      dataIndex: "PlayerCount",
-      key: "PlayerCount",
-      sorter: (a, b) =>
-        parseInt(a.PlayerCount.split("/")[0]) -
-        parseInt(b.PlayerCount.split("/")[0]),
-    },
-    {
-      title: SEARCH_GAME_CONTENT.action,
-      key: "action",
-      render: (_, record) => {
-        const current = parseInt(record.PlayerCount.split("/")[0]);
-        const disabled = current >= 4;
+  const handleJoinGame = async (game) => {
+    try {
+      await GameAPI.joinGame(game.GameId, game.StateVersion);
+      navigate(`/lobby?game_id=${game.GameId}`);
+    } catch (err) {
+      message.error(SEARCH_GAME_CONTENT.failedJoin);
+    }
+  };
 
-        return (
-          <Button
-            disabled={disabled}
-            onClick={async () => {
-              try {
-                await GameAPI.joinGame(record.GameId, record.StateVersion);
-                navigate(`/lobby?game_id=${record.GameId}`);
-              } catch (err) {
-                message.error(SEARCH_GAME_CONTENT.failedJoin);
-              }
-            }}
-          >
-            {disabled ? SEARCH_GAME_CONTENT.full : SEARCH_GAME_CONTENT.join}
-          </Button>
-        );
-      },
-    },
-  ];
-
-  /* ─────────────────────────────────────────────────────────────
-     fetch / refresh
-     ───────────────────────────────────────────────────────────── */
-  const fetchPublicGames = async () => {
+  const fetchPublicGames = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     try {
       const list = await GameAPI.getPublicLobbyGames();
-      const formatted = list.map((g, idx) => ({
-        key: idx,
-        GameId: g.gameId,
-        Creator: g.creatorNickname,
-        PlayerCount: `${g.playerCount}/4`,
-        StateVersion: g.stateVersion,
-      }));
-      setGames(formatted);
+      setGames(list.map((game, index) => ({
+        key: index,
+        GameId: game.gameId,
+        Creator: game.creatorNickname,
+        PlayerCount: `${game.playerCount}/4`,
+        StateVersion: game.stateVersion,
+      })));
+      setLoadFailed(false);
     } catch (err) {
+      setLoadFailed(true);
       message.error(SEARCH_GAME_CONTENT.failedLoad);
     } finally {
       setLoading(false);
@@ -91,29 +46,21 @@ function SearchGame() {
   };
 
   useEffect(() => {
-    /* first load */
-    fetchPublicGames();
-    /* refresh every 3 s */
+    void fetchPublicGames();
     const id = setInterval(fetchPublicGames, 10000);
-    /* clean-up on unmount */
     return () => clearInterval(id);
   }, []);
 
-  /* ─────────────────────────────────────────────────────────────
-     join-by-code
-     ───────────────────────────────────────────────────────────── */
   const handleJoinByInvite = async () => {
     const code = inviteCode.trim().toUpperCase();
     if (!code) return;
 
     try {
-      // ⬅️ now use the helper
       const { gameId } = await GameAPI.joinWithInvite(code);
-
       message.success(SEARCH_GAME_CONTENT.joinedPrivate);
       setModalOpen(false);
       setInviteCode("");
-      navigate(`/lobby?game_id=${gameId}&visibility=${"private"}`);
+      navigate(`/lobby?game_id=${gameId}&visibility=private`);
     } catch (err) {
       message.error(SEARCH_GAME_CONTENT.invalidInvite);
     }
@@ -121,56 +68,103 @@ function SearchGame() {
 
   const cleanInvite = (raw) => sanitizeText(raw, 5).toUpperCase();
 
-  /* ───────────────────────────────────────────────────────────── */
-
   return (
-    <div className="flex-grow flex justify-center items-center bg-cover bg-no-repeat" style={{ backgroundImage: `url(${bgImg})` }}>
-      <div className="fixed w-full h-full shadow-[0_0_80px_rgba(255,255,255,0.7)_inset] left-0 top-0" />
-
-      <div className="bg-[rgba(255,236,195,0.8)] pt-[50px] pb-[20px] px-5 backdrop-blur-sm border-solid border-[rgba(255,255,255,0.6)] rounded-md min-w-[700px]">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">{SEARCH_GAME_CONTENT.publicLobbies}</h2>
-          <Button onClick={() => setModalOpen(true)}>{SEARCH_GAME_CONTENT.joinByCode}</Button>
+    <>
+      <PregameShell
+        variant="wide"
+        title={SEARCH_GAME_CONTENT.title}
+        description={SEARCH_GAME_CONTENT.description}
+      >
+        <div className="pregame-toolbar">
+          <h2 className="pregame-section__title">{SEARCH_GAME_CONTENT.publicLobbies}</h2>
+          <Button
+            className="pregame-secondary pregame-secondary--compact"
+            icon={<KeyOutlined />}
+            onClick={() => setModalOpen(true)}
+          >
+            {SEARCH_GAME_CONTENT.joinByCode}
+          </Button>
         </div>
 
         {loading ? (
-          <div className="text-center mt-5">
-            <Spin indicator={antIcon} />
+          <div className="pregame-status" role="status" aria-live="polite">
+            <Spin size="small" />
+            <p>{SEARCH_GAME_CONTENT.loading}</p>
+          </div>
+        ) : loadFailed ? (
+          <div className="pregame-status" role="alert">
+            <p>{SEARCH_GAME_CONTENT.failedLoad}</p>
+            <Button className="pregame-utility" onClick={() => fetchPublicGames(true)}>
+              {SEARCH_GAME_CONTENT.retry}
+            </Button>
+          </div>
+        ) : games.length === 0 ? (
+          <div className="pregame-empty" role="status">
+            <p>{SEARCH_GAME_CONTENT.noGames}</p>
           </div>
         ) : (
-          <ConfigProvider
-            theme={{ token: { colorPrimary: "#cf971c" } }}
-          >
-            <Table
-              columns={columns}
-              dataSource={games}
-              pagination={false}
-              bordered
-              size="small"
-            />
-          </ConfigProvider>
+          <ul className="pregame-list pregame-game-list" aria-label={SEARCH_GAME_CONTENT.publicLobbies}>
+            {games.map(game => {
+              const currentPlayers = parseInt(game.PlayerCount.split("/")[0], 10);
+              const isFull = currentPlayers >= 4;
+              return (
+                <li className="pregame-list__row" key={game.key}>
+                  <div className="pregame-list__copy">
+                    <span className="pregame-list__eyebrow">{SEARCH_GAME_CONTENT.creator}</span>
+                    <strong>{game.Creator}</strong>
+                    <span className="pregame-list__meta">{SEARCH_GAME_CONTENT.players}: {game.PlayerCount}</span>
+                  </div>
+                  <Button
+                    className={isFull ? "pregame-secondary pregame-secondary--compact" : "pregame-primary"}
+                    disabled={isFull}
+                    icon={!isFull && <UsergroupAddOutlined />}
+                    onClick={() => handleJoinGame(game)}
+                  >
+                    {isFull ? SEARCH_GAME_CONTENT.full : SEARCH_GAME_CONTENT.join}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
         )}
-      </div>
+
+        <div className="pregame-navigation">
+          <Button
+            type="text"
+            className="pregame-utility"
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate("/")}
+          >
+            {SEARCH_GAME_CONTENT.backHome}
+          </Button>
+        </div>
+      </PregameShell>
 
       <Modal
+        centered
+        width={440}
+        rootClassName="pregame-modal"
         title={SEARCH_GAME_CONTENT.joinPrivate}
         open={modalOpen}
         onOk={handleJoinByInvite}
         onCancel={() => setModalOpen(false)}
         okText={SEARCH_GAME_CONTENT.join}
-        centered
+        cancelText={SEARCH_GAME_CONTENT.cancel}
         destroyOnClose
-        afterOpenChange={(open) => open && inputRef.current?.focus()}
+        afterOpenChange={open => open && inputRef.current?.focus()}
       >
         <Input
-          ref={inputRef} 
+          ref={inputRef}
+          autoFocus
+          size="large"
+          aria-label={SEARCH_GAME_CONTENT.invitePlaceholder}
           placeholder={SEARCH_GAME_CONTENT.invitePlaceholder}
           value={inviteCode}
-          onChange={(e) => setInviteCode(cleanInvite(e.target.value))}
+          onChange={(event) => setInviteCode(cleanInvite(event.target.value))}
           onPressEnter={handleJoinByInvite}
         />
       </Modal>
-    </div>
+    </>
   );
 }
 

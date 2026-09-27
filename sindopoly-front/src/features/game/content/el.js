@@ -84,13 +84,19 @@ export const LOGIN_CONTENT = Object.freeze({
 });
 
 export const SEARCH_GAME_CONTENT = Object.freeze({
+  title: "Βρες ένα παιχνίδι",
+  description: "Διάλεξε ένα διαθέσιμο δημόσιο παιχνίδι ή μπες με κωδικό πρόσκλησης.",
   creator: "Δημιουργός",
   players: "Παίκτες",
-  action: "Ενέργεια",
   full: "Πλήρες",
   join: "Συμμετοχή",
   publicLobbies: "Δημόσια λόμπι",
   joinByCode: "Συμμετοχή με κωδικό",
+  noGames: "Δεν υπάρχουν διαθέσιμα δημόσια παιχνίδια αυτή τη στιγμή.",
+  loading: "Αναζήτηση διαθέσιμων παιχνιδιών…",
+  retry: "Ανανέωση λίστας",
+  backHome: "Επιστροφή στην αρχική",
+  cancel: "Ακύρωση",
   failedJoin: "Δεν ήταν δυνατή η συμμετοχή στο παιχνίδι.",
   failedLoad: "Δεν ήταν δυνατή η φόρτωση των παιχνιδιών.",
   joinedPrivate: "Συμμετείχες στο ιδιωτικό παιχνίδι!",
@@ -100,18 +106,25 @@ export const SEARCH_GAME_CONTENT = Object.freeze({
 });
 
 export const STATISTICS_CONTENT = Object.freeze({
+  title: "Στατιστικά",
+  description: "Παρακολούθησε την πορεία σου και την κατάταξη των παικτών.",
   player: "Παίκτης",
   wins: "Νίκες",
   games: "Παιχνίδια",
   winRate: "Ποσοστό νικών",
   yourStats: "Τα στατιστικά σου",
   leaderboard: "Κατάταξη",
+  noLeaderboard: "Δεν υπάρχουν ακόμη καταγεγραμμένα παιχνίδια.",
+  loading: "Φόρτωση στατιστικών…",
+  retry: "Προσπάθησε ξανά",
+  backHome: "Επιστροφή στην αρχική",
   loadFailed: "Δεν ήταν δυνατή η φόρτωση των στατιστικών. Δοκίμασε ξανά αργότερα.",
 });
 
 export const LOBBY_CONTENT = Object.freeze({
   playerRemoved: "Ο παίκτης αφαιρέθηκε.",
   title: "Λόμπι παιχνιδιού",
+  description: "Ετοίμασε την παρέα σου πριν ξεκινήσει η παρτίδα.",
   visibility: "Ορατότητα",
   public: "δημόσιο",
   private: "ιδιωτικό",
@@ -120,6 +133,11 @@ export const LOBBY_CONTENT = Object.freeze({
   you: "Εσύ",
   owner: "Ιδιοκτήτης 👑",
   waiting: "Αναμονή για να συμμετάσχουν παίκτες…",
+  ownerWaiting: "Ο ιδιοκτήτης του παιχνιδιού θα ξεκινήσει την παρτίδα όταν είναι έτοιμος.",
+  synchronizing: "Συγχρονισμός του λόμπι πριν από την έναρξη…",
+  requiresPlayers: "Χρειάζονται τουλάχιστον δύο παίκτες για να ξεκινήσει η παρτίδα.",
+  readyToStart: "Το λόμπι είναι έτοιμο για έναρξη.",
+  playerListEmpty: "Δεν υπάρχουν διαθέσιμοι παίκτες στο λόμπι.",
   start: "Έναρξη παιχνιδιού",
   leave: "Έξοδος από το παιχνίδι",
   removePlayer: "Αφαίρεση παίκτη",

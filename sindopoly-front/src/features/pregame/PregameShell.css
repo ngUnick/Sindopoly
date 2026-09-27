@@ -47,6 +47,14 @@
   width: min(100%, 48rem);
 }
 
+.pregame-panel--wide .pregame-panel__header {
+  gap: var(--space-3);
+}
+
+.pregame-panel--wide .pregame-panel__logo {
+  width: clamp(10rem, 18vw, 13rem);
+}
+
 .pregame-panel__header {
   display: flex;
   flex-direction: column;
@@ -125,6 +133,14 @@
   transform: translateY(1px);
 }
 
+.pregame-primary.ant-btn:disabled {
+  color: var(--color-text-secondary) !important;
+  background: var(--color-action-secondary) !important;
+  border-color: var(--color-border-structural) !important;
+  box-shadow: none;
+  opacity: 1;
+}
+
 .pregame-secondary.ant-btn {
   justify-content: flex-start;
   min-height: 4rem;
@@ -141,6 +157,34 @@
   border-color: var(--color-action-primary) !important;
 }
 
+.pregame-secondary--compact.ant-btn {
+  justify-content: center;
+  min-height: var(--control-min-height);
+  padding-inline: var(--space-3);
+}
+
+.pregame-utility.ant-btn {
+  min-height: var(--control-min-height);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border-color: transparent;
+}
+
+.pregame-utility.ant-btn:not(:disabled):hover {
+  color: var(--color-action-primary) !important;
+  background: var(--color-surface-hover) !important;
+  border-color: transparent !important;
+}
+
+.pregame-utility--destructive.ant-btn {
+  color: var(--color-action-destructive);
+}
+
+.pregame-utility--destructive.ant-btn:not(:disabled):hover {
+  color: var(--color-text-inverse) !important;
+  background: var(--color-action-destructive) !important;
+}
+
 .pregame-status {
   display: grid;
   gap: var(--space-3);
@@ -154,6 +198,214 @@
 
 .pregame-status .ant-btn {
   justify-self: center;
+}
+
+.pregame-empty {
+  padding: var(--space-5);
+  color: var(--color-text-secondary);
+  text-align: center;
+  background: var(--color-surface-elevated);
+  border: 1px dashed var(--color-border-structural);
+  border-radius: var(--radius-panel);
+}
+
+.pregame-toolbar,
+.pregame-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.pregame-navigation {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-structural);
+}
+
+.pregame-section {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.pregame-section__title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-compact);
+}
+
+.pregame-list {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.pregame-list__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-structural);
+  border-radius: var(--radius-panel);
+}
+
+.pregame-list__copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.pregame-list__copy strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pregame-list__eyebrow,
+.pregame-list__meta {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.pregame-list__eyebrow {
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pregame-game-list .pregame-primary.ant-btn,
+.pregame-game-list .pregame-secondary.ant-btn {
+  flex: 0 0 auto;
+  min-width: 8.5rem;
+}
+
+.pregame-lobby-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-structural);
+  border-radius: var(--radius-panel);
+}
+
+.pregame-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: fit-content;
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-action-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border-structural);
+  border-radius: var(--radius-control);
+}
+
+.pregame-badge--owner {
+  color: var(--color-text-primary);
+}
+
+.pregame-invite-code {
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.pregame-invite-code strong {
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.pregame-player-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.pregame-lobby-actions {
+  gap: var(--space-2);
+}
+
+.pregame-personal-stats {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-structural);
+  border-radius: var(--radius-panel);
+}
+
+.pregame-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.pregame-stat-grid div {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  text-align: center;
+  border-right: 1px solid var(--color-border-structural);
+}
+
+.pregame-stat-grid div:last-child {
+  border-right: 0;
+}
+
+.pregame-stat-grid dt {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.pregame-stat-grid dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.pregame-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border-structural);
+  border-radius: var(--radius-panel);
+}
+
+.pregame-table .ant-table {
+  color: var(--color-text-primary);
+  background: var(--color-surface-elevated);
+}
+
+.pregame-table .ant-table-thead > tr > th {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  background: var(--color-surface-hover);
+}
+
+.pregame-table .ant-table-tbody > tr > td,
+.pregame-table .ant-table-thead > tr > th {
+  border-bottom-color: var(--color-border-structural);
+}
+
+.pregame-table .ant-table-tbody > tr > td:nth-child(n + 2) {
+  font-variant-numeric: tabular-nums;
+}
+
+.pregame-table .ant-table-tbody > tr.ant-table-row:hover > td {
+  background: var(--color-surface-hover) !important;
 }
 
 .pregame-account {
@@ -177,8 +429,6 @@
 .pregame-account .pregame-utility.ant-btn {
   margin-left: auto;
   color: var(--color-action-destructive);
-  background: transparent;
-  border-color: transparent;
 }
 
 .pregame-account .pregame-utility.ant-btn:hover {
@@ -280,6 +530,36 @@
 
   .pregame-secondary.ant-btn {
     min-height: 3.5rem;
+  }
+
+  .pregame-toolbar,
+  .pregame-list__row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pregame-toolbar .pregame-secondary.ant-btn,
+  .pregame-game-list .pregame-primary.ant-btn,
+  .pregame-game-list .pregame-secondary.ant-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .pregame-invite-code {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .pregame-list__copy strong {
+    white-space: normal;
+  }
+
+  .pregame-stat-grid {
+    gap: 0;
+  }
+
+  .pregame-stat-grid dd {
+    font-size: var(--font-size-lg);
   }
 
   .pregame-modal .ant-modal {
