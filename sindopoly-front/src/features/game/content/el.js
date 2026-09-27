@@ -171,8 +171,11 @@ export const GAMEPLAY_CONTENT = Object.freeze({
 });
 
 export const END_GAME_CONTENT = Object.freeze({
-  title: "Τέλος Παιχνιδιού",
+  gameFinished: "Το παιχνίδι ολοκληρώθηκε",
+  title: "Τέλος παιχνιδιού",
   winner: "Νικητής",
+  finalStandings: "Τελική κατάταξη",
+  standingsDescription: "Το τελικό αποτέλεσμα της παρτίδας",
   finalBalance: "Τελικό υπόλοιπο",
   propertyValue: "Αξία ιδιοκτησιών",
   totalValue: "Συνολικό κεφάλαιο",

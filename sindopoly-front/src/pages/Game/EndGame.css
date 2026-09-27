@@ -1,0 +1,435 @@
+.endgame-shell {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(var(--space-4), 4vw, var(--space-7));
+  overflow-x: hidden;
+  color: var(--color-text-primary);
+  background-image: url("../../assets/images/monopoly_bg.png");
+  background-position: center;
+  background-size: cover;
+}
+
+.endgame-shell,
+.endgame-shell * {
+  font-family: var(--font-family-interface);
+}
+
+.endgame-shell__scrim {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 32%, rgba(255, 240, 184, 0.12), transparent 32%),
+    linear-gradient(rgba(23, 37, 34, 0.5), rgba(23, 37, 34, 0.68));
+}
+
+.endgame-result {
+  display: grid;
+  gap: var(--space-5);
+  width: min(100%, 54rem);
+  padding: clamp(var(--space-5), 4vw, var(--space-7));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-structural);
+  border-radius: var(--radius-major);
+  box-shadow: var(--shadow-high);
+  animation: endgame-result-enter var(--motion-duration-long) var(--motion-easing-standard) both;
+}
+
+.endgame-result__header {
+  display: grid;
+  gap: var(--space-1);
+  text-align: center;
+}
+
+.endgame-result__eyebrow,
+.endgame-winner__label {
+  color: var(--color-status-warning-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.endgame-result__header h1 {
+  font-size: clamp(var(--font-size-xl), 4vw, var(--font-size-display));
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-compact);
+}
+
+.endgame-winner {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  overflow: hidden;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 0, rgba(255, 240, 184, 0.8), transparent 58%),
+    var(--color-surface-elevated);
+  border: 2px solid var(--color-active-player-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-low);
+}
+
+.endgame-winner__trophy {
+  display: grid;
+  place-items: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  color: var(--color-status-warning-text);
+  font-size: 1.65rem;
+  background: var(--color-active-player-surface);
+  border: 1px solid var(--color-active-player-border);
+  border-radius: 50%;
+  animation: endgame-trophy-enter var(--motion-duration-long) var(--motion-easing-standard) both;
+}
+
+.endgame-winner h2 {
+  max-width: 100%;
+  color: var(--color-text-primary);
+  font-size: clamp(1.75rem, 5vw, 2.75rem);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.endgame-winner__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--color-border-structural);
+}
+
+.endgame-winner__summary > div {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2) 0;
+}
+
+.endgame-winner__summary > div + div {
+  border-left: 1px solid var(--color-border-structural);
+}
+
+.endgame-winner__summary dt {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-compact);
+}
+
+.endgame-winner__summary dd {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+}
+
+.endgame-celebration {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.endgame-spark {
+  position: absolute;
+  width: 0.4rem;
+  height: 0.4rem;
+  background: var(--color-active-player-border);
+  border-radius: 50%;
+  opacity: 0;
+  animation: endgame-spark 820ms var(--motion-easing-standard) both;
+}
+
+.endgame-spark--1 { top: 22%; left: 10%; animation-delay: 80ms; }
+.endgame-spark--2 { top: 52%; left: 16%; animation-delay: 180ms; }
+.endgame-spark--3 { top: 18%; left: 27%; animation-delay: 260ms; }
+.endgame-spark--4 { top: 65%; left: 31%; animation-delay: 120ms; }
+.endgame-spark--5 { top: 20%; right: 12%; animation-delay: 220ms; }
+.endgame-spark--6 { top: 54%; right: 18%; animation-delay: 100ms; }
+.endgame-spark--7 { top: 16%; right: 31%; animation-delay: 300ms; }
+.endgame-spark--8 { top: 68%; right: 29%; animation-delay: 200ms; }
+
+.endgame-standings {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.endgame-standings__heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.endgame-standings__heading h2 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+}
+
+.endgame-standings__heading p {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  text-align: right;
+}
+
+.endgame-standings__list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.endgame-standing {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr) minmax(7.5rem, auto);
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-structural);
+  border-radius: var(--radius-control);
+}
+
+.endgame-standing--winner {
+  background: var(--color-status-warning-surface);
+  border-color: var(--color-active-player-border);
+}
+
+.endgame-standing__rank {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.endgame-standing__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.endgame-standing__identity > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.endgame-standing__winner-label {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  color: var(--color-status-warning-text);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  background: rgba(255, 248, 232, 0.72);
+  border-radius: var(--radius-pill);
+}
+
+.endgame-standing__value {
+  display: grid;
+  justify-items: end;
+}
+
+.endgame-standing__value small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.endgame-standing__value strong {
+  font-size: var(--font-size-md);
+}
+
+.endgame-result__unavailable {
+  padding: var(--space-5);
+  color: var(--color-status-error-text);
+  text-align: center;
+  background: var(--color-status-error-surface);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-control);
+}
+
+.endgame-result__actions {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-structural);
+}
+
+.endgame-primary.ant-btn {
+  min-width: min(100%, 18rem);
+  min-height: 3.25rem;
+  color: var(--color-text-inverse);
+  background: var(--color-action-primary);
+  border-color: var(--color-action-primary);
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: var(--shadow-low);
+}
+
+.endgame-primary.ant-btn:hover {
+  color: var(--color-text-inverse) !important;
+  background: var(--color-action-primary-hover) !important;
+  border-color: var(--color-action-primary-hover) !important;
+}
+
+.endgame-primary.ant-btn:active {
+  color: var(--color-text-inverse) !important;
+  background: var(--color-action-primary-active) !important;
+  transform: translateY(1px);
+}
+
+@keyframes endgame-result-enter {
+  from { opacity: 0; transform: translateY(var(--space-3)); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes endgame-trophy-enter {
+  from { opacity: 0; transform: scale(0.82) rotate(-8deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+@keyframes endgame-spark {
+  0% { opacity: 0; transform: scale(0.4); }
+  35% { opacity: 0.85; transform: scale(1); }
+  100% { opacity: 0; transform: translateY(-0.75rem) scale(0.5); }
+}
+
+@media (max-width: 40rem) {
+  .endgame-result {
+    gap: var(--space-4);
+    padding: var(--space-4);
+  }
+
+  .endgame-winner {
+    padding: var(--space-4);
+  }
+
+  .endgame-winner__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .endgame-winner__summary > div {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    padding: var(--space-2) 0;
+    text-align: left;
+  }
+
+  .endgame-winner__summary > div + div {
+    border-top: 1px solid var(--color-border-structural);
+    border-left: 0;
+  }
+
+  .endgame-standings__heading {
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  .endgame-standings__heading p {
+    text-align: left;
+  }
+
+  .endgame-standing {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: var(--space-3);
+  }
+
+  .endgame-standing__identity {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .endgame-standing__value {
+    grid-column: 2;
+    justify-items: start;
+  }
+
+  .endgame-result__actions,
+  .endgame-primary.ant-btn {
+    width: 100%;
+  }
+}
+
+@media (max-height: 52rem) and (min-width: 40.01rem) {
+  .endgame-shell {
+    padding: var(--space-4);
+  }
+
+  .endgame-result {
+    gap: var(--space-3);
+    width: min(100%, 50rem);
+    padding: var(--space-5);
+  }
+
+  .endgame-result__header {
+    gap: 0;
+  }
+
+  .endgame-result__header h1 {
+    font-size: var(--font-size-xl);
+  }
+
+  .endgame-winner {
+    gap: var(--space-1);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .endgame-winner__trophy {
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 1.25rem;
+  }
+
+  .endgame-winner h2 {
+    font-size: 2rem;
+  }
+
+  .endgame-winner__summary {
+    margin-top: var(--space-1);
+  }
+
+  .endgame-winner__summary > div {
+    padding-top: var(--space-2);
+  }
+
+  .endgame-winner__summary dd {
+    font-size: var(--font-size-md);
+  }
+
+  .endgame-standings {
+    gap: var(--space-2);
+  }
+
+  .endgame-standing {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .endgame-result__actions {
+    padding-top: var(--space-1);
+  }
+
+  .endgame-primary.ant-btn {
+    min-height: var(--control-min-height);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .endgame-result,
+  .endgame-winner__trophy,
+  .endgame-spark {
+    animation: none;
+  }
+
+  .endgame-spark {
+    display: none;
+  }
+}
