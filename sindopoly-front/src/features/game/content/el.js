@@ -70,7 +70,7 @@ export const HOME_CONTENT = Object.freeze({
 
 export const LOGIN_CONTENT = Object.freeze({
   title: "Το παιχνίδι της πανεπιστημιούπολης",
-  description: "Μπες στον κόσμο του Sindopoly και ξεκίνησε τη δική σου παρτίδα.",
+  description: "Μπες στον κόσμο του Sindopoly και ξεκίνησε το ταξίδι σου!",
   start: "Έναρξη",
   chooseNickname: "Επίλεξε ψευδώνυμο",
   continue: "Συνέχεια",
