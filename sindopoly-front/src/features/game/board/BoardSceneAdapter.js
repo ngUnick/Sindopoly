@@ -38,7 +38,7 @@ const DICE_CAMERA_RESTORE_AT_MS = DICE_PRESENTATION_TIMING.anticipationMs
   + DICE_PRESENTATION_TIMING.settleMs
   + DICE_PRESENTATION_TIMING.cameraRestoreDelayMs;
 const DICE_VISUAL_SCALE = 11.5;
-export const BOARD_ARTWORK_COLOR_MULTIPLIER = 1;
+export const BOARD_ARTWORK_COLOR_MULTIPLIER = 0.96;
 // The board artwork lies on source Z=5 after the authored board transform and 0.035 runtime scale.
 export const BOARD_SURFACE_Y = 0.043653335571289066;
 export const DICE_SURFACE_CLEARANCE = 0.03;
