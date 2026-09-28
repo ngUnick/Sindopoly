@@ -38,7 +38,7 @@ const DICE_CAMERA_RESTORE_AT_MS = DICE_PRESENTATION_TIMING.anticipationMs
   + DICE_PRESENTATION_TIMING.settleMs
   + DICE_PRESENTATION_TIMING.cameraRestoreDelayMs;
 const DICE_VISUAL_SCALE = 11.5;
-export const BOARD_ARTWORK_COLOR_MULTIPLIER = 0.82;
+export const BOARD_ARTWORK_COLOR_MULTIPLIER = 1;
 // The board artwork lies on source Z=5 after the authored board transform and 0.035 runtime scale.
 export const BOARD_SURFACE_Y = 0.043653335571289066;
 export const DICE_SURFACE_CLEARANCE = 0.03;
@@ -1170,9 +1170,9 @@ function setShadowParticipation(root, { castShadow, receiveShadow }) {
 /**
  * Isolates the artwork material before correcting the GLB's implicit metallic
  * default. Printed cardboard is dielectric, not metal; keeping it metallic
- * suppresses its diffuse response. Its authored white multiplier is then
- * calibrated for the deliberately bright shared room lights without changing
- * dice, pawn, or shadow treatment.
+ * suppresses its diffuse response. Preserve the artwork's authored brightness
+ * with a neutral white multiplier so this board-only correction leaves dice,
+ * pawn, and shadow treatment untouched.
  */
 export function calibrateBoardArtworkMaterials(root) {
   const calibrated = new Map();
